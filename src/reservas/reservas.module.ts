@@ -7,5 +7,6 @@ import { HabitacionesModule } from '../habitaciones/habitaciones.module';
   imports: [HabitacionesModule],
   controllers: [ReservasController],
   providers: [ReservasService],
+  exports: [ReservasService],
 })
 export class ReservasModule {}
