@@ -497,6 +497,24 @@ create policy p_importaciones_canal on importaciones_canal for all
 create policy p_personal_hotel on personal_hotel for select
     using (is_super_admin() or personal_id = my_personal_id() or hotel_id in (select my_hotel_ids_by_rol('admin')));
 
+-- Altas de personal: solo un admin (de cualquiera de sus hoteles) o
+-- super_admin puede crear personas nuevas o asignarlas/reasignarlas a un
+-- hotel. Sin estas dos, PersonalModule no podría insertar nada (personal y
+-- personal_hotel solo tenían policy de SELECT).
+create policy p_personal_insert on personal for insert
+    with check (is_super_admin() or exists (select 1 from my_hotel_ids_by_rol('admin')));
+
+create policy p_personal_update on personal for update
+    using (is_super_admin() or exists (select 1 from my_hotel_ids_by_rol('admin')))
+    with check (is_super_admin() or exists (select 1 from my_hotel_ids_by_rol('admin')));
+
+create policy p_personal_hotel_insert on personal_hotel for insert
+    with check (is_super_admin() or hotel_id in (select my_hotel_ids_by_rol('admin')));
+
+create policy p_personal_hotel_update on personal_hotel for update
+    using (is_super_admin() or hotel_id in (select my_hotel_ids_by_rol('admin')))
+    with check (is_super_admin() or hotel_id in (select my_hotel_ids_by_rol('admin')));
+
 create policy p_turnos on turnos for all
     using (is_super_admin() or hotel_id in (select my_hotel_ids()));
 

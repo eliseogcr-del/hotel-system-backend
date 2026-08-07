@@ -5,6 +5,7 @@ import { HabitacionesModule } from './habitaciones/habitaciones.module';
 import { ReservasModule } from './reservas/reservas.module';
 import { EstadiasModule } from './estadias/estadias.module';
 import { CajaModule } from './caja/caja.module';
+import { PersonalModule } from './personal/personal.module';
 
 @Module({
   imports: [
@@ -14,9 +15,9 @@ import { CajaModule } from './caja/caja.module';
     ReservasModule,
     EstadiasModule,
     CajaModule,
+    PersonalModule,
     // Próximos módulos a agregar en la siguiente iteración:
-    // PersonalModule, CotizacionesModule,
-    // TareasHkModule, ImportacionesCanalModule
+    // CotizacionesModule, TareasHkModule, ImportacionesCanalModule
   ],
 })
 export class AppModule {}
