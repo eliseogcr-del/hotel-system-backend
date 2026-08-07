@@ -343,23 +343,30 @@ create index idx_personal_hotel_hotel on personal_hotel(hotel_id);
 -- FUNCIONES DE APOYO PARA RLS
 -- ============================================================================
 
+-- security definer: estas funciones se llaman DESDE las policies de RLS de
+-- personal/personal_hotel (entre otras). Sin security definer, su propia
+-- consulta a `personal`/`personal_hotel` vuelve a disparar esas mismas
+-- policies -> recursión infinita ("stack depth limit exceeded"). Al correr
+-- con los privilegios del dueño de la función (que sí puede leer sin RLS),
+-- se cortan en una sola vuelta. set search_path fijo por buena práctica de
+-- seguridad en funciones security definer.
 create or replace function my_personal_id()
 returns uuid
-language sql stable
+language sql stable security definer set search_path = public
 as $$
     select id from personal where auth_user_id = auth.uid();
 $$;
 
 create or replace function is_super_admin()
 returns boolean
-language sql stable
+language sql stable security definer set search_path = public
 as $$
     select coalesce((select es_super_admin from personal where auth_user_id = auth.uid()), false);
 $$;
 
 create or replace function my_hotel_ids()
 returns setof uuid
-language sql stable
+language sql stable security definer set search_path = public
 as $$
     select hotel_id from personal_hotel
     where personal_id = my_personal_id() and activo = true;
@@ -367,7 +374,7 @@ $$;
 
 create or replace function my_hotel_ids_by_rol(p_rol text)
 returns setof uuid
-language sql stable
+language sql stable security definer set search_path = public
 as $$
     select hotel_id from personal_hotel
     where personal_id = my_personal_id() and activo = true and rol = p_rol;
@@ -403,6 +410,21 @@ alter table cotizacion_detalle enable row level security;
 alter table importaciones_canal enable row level security;
 
 -- Patrón general: super_admin ve todo; el resto solo ve datos de sus hoteles asignados.
+
+-- Sin esta policy nadie puede leer ni su propia fila de `personal` (RLS
+-- deniega todo por defecto sin policies) y el AuthGuard falla siempre con
+-- "sin perfil de personal activo". Cada quien lee su propia fila; el admin
+-- de hotel ve el personal asignado a sus hoteles; super_admin ve todo.
+create policy p_personal on personal for select
+    using (
+        is_super_admin()
+        or auth_user_id = auth.uid()
+        or id in (
+            select ph.personal_id from personal_hotel ph
+            where ph.hotel_id in (select my_hotel_ids_by_rol('admin'))
+        )
+    );
+
 create policy p_hoteles on hoteles for select
     using (is_super_admin() or id in (select my_hotel_ids()));
 
