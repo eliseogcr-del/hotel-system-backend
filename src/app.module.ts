@@ -4,6 +4,7 @@ import { SupabaseModule } from './common/supabase/supabase.module';
 import { HabitacionesModule } from './habitaciones/habitaciones.module';
 import { ReservasModule } from './reservas/reservas.module';
 import { EstadiasModule } from './estadias/estadias.module';
+import { CajaModule } from './caja/caja.module';
 
 @Module({
   imports: [
@@ -12,8 +13,9 @@ import { EstadiasModule } from './estadias/estadias.module';
     HabitacionesModule,
     ReservasModule,
     EstadiasModule,
+    CajaModule,
     // Próximos módulos a agregar en la siguiente iteración:
-    // CajaModule, PersonalModule, CotizacionesModule,
+    // PersonalModule, CotizacionesModule,
     // TareasHkModule, ImportacionesCanalModule
   ],
 })

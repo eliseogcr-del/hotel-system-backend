@@ -495,6 +495,12 @@ create policy p_sesiones_turno_insert on sesiones_turno for insert
         personal_hotel_id in (select id from personal_hotel where personal_id = my_personal_id())
     );
 
+-- Permite a cada recepcionista cerrar (liquidar) sus propias sesiones de
+-- turno. Sin esta policy el UPDATE de cierre queda bloqueado por RLS.
+create policy p_sesiones_turno_update on sesiones_turno for update
+    using (personal_hotel_id in (select id from personal_hotel where personal_id = my_personal_id()))
+    with check (personal_hotel_id in (select id from personal_hotel where personal_id = my_personal_id()));
+
 create policy p_movimientos_caja on movimientos_caja for select
     using (
         is_super_admin()
