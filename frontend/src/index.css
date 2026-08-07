@@ -1,0 +1,59 @@
+:root {
+  --brand: #0f6e56;
+  --brand-hover: #085041;
+  --brand-bg: #e1f5ee;
+
+  --disponible: #639922;
+  --disponible-bg: #eaf3de;
+  --disponible-text: #173404;
+  --ocupada: #e24b4a;
+  --ocupada-bg: #fcebeb;
+  --ocupada-text: #501313;
+  --limpieza: #ef9f27;
+  --limpieza-bg: #faeeda;
+  --limpieza-text: #412402;
+  --mantenimiento: #d85a30;
+  --mantenimiento-bg: #faece7;
+  --mantenimiento-text: #4a1b0c;
+
+  --danger: #e24b4a;
+  --danger-bg: #fcebeb;
+
+  --surface-0: #f7f7f5;
+  --surface-1: #ffffff;
+  --surface-2: #ffffff;
+  --text-primary: #17181c;
+  --text-secondary: #5f6068;
+  --text-muted: #8a8b91;
+  --border: #e6e5e1;
+  --border-strong: #d3d1c7;
+  --radius: 8px;
+
+  font-family: system-ui, 'Segoe UI', Roboto, sans-serif;
+  color-scheme: light;
+  color: var(--text-primary);
+  background: var(--surface-0);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+}
+
+h1, h2, h3 {
+  font-weight: 500;
+  margin: 0;
+}
+
+button {
+  font-family: inherit;
+  cursor: pointer;
+}
+
+input {
+  font-family: inherit;
+}
