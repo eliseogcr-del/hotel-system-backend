@@ -16,6 +16,7 @@ import { RequestUser } from '../common/interfaces/request-user.interface';
 import { SupabaseService } from '../common/supabase/supabase.service';
 import { ReservasService } from './reservas.service';
 import { CrearReservaDto } from './dto/crear-reserva.dto';
+import { CrearReservaHabitacionDto } from './dto/crear-reserva-habitacion.dto';
 import { ListarReservasQueryDto } from './dto/listar-reservas-query.dto';
 
 @Controller('hoteles/:hotelId/reservas')
@@ -68,5 +69,28 @@ export class ReservasController {
   ) {
     const client = this.supabase.getClientForRequest(user.accessToken);
     return this.reservasService.cancelar(client, hotelId, id);
+  }
+
+  @Post(':id/habitaciones')
+  @Roles('admin', 'recepcion')
+  async agregarHabitacion(
+    @Param('hotelId') hotelId: string,
+    @Param('id') id: string,
+    @Body() dto: CrearReservaHabitacionDto,
+    @CurrentUser() user: RequestUser,
+  ) {
+    const client = this.supabase.getClientForRequest(user.accessToken);
+    return this.reservasService.agregarHabitacion(client, hotelId, id, dto);
+  }
+
+  @Patch(':id/confirmar')
+  @Roles('admin', 'recepcion')
+  async confirmar(
+    @Param('hotelId') hotelId: string,
+    @Param('id') id: string,
+    @CurrentUser() user: RequestUser,
+  ) {
+    const client = this.supabase.getClientForRequest(user.accessToken);
+    return this.reservasService.confirmar(client, hotelId, id);
   }
 }

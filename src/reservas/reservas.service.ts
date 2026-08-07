@@ -241,6 +241,153 @@ export class ReservasService {
     return data;
   }
 
+  /**
+   * Agrega una línea de habitación a una reserva YA existente. Es lo que
+   * permite "completar" una reserva creada sin habitaciones (ej. las que
+   * llegan de ImportacionesCanalModule en 'pendiente_revision', donde el
+   * texto libre del correo no alcanza para asignar un cuarto con
+   * confianza) sin tener que recrearla desde cero.
+   */
+  async agregarHabitacion(
+    client: SupabaseClient,
+    hotelId: string,
+    reservaId: string,
+    linea: CrearReservaHabitacionDto,
+  ) {
+    const { data: reserva, error: reservaError } = await client
+      .from('reservas')
+      .select('id, origen, descuento_total, estado')
+      .eq('id', reservaId)
+      .eq('hotel_id', hotelId)
+      .maybeSingle();
+    if (reservaError) throw reservaError;
+    if (!reserva) throw new NotFoundException('Reserva no encontrada en este hotel');
+    if (reserva.estado === 'cancelada') {
+      throw new BadRequestException('No se puede agregar habitaciones a una reserva cancelada');
+    }
+
+    const resultado = await this.disponibilidad.validar(client, {
+      hotelId,
+      habitacionId: linea.habitacionId,
+      checkinPrevisto: linea.checkinPrevisto,
+      checkoutPrevisto: linea.checkoutPrevisto,
+    });
+    if (!resultado.disponible) {
+      throw new ConflictException(resultado.conflicto);
+    }
+
+    const costo = await this.resolverCostoLinea(
+      client,
+      hotelId,
+      reserva.origen as OrigenReserva,
+      linea,
+    );
+
+    const { data: nuevaLinea, error: insertError } = await client
+      .from('reserva_habitacion')
+      .insert({
+        reserva_id: reservaId,
+        habitacion_id: linea.habitacionId,
+        nro_personas: linea.nroPersonas,
+        incluye_desayuno: linea.incluyeDesayuno ?? false,
+        tarifa_dia: costo.tarifaDia,
+        dias: costo.dias,
+        cargo_aforo_extra: costo.cargoAforoExtra,
+        cobro_early: costo.cobroEarly,
+        cobro_late: costo.cobroLate,
+        subtotal: costo.subtotal,
+        tipo_alquiler: linea.tipoAlquiler,
+        fecha_hora_checkin_prevista: linea.checkinPrevisto,
+        fecha_hora_checkout_prevista: linea.checkoutPrevisto,
+        observaciones: linea.observaciones ?? null,
+        cochera_id: linea.cocheraId ?? null,
+      })
+      .select()
+      .single();
+    if (insertError) throw insertError;
+
+    if (
+      linea.cocheraId &&
+      (linea.vehiculoPlaca || linea.vehiculoColor || linea.vehiculoCaracteristicas)
+    ) {
+      const { error: vehError } = await client.from('vehiculos').insert({
+        reserva_habitacion_id: nuevaLinea.id,
+        placa: linea.vehiculoPlaca ?? null,
+        color: linea.vehiculoColor ?? null,
+        caracteristicas: linea.vehiculoCaracteristicas ?? null,
+      });
+      if (vehError) throw vehError;
+    }
+
+    await this.recalcularTotales(client, reservaId, Number(reserva.descuento_total));
+
+    return this.obtenerDetalle(client, hotelId, reservaId);
+  }
+
+  /**
+   * pendiente_revision -> confirmada. El "un clic" que menciona CLAUDE.md
+   * 3.6 para las reservas que llegan de Booking/Airbnb: exige que ya tenga
+   * al menos una habitación asignada (si no, agregarHabitacion primero).
+   */
+  async confirmar(client: SupabaseClient, hotelId: string, reservaId: string) {
+    const reserva = await this.obtenerDetalle(client, hotelId, reservaId);
+
+    if (reserva.estado !== 'pendiente_revision') {
+      throw new BadRequestException(
+        `No se puede confirmar: la reserva está en estado '${reserva.estado}'`,
+      );
+    }
+    if (!reserva.reserva_habitacion || reserva.reserva_habitacion.length === 0) {
+      throw new BadRequestException(
+        'No se puede confirmar una reserva sin ninguna habitación asignada; agrega al menos una primero',
+      );
+    }
+
+    const { error } = await client
+      .from('reservas')
+      .update({ estado: 'confirmada' })
+      .eq('id', reservaId);
+    if (error) throw error;
+
+    return this.obtenerDetalle(client, hotelId, reservaId);
+  }
+
+  private async recalcularTotales(
+    client: SupabaseClient,
+    reservaId: string,
+    descuentoTotal: number,
+  ) {
+    const { data: lineas, error } = await client
+      .from('reserva_habitacion')
+      .select('subtotal, dias, fecha_hora_checkin_prevista, fecha_hora_checkout_prevista')
+      .eq('reserva_id', reservaId);
+    if (error) throw error;
+
+    const filas = lineas ?? [];
+    const importeFinal =
+      filas.reduce((acc, l) => acc + Number(l.subtotal), 0) - descuentoTotal;
+    const diasHospedaje = filas.reduce((max, l) => Math.max(max, l.dias), 1);
+    const fechaIngreso = filas.reduce<string | null>(
+      (min, l) => (!min || l.fecha_hora_checkin_prevista < min ? l.fecha_hora_checkin_prevista : min),
+      null,
+    );
+    const fechaSalidaProg = filas.reduce<string | null>(
+      (max, l) => (!max || l.fecha_hora_checkout_prevista > max ? l.fecha_hora_checkout_prevista : max),
+      null,
+    );
+
+    const { error: updError } = await client
+      .from('reservas')
+      .update({
+        importe_final: importeFinal,
+        dias_hospedaje: diasHospedaje,
+        ...(fechaIngreso ? { fecha_ingreso: fechaIngreso } : {}),
+        ...(fechaSalidaProg ? { fecha_salida_prog: fechaSalidaProg.slice(0, 10) } : {}),
+      })
+      .eq('id', reservaId);
+    if (updError) throw updError;
+  }
+
   private async resolverCostoLinea(
     client: SupabaseClient,
     hotelId: string,
