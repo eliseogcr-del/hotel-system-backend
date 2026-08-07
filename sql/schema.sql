@@ -1,0 +1,516 @@
+-- ============================================================================
+-- SISTEMA DE GESTIÓN HOTELERA MULTI-TENANT
+-- Esquema para Supabase (PostgreSQL)
+-- Cliente inicial: Hotel Jorge Chávez (25 habitaciones, 6 pisos, 2 cocheras)
+-- ============================================================================
+
+create extension if not exists "pgcrypto"; -- gen_random_uuid()
+
+-- ============================================================================
+-- MÓDULO 0: TENANT RAÍZ
+-- ============================================================================
+
+create table hoteles (
+    id uuid primary key default gen_random_uuid(),
+    nombre text not null,
+    ruc text,
+    cantidad_pisos int not null default 1,
+    moneda_default text not null default 'PEN' check (moneda_default in ('PEN','USD')),
+    activo boolean not null default true,
+    created_at timestamptz not null default now()
+);
+
+-- ============================================================================
+-- MÓDULO 1: PERSONAL, TURNOS, CAJA
+-- ============================================================================
+
+create table personal (
+    id uuid primary key default gen_random_uuid(),
+    auth_user_id uuid references auth.users(id) on delete set null,
+    nombre text not null,
+    usuario text not null unique,
+    es_super_admin boolean not null default false,
+    activo boolean not null default true,
+    created_at timestamptz not null default now()
+);
+
+create table personal_hotel (
+    id uuid primary key default gen_random_uuid(),
+    personal_id uuid not null references personal(id) on delete cascade,
+    hotel_id uuid not null references hoteles(id) on delete cascade,
+    rol text not null check (rol in ('admin','recepcion','hk')),
+    activo boolean not null default true,
+    unique (personal_id, hotel_id, rol)
+);
+
+create table turnos (
+    id uuid primary key default gen_random_uuid(),
+    hotel_id uuid not null references hoteles(id) on delete cascade,
+    nombre text not null,              -- 'Mañana','Tarde','Noche'
+    hora_inicio time not null,
+    hora_fin time not null,
+    activo boolean not null default true
+);
+
+create table sesiones_turno (
+    id uuid primary key default gen_random_uuid(),
+    personal_hotel_id uuid not null references personal_hotel(id) on delete restrict,
+    turno_id uuid not null references turnos(id) on delete restrict,
+    sesion_anterior_id uuid references sesiones_turno(id),
+    fecha date not null default current_date,
+    saldo_inicial numeric(10,2) not null default 0,
+    saldo_final numeric(10,2),
+    estado text not null default 'abierta' check (estado in ('abierta','cerrada')),
+    abierta_en timestamptz not null default now(),
+    cerrada_en timestamptz
+);
+
+create table movimientos_caja (
+    id uuid primary key default gen_random_uuid(),
+    sesion_turno_id uuid not null references sesiones_turno(id) on delete cascade,
+    tipo text not null check (tipo in ('ingreso','egreso')),
+    monto numeric(10,2) not null,
+    concepto text not null,
+    metodo_pago text not null default 'efectivo' check (metodo_pago in ('efectivo','transferencia','yape','tarjeta')),
+    notas text,
+    created_at timestamptz not null default now()
+);
+
+-- ============================================================================
+-- MÓDULO 2: HABITACIONES, TIPOS, COCHERAS, TARIFAS
+-- ============================================================================
+
+create table tipos_habitacion (
+    id uuid primary key default gen_random_uuid(),
+    hotel_id uuid not null references hoteles(id) on delete cascade,
+    nombre text not null,              -- Matrimonial, Doble, Doble Familiar, Triple...
+    aforo_max int not null default 1,
+    tiempo_limpieza_min int not null default 45,
+    activo boolean not null default true,
+    unique (hotel_id, nombre)
+);
+
+create table habitaciones (
+    id uuid primary key default gen_random_uuid(),
+    hotel_id uuid not null references hoteles(id) on delete cascade,
+    hab_numero int not null,
+    tipo_id uuid not null references tipos_habitacion(id),
+    piso int not null,
+    estado text not null default 'disponible' check (estado in ('disponible','ocupada','limpieza','mantenimiento')),
+    mantenimiento_planificado boolean not null default false,
+    unique (hotel_id, hab_numero)
+);
+
+create table cocheras (
+    id uuid primary key default gen_random_uuid(),
+    hotel_id uuid not null references hoteles(id) on delete cascade,
+    numero text not null,
+    tamano text not null check (tamano in ('grande','chica')),
+    tipo_vehiculo_permitido text,      -- camioneta, auto, moto...
+    estado text not null default 'disponible' check (estado in ('disponible','ocupada')),
+    es_externa boolean not null default false,
+    precio_externa numeric(10,2) default 0
+);
+
+create table tarifas (
+    id uuid primary key default gen_random_uuid(),
+    hotel_id uuid not null references hoteles(id) on delete cascade,
+    tipo_hab_id uuid not null references tipos_habitacion(id) on delete cascade,
+    minimo numeric(10,2),
+    normal numeric(10,2) not null,
+    booking numeric(10,2),
+    airbnb numeric(10,2),
+    vigente_desde date not null default current_date
+);
+
+-- ============================================================================
+-- MÓDULO 3: CLIENTES (huéspedes / empresas)
+-- ============================================================================
+
+create table huespedes (
+    id uuid primary key default gen_random_uuid(),
+    hotel_id uuid not null references hoteles(id) on delete cascade,
+    tipo_doc text not null check (tipo_doc in ('dni','pasaporte','carnet_extranjeria','cedula','otro')),
+    nro_doc text not null,
+    nombres text not null,
+    apellidos text not null,
+    nacionalidad text,
+    fecha_nacimiento date,
+    telefono text,
+    correo text,
+    created_at timestamptz not null default now(),
+    unique (hotel_id, tipo_doc, nro_doc)
+);
+
+create table empresas (
+    id uuid primary key default gen_random_uuid(),
+    hotel_id uuid not null references hoteles(id) on delete cascade,
+    ruc text not null,
+    razon_social text not null,
+    unique (hotel_id, ruc)
+);
+
+create table tarifas_especiales (
+    id uuid primary key default gen_random_uuid(),
+    hotel_id uuid not null references hoteles(id) on delete cascade,
+    empresa_id uuid not null references empresas(id) on delete cascade,
+    tarifa_real numeric(10,2),
+    tarifa_factura numeric(10,2),
+    porcentaje numeric(5,2)
+);
+
+-- ============================================================================
+-- MÓDULO 4: RESERVAS, ESTADÍAS, VEHÍCULOS, MANTENIMIENTO
+-- ============================================================================
+
+create table reservas (
+    id uuid primary key default gen_random_uuid(),
+    hotel_id uuid not null references hoteles(id) on delete cascade,
+    huesped_id uuid references huespedes(id),
+    empresa_id uuid references empresas(id),
+    origen text not null check (origen in ('telefono','whatsapp','booking','airbnb','directo','walkin')),
+    codigo_externo text,                -- id de reserva en Booking/Airbnb
+    fecha_ingreso timestamptz not null,
+    dias_hospedaje int not null default 1,
+    fecha_salida_prog date,
+    moneda text not null default 'PEN' check (moneda in ('PEN','USD')),
+    deducible_impuestos boolean not null default true,
+    descuento_total numeric(10,2) not null default 0,
+    importe_final numeric(10,2),
+    estado text not null default 'confirmada' check (estado in ('pendiente_revision','confirmada','cancelada')),
+    creado_por uuid references personal(id),
+    created_at timestamptz not null default now()
+);
+
+create table reserva_habitacion (
+    id uuid primary key default gen_random_uuid(),
+    reserva_id uuid not null references reservas(id) on delete cascade,
+    habitacion_id uuid not null references habitaciones(id),
+    nro_personas int not null default 1,
+    incluye_desayuno boolean not null default false,
+    tarifa_dia numeric(10,2) not null,
+    dias int not null default 1,
+    cargo_aforo_extra numeric(10,2) not null default 0,
+    cobro_early numeric(10,2) not null default 0,
+    cobro_late numeric(10,2) not null default 0,
+    subtotal numeric(10,2) not null default 0,
+    tipo_alquiler text not null default 'pernocte' check (tipo_alquiler in ('pernocte','por_horas')),
+    fecha_hora_checkin_prevista timestamptz not null,
+    fecha_hora_checkout_prevista timestamptz not null,
+    observaciones text,
+    cochera_id uuid references cocheras(id)
+);
+
+create table vehiculos (
+    id uuid primary key default gen_random_uuid(),
+    reserva_habitacion_id uuid not null references reserva_habitacion(id) on delete cascade,
+    placa text,
+    color text,
+    caracteristicas text
+);
+
+create table estadias (
+    id uuid primary key default gen_random_uuid(),
+    reserva_habitacion_id uuid not null unique references reserva_habitacion(id) on delete cascade,
+    checkin_real timestamptz,
+    checkout_real timestamptz,
+    estado_actual text not null default 'pendiente' check (estado_actual in ('pendiente','en_curso','finalizada')),
+    saldo numeric(10,2) not null default 0
+);
+
+create table tareas_hk (
+    id uuid primary key default gen_random_uuid(),
+    hotel_id uuid not null references hoteles(id) on delete cascade,
+    habitacion_id uuid not null references habitaciones(id),
+    tipo text not null check (tipo in ('limpieza','mantenimiento')),
+    prioridad int not null default 100,
+    estado text not null default 'planificado' check (estado in ('planificado','en_proceso','terminado')),
+    con_huesped_dentro boolean not null default false,
+    asignado_a uuid references personal(id),
+    definido_por uuid references personal(id),
+    iniciado_en timestamptz,
+    finalizado_en timestamptz,
+    created_at timestamptz not null default now()
+);
+
+-- ============================================================================
+-- MÓDULO 5: FINANCIERO (libro de cuentas, comprobantes, bazar)
+-- ============================================================================
+
+create table productos_bazar (
+    id uuid primary key default gen_random_uuid(),
+    hotel_id uuid not null references hoteles(id) on delete cascade,
+    nombre text not null,
+    precio numeric(10,2) not null,
+    activo boolean not null default true
+);
+
+-- Libro único de cargos y abonos por estadía (reemplaza Pagos + Consumos + CuentasCobrar)
+create table movimientos_cuenta (
+    id uuid primary key default gen_random_uuid(),
+    estadia_id uuid not null references estadias(id) on delete cascade,
+    tipo text not null check (tipo in ('alquiler','consumo_bazar','pago','early','late','ajuste','cochera')),
+    monto numeric(10,2) not null,       -- positivo = cargo, negativo = abono/pago
+    metodo_pago text check (metodo_pago in ('efectivo','transferencia','yape','tarjeta')),
+    producto_id uuid references productos_bazar(id),
+    pagado_al_momento boolean default true,
+    sesion_turno_id uuid references sesiones_turno(id),
+    fecha timestamptz not null default now(),
+    notas text
+);
+
+create table comprobantes (
+    id uuid primary key default gen_random_uuid(),
+    estadia_id uuid not null references estadias(id) on delete cascade,
+    tipo text not null check (tipo in ('boleta','factura')),
+    estado text not null default 'pendiente' check (estado in ('pendiente','emitido')),
+    monto numeric(10,2) not null,
+    nro_comprobante text,
+    sesion_turno_id uuid references sesiones_turno(id),
+    created_at timestamptz not null default now()
+);
+
+create table tipo_cambio (
+    fecha date primary key default current_date,
+    valor_compra numeric(6,3) not null,
+    valor_venta numeric(6,3) not null
+);
+
+-- ============================================================================
+-- MÓDULO 6: COTIZACIONES
+-- ============================================================================
+
+create table cotizaciones (
+    id uuid primary key default gen_random_uuid(),
+    hotel_id uuid not null references hoteles(id) on delete cascade,
+    huesped_id uuid references huespedes(id),
+    empresa_id uuid references empresas(id),
+    fecha_emision date not null default current_date,
+    fecha_desde date not null,
+    fecha_hasta date not null,
+    estado text not null default 'pendiente' check (estado in ('pendiente','aprobada','convertida','vencida','cancelada')),
+    moneda text not null default 'PEN',
+    total_estimado numeric(10,2),
+    creado_por uuid references personal(id),
+    reserva_id uuid references reservas(id),
+    vence_en date
+);
+
+create table cotizacion_detalle (
+    id uuid primary key default gen_random_uuid(),
+    cotizacion_id uuid not null references cotizaciones(id) on delete cascade,
+    habitacion_id uuid not null references habitaciones(id),
+    tarifa_id uuid references tarifas(id),
+    nro_personas int not null default 1,
+    dias int not null default 1,
+    precio_noche numeric(10,2) not null,
+    subtotal numeric(10,2) not null
+);
+
+-- ============================================================================
+-- MÓDULO 7: INTEGRACIÓN BOOKING / AIRBNB (Opción B - lectura de correo)
+-- ============================================================================
+
+create table importaciones_canal (
+    id uuid primary key default gen_random_uuid(),
+    hotel_id uuid not null references hoteles(id) on delete cascade,
+    canal text not null check (canal in ('booking','airbnb')),
+    correo_origen text,
+    fecha_recibido timestamptz not null default now(),
+    estado_parseo text not null default 'pendiente' check (estado_parseo in ('pendiente','ok','error')),
+    reserva_id uuid references reservas(id),
+    datos_crudos jsonb,
+    error_detalle text
+);
+
+-- ============================================================================
+-- ÍNDICES DE APOYO
+-- ============================================================================
+
+create index idx_habitaciones_hotel on habitaciones(hotel_id);
+create index idx_reservas_hotel on reservas(hotel_id);
+create index idx_reserva_hab_reserva on reserva_habitacion(reserva_id);
+create index idx_reserva_hab_habitacion on reserva_habitacion(habitacion_id);
+create index idx_reserva_hab_checkin on reserva_habitacion(fecha_hora_checkin_prevista);
+create index idx_reserva_hab_checkout on reserva_habitacion(fecha_hora_checkout_prevista);
+create index idx_movimientos_cuenta_estadia on movimientos_cuenta(estadia_id);
+create index idx_movimientos_caja_sesion on movimientos_caja(sesion_turno_id);
+create index idx_tareas_hk_hotel_estado on tareas_hk(hotel_id, estado);
+create index idx_personal_hotel_personal on personal_hotel(personal_id);
+create index idx_personal_hotel_hotel on personal_hotel(hotel_id);
+
+-- ============================================================================
+-- FUNCIONES DE APOYO PARA RLS
+-- ============================================================================
+
+create or replace function my_personal_id()
+returns uuid
+language sql stable
+as $$
+    select id from personal where auth_user_id = auth.uid();
+$$;
+
+create or replace function is_super_admin()
+returns boolean
+language sql stable
+as $$
+    select coalesce((select es_super_admin from personal where auth_user_id = auth.uid()), false);
+$$;
+
+create or replace function my_hotel_ids()
+returns setof uuid
+language sql stable
+as $$
+    select hotel_id from personal_hotel
+    where personal_id = my_personal_id() and activo = true;
+$$;
+
+create or replace function my_hotel_ids_by_rol(p_rol text)
+returns setof uuid
+language sql stable
+as $$
+    select hotel_id from personal_hotel
+    where personal_id = my_personal_id() and activo = true and rol = p_rol;
+$$;
+
+-- ============================================================================
+-- ROW LEVEL SECURITY
+-- ============================================================================
+
+alter table hoteles enable row level security;
+alter table personal enable row level security;
+alter table personal_hotel enable row level security;
+alter table turnos enable row level security;
+alter table sesiones_turno enable row level security;
+alter table movimientos_caja enable row level security;
+alter table tipos_habitacion enable row level security;
+alter table habitaciones enable row level security;
+alter table cocheras enable row level security;
+alter table tarifas enable row level security;
+alter table huespedes enable row level security;
+alter table empresas enable row level security;
+alter table tarifas_especiales enable row level security;
+alter table reservas enable row level security;
+alter table reserva_habitacion enable row level security;
+alter table vehiculos enable row level security;
+alter table estadias enable row level security;
+alter table tareas_hk enable row level security;
+alter table productos_bazar enable row level security;
+alter table movimientos_cuenta enable row level security;
+alter table comprobantes enable row level security;
+alter table cotizaciones enable row level security;
+alter table cotizacion_detalle enable row level security;
+alter table importaciones_canal enable row level security;
+
+-- Patrón general: super_admin ve todo; el resto solo ve datos de sus hoteles asignados.
+create policy p_hoteles on hoteles for select
+    using (is_super_admin() or id in (select my_hotel_ids()));
+
+create policy p_tipos_habitacion on tipos_habitacion for all
+    using (is_super_admin() or hotel_id in (select my_hotel_ids()));
+
+create policy p_habitaciones on habitaciones for all
+    using (is_super_admin() or hotel_id in (select my_hotel_ids()));
+
+create policy p_cocheras on cocheras for all
+    using (is_super_admin() or hotel_id in (select my_hotel_ids()));
+
+create policy p_tarifas on tarifas for all
+    using (is_super_admin() or hotel_id in (select my_hotel_ids()));
+
+create policy p_huespedes on huespedes for all
+    using (is_super_admin() or hotel_id in (select my_hotel_ids()));
+
+create policy p_empresas on empresas for all
+    using (is_super_admin() or hotel_id in (select my_hotel_ids()));
+
+create policy p_tarifas_especiales on tarifas_especiales for all
+    using (is_super_admin() or hotel_id in (select my_hotel_ids()));
+
+create policy p_reservas on reservas for all
+    using (is_super_admin() or hotel_id in (select my_hotel_ids()));
+
+create policy p_reserva_habitacion on reserva_habitacion for all
+    using (is_super_admin() or reserva_id in (select id from reservas where hotel_id in (select my_hotel_ids())));
+
+create policy p_vehiculos on vehiculos for all
+    using (is_super_admin() or reserva_habitacion_id in (
+        select rh.id from reserva_habitacion rh join reservas r on r.id = rh.reserva_id
+        where r.hotel_id in (select my_hotel_ids())));
+
+create policy p_estadias on estadias for all
+    using (is_super_admin() or reserva_habitacion_id in (
+        select rh.id from reserva_habitacion rh join reservas r on r.id = rh.reserva_id
+        where r.hotel_id in (select my_hotel_ids())));
+
+create policy p_tareas_hk on tareas_hk for all
+    using (is_super_admin() or hotel_id in (select my_hotel_ids()));
+
+create policy p_productos_bazar on productos_bazar for all
+    using (is_super_admin() or hotel_id in (select my_hotel_ids()));
+
+create policy p_movimientos_cuenta on movimientos_cuenta for all
+    using (is_super_admin() or estadia_id in (
+        select e.id from estadias e
+        join reserva_habitacion rh on rh.id = e.reserva_habitacion_id
+        join reservas r on r.id = rh.reserva_id
+        where r.hotel_id in (select my_hotel_ids())));
+
+create policy p_comprobantes on comprobantes for all
+    using (is_super_admin() or estadia_id in (
+        select e.id from estadias e
+        join reserva_habitacion rh on rh.id = e.reserva_habitacion_id
+        join reservas r on r.id = rh.reserva_id
+        where r.hotel_id in (select my_hotel_ids())));
+
+create policy p_cotizaciones on cotizaciones for all
+    using (is_super_admin() or hotel_id in (select my_hotel_ids()));
+
+create policy p_cotizacion_detalle on cotizacion_detalle for all
+    using (is_super_admin() or cotizacion_id in (select id from cotizaciones where hotel_id in (select my_hotel_ids())));
+
+create policy p_importaciones_canal on importaciones_canal for all
+    using (is_super_admin() or hotel_id in (select my_hotel_ids()));
+
+create policy p_personal_hotel on personal_hotel for select
+    using (is_super_admin() or personal_id = my_personal_id() or hotel_id in (select my_hotel_ids_by_rol('admin')));
+
+create policy p_turnos on turnos for all
+    using (is_super_admin() or hotel_id in (select my_hotel_ids()));
+
+-- CAJA: aislamiento estricto. Cada recepcionista ve solo sus propias sesiones;
+-- el admin del hotel ve el consolidado de todo su hotel; el super_admin ve todo.
+create policy p_sesiones_turno on sesiones_turno for select
+    using (
+        is_super_admin()
+        or personal_hotel_id in (select id from personal_hotel where personal_id = my_personal_id())
+        or personal_hotel_id in (
+            select ph.id from personal_hotel ph
+            where ph.hotel_id in (select my_hotel_ids_by_rol('admin'))
+        )
+    );
+
+create policy p_sesiones_turno_insert on sesiones_turno for insert
+    with check (
+        personal_hotel_id in (select id from personal_hotel where personal_id = my_personal_id())
+    );
+
+create policy p_movimientos_caja on movimientos_caja for select
+    using (
+        is_super_admin()
+        or sesion_turno_id in (
+            select st.id from sesiones_turno st
+            join personal_hotel ph on ph.id = st.personal_hotel_id
+            where ph.personal_id = my_personal_id()
+               or ph.hotel_id in (select my_hotel_ids_by_rol('admin'))
+        )
+    );
+
+create policy p_movimientos_caja_insert on movimientos_caja for insert
+    with check (
+        sesion_turno_id in (
+            select st.id from sesiones_turno st
+            join personal_hotel ph on ph.id = st.personal_hotel_id
+            where ph.personal_id = my_personal_id()
+        )
+    );

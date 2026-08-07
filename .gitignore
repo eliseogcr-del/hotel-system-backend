@@ -1,0 +1,5 @@
+node_modules/
+dist/
+.env
+*.log
+hotel-system-backend_1.zip
