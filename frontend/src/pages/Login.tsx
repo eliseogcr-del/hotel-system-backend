@@ -1,12 +1,20 @@
 import { useState, type CSSProperties, type FormEvent } from 'react';
+import { Navigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 
 export function Login() {
-  const { signIn } = useAuth();
+  const { session, signIn } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+
+  // signIn() deja la sesión creada en Supabase, pero /login no está dentro
+  // de ProtectedRoute -> nada más redirige solo. Sin esto, el login
+  // "funciona" pero la pantalla se queda igual y parece que no hizo nada.
+  if (session) {
+    return <Navigate to="/" replace />;
+  }
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
