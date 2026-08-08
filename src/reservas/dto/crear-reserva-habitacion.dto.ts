@@ -44,6 +44,17 @@ export class CrearReservaHabitacionDto {
   @Min(0)
   tarifaDiaManual?: number;
 
+  // Por defecto los días se derivan de checkinPrevisto/checkoutPrevisto
+  // (ceil de la diferencia en horas). checkin-rápido necesita fijar el
+  // número exacto de días que pidió el huésped: como el checkout previsto
+  // se ancla a la hora_checkout del hotel (no a la hora real de llegada),
+  // un check-in temprano puede hacer que esa diferencia caiga un poco por
+  // encima de N días completos y el ceil sume una noche de más.
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  diasManual?: number;
+
   @IsOptional()
   @IsNumber()
   @Min(0)

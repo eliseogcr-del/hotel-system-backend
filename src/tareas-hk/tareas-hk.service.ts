@@ -153,6 +153,24 @@ export class TareasHkService {
     return this.obtenerDetalle(client, hotelId, tareaId);
   }
 
+  /**
+   * Cancela una tarea que todavía no empezó. Si ya está en_proceso o
+   * terminado no se puede borrar (el HK ya la tomó o ya la hizo); hay que
+   * dejar el registro histórico.
+   */
+  async eliminar(client: SupabaseClient, hotelId: string, tareaId: string) {
+    const tarea = await this.cargarTareaHotel(client, hotelId, tareaId);
+    if (tarea.estado !== 'planificado') {
+      throw new BadRequestException(
+        `No se puede cancelar: la tarea ya está en estado '${tarea.estado}'`,
+      );
+    }
+
+    const { error } = await client.from('tareas_hk').delete().eq('id', tareaId);
+    if (error) throw error;
+    return { eliminado: true };
+  }
+
   private async cargarTareaHotel(
     client: SupabaseClient,
     hotelId: string,

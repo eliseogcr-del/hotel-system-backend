@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   Param,
   Patch,
@@ -92,5 +93,16 @@ export class TareasHkController {
   ) {
     const client = this.supabase.getClientForRequest(user.accessToken);
     return this.tareasHkService.asignar(client, hotelId, id, dto);
+  }
+
+  @Delete(':id')
+  @Roles('admin', 'recepcion')
+  async eliminar(
+    @Param('hotelId') hotelId: string,
+    @Param('id') id: string,
+    @CurrentUser() user: RequestUser,
+  ) {
+    const client = this.supabase.getClientForRequest(user.accessToken);
+    return this.tareasHkService.eliminar(client, hotelId, id);
   }
 }

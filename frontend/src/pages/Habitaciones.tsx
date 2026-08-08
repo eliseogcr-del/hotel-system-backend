@@ -1,6 +1,7 @@
 import { useEffect, useState, type CSSProperties } from 'react';
 import { api, ApiError } from '../lib/api';
 import { useHotel } from '../contexts/HotelContext';
+import { CheckinRapidoModal } from '../components/CheckinRapidoModal';
 
 type Estado = 'disponible' | 'ocupada' | 'limpieza' | 'mantenimiento' | 'bloqueada';
 
@@ -10,7 +11,7 @@ interface Habitacion {
   piso: number;
   estado: Estado;
   mantenimiento_planificado: boolean;
-  tipos_habitacion: { nombre: string } | null;
+  tipos_habitacion: { id: string; nombre: string } | null;
   estadiaId: string | null;
   huesped: string | null;
   checkinReal: string | null;
@@ -21,6 +22,11 @@ interface Habitacion {
   totalPagado: number | null;
   saldo: number | null;
   notas: string | null;
+}
+
+interface Tarifa {
+  tipo_hab_id: string;
+  normal: number;
 }
 
 const ESTADO_LABEL: Record<Estado, string> = {
@@ -44,8 +50,16 @@ function formatoMonto(n: number | null) {
 export function Habitaciones() {
   const { hotelActual } = useHotel();
   const [habitaciones, setHabitaciones] = useState<Habitacion[]>([]);
+  const [tarifas, setTarifas] = useState<Tarifa[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [ahora, setAhora] = useState(new Date());
+  const [checkinHab, setCheckinHab] = useState<Habitacion | null>(null);
+
+  useEffect(() => {
+    const t = setInterval(() => setAhora(new Date()), 1000);
+    return () => clearInterval(t);
+  }, []);
 
   function cargar() {
     if (!hotelActual) return;
@@ -56,6 +70,10 @@ export function Habitaciones() {
       .then(setHabitaciones)
       .catch((err) => setError(err instanceof ApiError ? err.message : 'Error al cargar'))
       .finally(() => setLoading(false));
+    api
+      .get<Tarifa[]>(`/hoteles/${hotelActual.hotelId}/tarifas`)
+      .then(setTarifas)
+      .catch(() => {});
   }
 
   useEffect(cargar, [hotelActual]);
@@ -71,11 +89,11 @@ export function Habitaciones() {
   }
 
   async function alternarMantenimientoPlanificado(hab: Habitacion) {
-    if (!hotelActual) return;
+    if (!hotelActual || hab.estado !== 'ocupada') return;
     const nuevo = !hab.mantenimiento_planificado;
     try {
-      await api.patch(`/hoteles/${hotelActual.hotelId}/habitaciones/${hab.id}`, {
-        mantenimientoPlanificado: nuevo,
+      await api.patch(`/hoteles/${hotelActual.hotelId}/habitaciones/${hab.id}/mantenimiento`, {
+        activar: nuevo,
       });
       setHabitaciones((prev) =>
         prev.map((h) => (h.id === hab.id ? { ...h, mantenimiento_planificado: nuevo } : h)),
@@ -85,13 +103,24 @@ export function Habitaciones() {
     }
   }
 
+  function tarifaNormalDe(tipoId: string | undefined): number | null {
+    if (!tipoId) return null;
+    const t = tarifas.find((t) => t.tipo_hab_id === tipoId);
+    return t ? Number(t.normal) : null;
+  }
+
   if (!hotelActual) return <p style={{ color: 'var(--text-muted)' }}>Cargando hotel...</p>;
   if (loading) return <p style={{ color: 'var(--text-muted)' }}>Cargando habitaciones...</p>;
   if (error && habitaciones.length === 0) return <p style={{ color: 'var(--danger)' }}>{error}</p>;
 
   return (
     <div>
-      <h1 style={{ fontSize: 20, marginBottom: 16 }}>Habitaciones</h1>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 16 }}>
+        <h1 style={{ fontSize: 20 }}>Habitaciones</h1>
+        <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
+          {ahora.toLocaleString('es-PE', { dateStyle: 'full', timeStyle: 'medium' })}
+        </span>
+      </div>
 
       <div style={{ display: 'flex', gap: 16, fontSize: 12, color: 'var(--text-secondary)', marginBottom: 16 }}>
         {(Object.keys(ESTADO_LABEL) as Estado[]).map((estado) => (
@@ -129,6 +158,7 @@ export function Habitaciones() {
               <th style={thStyle}>Tarifa/día</th>
               <th style={thStyle}>Notas</th>
               <th style={thStyle}>¿Mantenim.?</th>
+              <th style={thStyle}>Acciones</th>
             </tr>
           </thead>
           <tbody>
@@ -177,8 +207,17 @@ export function Habitaciones() {
                   <input
                     type="checkbox"
                     checked={h.mantenimiento_planificado}
+                    disabled={h.estado !== 'ocupada'}
+                    title={h.estado !== 'ocupada' ? 'Solo se puede marcar mientras la habitación está ocupada' : ''}
                     onChange={() => alternarMantenimientoPlanificado(h)}
                   />
+                </td>
+                <td style={tdStyle}>
+                  {h.estado === 'disponible' && (
+                    <button onClick={() => setCheckinHab(h)} style={linkBtnStyle}>
+                      Check-in
+                    </button>
+                  )}
                 </td>
               </tr>
             ))}
@@ -188,6 +227,17 @@ export function Habitaciones() {
 
       {habitaciones.length === 0 && (
         <p style={{ color: 'var(--text-muted)' }}>No hay habitaciones registradas.</p>
+      )}
+
+      {checkinHab && (
+        <CheckinRapidoModal
+          hotelId={hotelActual.hotelId}
+          habitacionId={checkinHab.id}
+          habNumero={checkinHab.hab_numero}
+          tarifaNormalDefault={tarifaNormalDe(checkinHab.tipos_habitacion?.id)}
+          onClose={() => setCheckinHab(null)}
+          onCreado={cargar}
+        />
       )}
     </div>
   );
@@ -253,3 +303,14 @@ function NotasCelda({ notas, onGuardar }: { notas: string; onGuardar: (valor: st
 
 const thStyle: CSSProperties = { padding: '8px 10px', whiteSpace: 'nowrap' };
 const tdStyle: CSSProperties = { padding: '8px 10px', color: 'var(--text-secondary)', whiteSpace: 'nowrap' };
+
+const linkBtnStyle: CSSProperties = {
+  background: 'none',
+  border: 'none',
+  padding: 0,
+  color: 'var(--brand)',
+  fontSize: 12.5,
+  fontWeight: 500,
+  cursor: 'pointer',
+  textDecoration: 'underline',
+};

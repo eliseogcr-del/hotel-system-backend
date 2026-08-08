@@ -431,11 +431,9 @@ export class ReservasService {
       tarifaDia = this.tarifaSegunOrigen(tarifa, origen, linea.tipoAlquiler);
     }
 
-    const dias = this.calcularDias(
-      linea.tipoAlquiler,
-      linea.checkinPrevisto,
-      linea.checkoutPrevisto,
-    );
+    const dias =
+      linea.diasManual ??
+      this.calcularDias(linea.tipoAlquiler, linea.checkinPrevisto, linea.checkoutPrevisto);
 
     const cargoAforoExtra = linea.cargoAforoExtra ?? 0;
     const cobroEarly = linea.cobroEarly ?? 0;

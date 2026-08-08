@@ -23,6 +23,7 @@ import { ActualizarHabitacionDto } from './dto/actualizar-habitacion.dto';
 import { CrearTarifaDto } from './dto/crear-tarifa.dto';
 import { CrearCocheraDto } from './dto/crear-cochera.dto';
 import { ActualizarCocheraDto } from './dto/actualizar-cochera.dto';
+import { ActualizarHotelDto } from './dto/actualizar-hotel.dto';
 
 @Controller('hoteles/:hotelId')
 @UseGuards(AuthGuard, RolesGuard)
@@ -31,6 +32,26 @@ export class ConfiguracionController {
     private readonly configuracionService: ConfiguracionService,
     private readonly supabase: SupabaseService,
   ) {}
+
+  // ---------- Hotel ----------
+
+  @Get()
+  @Roles('admin', 'recepcion', 'hk')
+  async obtenerHotel(@Param('hotelId') hotelId: string, @CurrentUser() user: RequestUser) {
+    const client = this.supabase.getClientForRequest(user.accessToken);
+    return this.configuracionService.obtenerHotel(client, hotelId);
+  }
+
+  @Patch()
+  @Roles('admin')
+  async actualizarHotel(
+    @Param('hotelId') hotelId: string,
+    @Body() dto: ActualizarHotelDto,
+    @CurrentUser() user: RequestUser,
+  ) {
+    const client = this.supabase.getClientForRequest(user.accessToken);
+    return this.configuracionService.actualizarHotel(client, hotelId, dto);
+  }
 
   // ---------- Tipos de habitación ----------
 

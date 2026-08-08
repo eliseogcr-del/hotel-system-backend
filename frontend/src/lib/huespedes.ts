@@ -6,6 +6,10 @@ export interface Huesped {
   apellidos: string;
   tipo_doc: string;
   nro_doc: string;
+  telefono: string | null;
+  correo: string | null;
+  nacionalidad: string | null;
+  fecha_nacimiento: string | null;
 }
 
 // No hay HuespedesModule en el backend todavía, así que esto consulta
@@ -18,7 +22,7 @@ export async function buscarHuespedPorDni(
 ): Promise<Huesped | null> {
   const { data, error } = await supabase
     .from('huespedes')
-    .select('id, nombres, apellidos, tipo_doc, nro_doc')
+    .select('id, nombres, apellidos, tipo_doc, nro_doc, telefono, correo, nacionalidad, fecha_nacimiento')
     .eq('hotel_id', hotelId)
     .eq('nro_doc', nroDoc)
     .maybeSingle();
@@ -39,7 +43,7 @@ export async function crearHuesped(
       tipo_doc: datos.tipoDoc,
       nro_doc: datos.nroDoc,
     })
-    .select('id, nombres, apellidos, tipo_doc, nro_doc')
+    .select('id, nombres, apellidos, tipo_doc, nro_doc, telefono, correo, nacionalidad, fecha_nacimiento')
     .single();
   if (error) throw error;
   return data;

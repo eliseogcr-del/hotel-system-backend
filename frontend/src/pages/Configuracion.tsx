@@ -37,12 +37,21 @@ interface Cochera {
   precio_externa: number;
 }
 
+interface HotelConfig {
+  id: string;
+  nombre: string;
+  hora_checkin: string;
+  hora_checkout: string;
+  modo_24h: boolean;
+}
+
 export function Configuracion() {
   const { hotelActual } = useHotel();
   const [tipos, setTipos] = useState<TipoHabitacion[]>([]);
   const [habitaciones, setHabitaciones] = useState<Habitacion[]>([]);
   const [tarifas, setTarifas] = useState<Tarifa[]>([]);
   const [cocheras, setCocheras] = useState<Cochera[]>([]);
+  const [hotel, setHotel] = useState<HotelConfig | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   function cargarTodo() {
@@ -52,6 +61,7 @@ export function Configuracion() {
     api.get<Habitacion[]>(`/hoteles/${h}/habitaciones`).then(setHabitaciones).catch(() => {});
     api.get<Tarifa[]>(`/hoteles/${h}/tarifas`).then(setTarifas).catch(() => {});
     api.get<Cochera[]>(`/hoteles/${h}/cocheras`).then(setCocheras).catch(() => {});
+    api.get<HotelConfig>(`/hoteles/${h}`).then(setHotel).catch(() => {});
   }
 
   useEffect(cargarTodo, [hotelActual]);
@@ -67,6 +77,7 @@ export function Configuracion() {
       <h1 style={{ fontSize: 20 }}>Configuración</h1>
       {error && <p style={{ color: 'var(--danger)' }}>{error}</p>}
 
+      {hotel && <SeccionHotel hotelId={hotelActual.hotelId} hotel={hotel} onCambio={cargarTodo} setError={setError} />}
       <SeccionTipos hotelId={hotelActual.hotelId} tipos={tipos} onCambio={cargarTodo} setError={setError} />
       <SeccionHabitaciones
         hotelId={hotelActual.hotelId}
@@ -78,6 +89,84 @@ export function Configuracion() {
       <SeccionTarifas hotelId={hotelActual.hotelId} tipos={tipos} tarifas={tarifas} onCambio={cargarTodo} setError={setError} />
       <SeccionCocheras hotelId={hotelActual.hotelId} cocheras={cocheras} onCambio={cargarTodo} setError={setError} />
     </div>
+  );
+}
+
+function SeccionHotel({
+  hotelId,
+  hotel,
+  onCambio,
+  setError,
+}: {
+  hotelId: string;
+  hotel: HotelConfig;
+  onCambio: () => void;
+  setError: (e: string | null) => void;
+}) {
+  const [horaCheckin, setHoraCheckin] = useState(hotel.hora_checkin.slice(0, 5));
+  const [horaCheckout, setHoraCheckout] = useState(hotel.hora_checkout.slice(0, 5));
+  const [modo24h, setModo24h] = useState(hotel.modo_24h);
+  const [guardando, setGuardando] = useState(false);
+
+  async function guardar(e: FormEvent) {
+    e.preventDefault();
+    setGuardando(true);
+    setError(null);
+    try {
+      await api.patch(`/hoteles/${hotelId}`, {
+        horaCheckin,
+        horaCheckout,
+        modo24h,
+      });
+      onCambio();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'No se pudo guardar la configuración del hotel');
+    } finally {
+      setGuardando(false);
+    }
+  }
+
+  return (
+    <section>
+      <h2 style={{ fontSize: 15, marginBottom: 10 }}>Horario de check-in / check-out</h2>
+      <p style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 8 }}>
+        Define la hora oficial de entrada y salida del hotel. Si el huésped ingresa antes de la hora de
+        check-in o sale después de la hora de check-out, el sistema calcula automáticamente un cargo de
+        early/late (50% de la tarifa diaria), editable por recepción. Modo 24h desactiva estas horas fijas:
+        la salida programada se calcula como check-in + días, a la misma hora de ingreso.
+      </p>
+      <form onSubmit={guardar} style={formInlineStyle}>
+        <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13 }}>
+          Check-in
+          <input
+            type="time"
+            value={horaCheckin}
+            onChange={(e) => setHoraCheckin(e.target.value)}
+            style={inputStyle}
+            disabled={modo24h}
+            required
+          />
+        </label>
+        <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13 }}>
+          Check-out
+          <input
+            type="time"
+            value={horaCheckout}
+            onChange={(e) => setHoraCheckout(e.target.value)}
+            style={inputStyle}
+            disabled={modo24h}
+            required
+          />
+        </label>
+        <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13 }}>
+          <input type="checkbox" checked={modo24h} onChange={(e) => setModo24h(e.target.checked)} />
+          Modo 24h (sin hora fija)
+        </label>
+        <button type="submit" disabled={guardando} style={btnPrimary}>
+          Guardar
+        </button>
+      </form>
+    </section>
   );
 }
 

@@ -34,6 +34,8 @@ export function EstadiaDetalle() {
   const [estadia, setEstadia] = useState<EstadiaDetalleData | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [accionando, setAccionando] = useState(false);
+  const [mostrarCheckout, setMostrarCheckout] = useState(false);
+  const [cobroLate, setCobroLate] = useState('');
 
   function cargar() {
     if (!hotelActual || !id) return;
@@ -45,13 +47,16 @@ export function EstadiaDetalle() {
 
   useEffect(cargar, [hotelActual, id]);
 
-  async function checkout() {
+  async function confirmarCheckout() {
     if (!hotelActual || !id) return;
-    if (!confirm('¿Confirmar checkout? La habitación pasará a limpieza.')) return;
     setAccionando(true);
     setError(null);
     try {
-      await api.post(`/hoteles/${hotelActual.hotelId}/estadias/${id}/checkout`);
+      await api.post(`/hoteles/${hotelActual.hotelId}/estadias/${id}/checkout`, {
+        cobroLateManual: cobroLate === '' ? undefined : Number(cobroLate),
+      });
+      setMostrarCheckout(false);
+      setCobroLate('');
       cargar();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'No se pudo hacer el checkout');
@@ -84,10 +89,49 @@ export function EstadiaDetalle() {
 
       {error && <p style={{ color: 'var(--danger)', fontSize: 13, marginBottom: 12 }}>{error}</p>}
 
-      {estadia.estado_actual === 'en_curso' && (
-        <button onClick={checkout} disabled={accionando} style={{ ...btnPrimary, marginBottom: 20 }}>
+      {estadia.estado_actual === 'en_curso' && !mostrarCheckout && (
+        <button onClick={() => setMostrarCheckout(true)} style={{ ...btnPrimary, marginBottom: 20 }}>
           Hacer checkout
         </button>
+      )}
+
+      {estadia.estado_actual === 'en_curso' && mostrarCheckout && (
+        <div
+          style={{
+            background: 'var(--surface-1)',
+            border: '1px solid var(--border)',
+            borderRadius: 12,
+            padding: 16,
+            marginBottom: 20,
+            display: 'flex',
+            gap: 8,
+            alignItems: 'flex-end',
+            flexWrap: 'wrap',
+          }}
+        >
+          <div style={{ width: 180 }}>
+            <label style={labelStyle}>Cargo por late (S/.)</label>
+            <input
+              type="number"
+              min={0}
+              step={0.01}
+              placeholder="Automático"
+              value={cobroLate}
+              onChange={(e) => setCobroLate(e.target.value)}
+              style={inputStyle}
+            />
+            <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: '4px 0 0' }}>
+              Vacío = se calcula solo (50% de la tarifa diaria si la salida es después de la hora de
+              check-out del hotel). Pon 0 para no cobrar.
+            </p>
+          </div>
+          <button onClick={confirmarCheckout} disabled={accionando} style={btnPrimary}>
+            Confirmar checkout
+          </button>
+          <button onClick={() => setMostrarCheckout(false)} style={btnSecondary}>
+            Cancelar
+          </button>
+        </div>
       )}
 
       {estadia.estado_actual !== 'finalizada' && (
@@ -240,4 +284,12 @@ const btnPrimary: CSSProperties = {
   borderRadius: 'var(--radius)',
   fontSize: 13,
   fontWeight: 500,
+};
+
+const btnSecondary: CSSProperties = {
+  padding: '8px 14px',
+  background: 'transparent',
+  border: '1px solid var(--border)',
+  borderRadius: 'var(--radius)',
+  fontSize: 13,
 };

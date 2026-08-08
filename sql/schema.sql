@@ -17,7 +17,15 @@ create table hoteles (
     cantidad_pisos int not null default 1,
     moneda_default text not null default 'PEN' check (moneda_default in ('PEN','USD')),
     activo boolean not null default true,
-    created_at timestamptz not null default now()
+    created_at timestamptz not null default now(),
+    -- Cada hotel configura su propia hora de check-in/checkout (ej. Jorge
+    -- Chávez: 13:00 / 12:00). modo_24h = true significa que no hay hora
+    -- fija: el checkout previsto se calcula como checkin + dias, a la
+    -- misma hora del checkin, sin comparar contra hora_checkin/checkout
+    -- (esos dos campos se ignoran en ese modo).
+    hora_checkin time not null default '13:00',
+    hora_checkout time not null default '12:00',
+    modo_24h boolean not null default false
 );
 
 -- ============================================================================
@@ -427,6 +435,12 @@ create policy p_personal on personal for select
 
 create policy p_hoteles on hoteles for select
     using (is_super_admin() or id in (select my_hotel_ids()));
+
+-- Solo el admin del hotel puede editar su configuracion (horas de
+-- check-in/checkout, modo 24h).
+create policy p_hoteles_update on hoteles for update
+    using (is_super_admin() or id in (select my_hotel_ids_by_rol('admin')))
+    with check (is_super_admin() or id in (select my_hotel_ids_by_rol('admin')));
 
 create policy p_tipos_habitacion on tipos_habitacion for all
     using (is_super_admin() or hotel_id in (select my_hotel_ids()));

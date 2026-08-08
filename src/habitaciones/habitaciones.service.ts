@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { SupabaseClient } from '@supabase/supabase-js';
 import { DisponibilidadService } from './disponibilidad/disponibilidad.service';
 import { ValidarDisponibilidadDto } from './dto/validar-disponibilidad.dto';
@@ -107,6 +107,66 @@ export class HabitacionesService {
         notas: null,
       }),
     }));
+  }
+
+  /**
+   * "Solicitar mantenimiento con huésped dentro" desde el panel de
+   * Habitaciones. Solo tiene sentido si la habitación está 'ocupada'
+   * (CLAUDE.md 3.2): el HK todavía no entra, la habitación sigue en rojo
+   * hasta que él inicia la tarea desde TareasHkModule. Activar crea la
+   * tarea (para que el HK la vea en su cola); desactivar la cancela SI
+   * todavía no la empezó -- si ya la inició, el estado de la habitación ya
+   * cambió a 'mantenimiento' y esta acción deja de estar disponible sola,
+   * porque el checkbox solo se habilita con estado 'ocupada'.
+   */
+  async alternarMantenimientoConHuesped(
+    client: SupabaseClient,
+    hotelId: string,
+    habitacionId: string,
+    activar: boolean,
+    personalId: string,
+  ) {
+    const { data: hab, error: habError } = await client
+      .from('habitaciones')
+      .select('id, estado, mantenimiento_planificado')
+      .eq('id', habitacionId)
+      .eq('hotel_id', hotelId)
+      .maybeSingle();
+    if (habError) throw habError;
+    if (!hab) throw new NotFoundException('La habitación no existe en este hotel');
+    if (hab.estado !== 'ocupada') {
+      throw new BadRequestException(
+        'Solo se puede marcar/desmarcar mantenimiento mientras la habitación está ocupada',
+      );
+    }
+
+    if (activar) {
+      const { error: tareaError } = await client.from('tareas_hk').insert({
+        hotel_id: hotelId,
+        habitacion_id: habitacionId,
+        tipo: 'mantenimiento',
+        con_huesped_dentro: true,
+        estado: 'planificado',
+        definido_por: personalId,
+      });
+      if (tareaError) throw tareaError;
+    } else {
+      const { error: cancelError } = await client
+        .from('tareas_hk')
+        .delete()
+        .eq('habitacion_id', habitacionId)
+        .eq('tipo', 'mantenimiento')
+        .eq('estado', 'planificado');
+      if (cancelError) throw cancelError;
+    }
+
+    const { error: updError } = await client
+      .from('habitaciones')
+      .update({ mantenimiento_planificado: activar })
+      .eq('id', habitacionId);
+    if (updError) throw updError;
+
+    return { mantenimientoPlanificado: activar };
   }
 
   async validarDisponibilidad(

@@ -3,6 +3,7 @@ import {
   Controller,
   Get,
   Param,
+  Patch,
   Post,
   UseGuards,
 } from '@nestjs/common';
@@ -14,6 +15,7 @@ import { RequestUser } from '../common/interfaces/request-user.interface';
 import { SupabaseService } from '../common/supabase/supabase.service';
 import { HabitacionesService } from './habitaciones.service';
 import { ValidarDisponibilidadDto } from './dto/validar-disponibilidad.dto';
+import { AlternarMantenimientoDto } from './dto/alternar-mantenimiento.dto';
 
 @Controller('hoteles/:hotelId/habitaciones')
 @UseGuards(AuthGuard, RolesGuard)
@@ -47,6 +49,24 @@ export class HabitacionesController {
       client,
       hotelId,
       dto,
+    );
+  }
+
+  @Patch(':id/mantenimiento')
+  @Roles('admin', 'recepcion')
+  async alternarMantenimiento(
+    @Param('hotelId') hotelId: string,
+    @Param('id') id: string,
+    @Body() dto: AlternarMantenimientoDto,
+    @CurrentUser() user: RequestUser,
+  ) {
+    const client = this.supabase.getClientForRequest(user.accessToken);
+    return this.habitacionesService.alternarMantenimientoConHuesped(
+      client,
+      hotelId,
+      id,
+      dto.activar,
+      user.personalId,
     );
   }
 }

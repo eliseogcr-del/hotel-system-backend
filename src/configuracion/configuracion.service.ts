@@ -7,12 +7,43 @@ import { ActualizarHabitacionDto } from './dto/actualizar-habitacion.dto';
 import { CrearTarifaDto } from './dto/crear-tarifa.dto';
 import { CrearCocheraDto } from './dto/crear-cochera.dto';
 import { ActualizarCocheraDto } from './dto/actualizar-cochera.dto';
+import { ActualizarHotelDto } from './dto/actualizar-hotel.dto';
 
 const CODIGO_UNIQUE_VIOLATION = '23505';
 const CODIGO_FOREIGN_KEY_VIOLATION = '23503';
 
 @Injectable()
 export class ConfiguracionService {
+  // ---------- Hotel (horas de check-in/checkout) ----------
+
+  async obtenerHotel(client: SupabaseClient, hotelId: string) {
+    const { data, error } = await client
+      .from('hoteles')
+      .select('id, nombre, hora_checkin, hora_checkout, modo_24h')
+      .eq('id', hotelId)
+      .maybeSingle();
+    if (error) throw error;
+    if (!data) throw new NotFoundException('Hotel no encontrado');
+    return data;
+  }
+
+  async actualizarHotel(client: SupabaseClient, hotelId: string, dto: ActualizarHotelDto) {
+    const cambios: Record<string, unknown> = {};
+    if (dto.horaCheckin !== undefined) cambios.hora_checkin = dto.horaCheckin;
+    if (dto.horaCheckout !== undefined) cambios.hora_checkout = dto.horaCheckout;
+    if (dto.modo24h !== undefined) cambios.modo_24h = dto.modo24h;
+
+    const { data, error } = await client
+      .from('hoteles')
+      .update(cambios)
+      .eq('id', hotelId)
+      .select('id, nombre, hora_checkin, hora_checkout, modo_24h')
+      .maybeSingle();
+    if (error) throw error;
+    if (!data) throw new NotFoundException('Hotel no encontrado');
+    return data;
+  }
+
   // ---------- Tipos de habitación ----------
 
   async crearTipoHabitacion(client: SupabaseClient, hotelId: string, dto: CrearTipoHabitacionDto) {
