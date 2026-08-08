@@ -69,4 +69,15 @@ export class HabitacionesController {
       user.personalId,
     );
   }
+
+  @Patch(':id/marcar-disponible')
+  @Roles('admin', 'recepcion')
+  async marcarDisponible(
+    @Param('hotelId') hotelId: string,
+    @Param('id') id: string,
+    @CurrentUser() user: RequestUser,
+  ) {
+    const client = this.supabase.getClientForRequest(user.accessToken);
+    return this.habitacionesService.marcarDisponible(client, hotelId, id);
+  }
 }

@@ -18,6 +18,17 @@ interface TareaHk {
 
 const ESTADOS = ['planificado', 'en_proceso', 'terminado'];
 
+const ESTADO_LABEL: Record<string, string> = {
+  planificado: 'Planificado',
+  en_proceso: 'En proceso',
+  terminado: 'Terminado',
+};
+
+const TIPO_LABEL: Record<string, string> = {
+  limpieza: 'Limpieza',
+  mantenimiento: 'Mantenimiento',
+};
+
 export function TareasHk() {
   const { hotelActual } = useHotel();
   const [tareas, setTareas] = useState<TareaHk[]>([]);
@@ -105,7 +116,7 @@ export function TareasHk() {
         <option value="">Todos los estados</option>
         {ESTADOS.map((e) => (
           <option key={e} value={e}>
-            {e}
+            {ESTADO_LABEL[e]}
           </option>
         ))}
       </select>
@@ -130,13 +141,23 @@ export function TareasHk() {
               }}
             >
               <span>
-                Habitación {t.habitaciones?.hab_numero} · {t.tipo}
+                Habitación {t.habitaciones?.hab_numero} · {TIPO_LABEL[t.tipo] ?? t.tipo}
                 {t.con_huesped_dentro && (
                   <span style={{ color: 'var(--text-muted)' }}> (con huésped dentro)</span>
                 )}
               </span>
               <span style={{ color: 'var(--text-secondary)' }}>Prioridad {t.prioridad}</span>
-              <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{t.estado}</span>
+              <span
+                style={{
+                  fontSize: 11,
+                  padding: '2px 8px',
+                  borderRadius: 999,
+                  border: '1px solid var(--border)',
+                  color: t.estado === 'terminado' ? 'var(--disponible-text)' : 'var(--text-secondary)',
+                }}
+              >
+                {ESTADO_LABEL[t.estado] ?? t.estado}
+              </span>
               <span>
                 {t.estado === 'planificado' && (
                   <button onClick={() => iniciar(t.id)} disabled={accionando === t.id} style={btnSecondary}>

@@ -1,4 +1,5 @@
 import { useEffect, useState, type CSSProperties } from 'react';
+import { Link } from 'react-router-dom';
 import { api, ApiError } from '../lib/api';
 import { useHotel } from '../contexts/HotelContext';
 import { CheckinRapidoModal } from '../components/CheckinRapidoModal';
@@ -11,6 +12,7 @@ interface Habitacion {
   piso: number;
   estado: Estado;
   mantenimiento_planificado: boolean;
+  tareaHkEnProceso: 'limpieza' | 'mantenimiento' | null;
   tipos_habitacion: { id: string; nombre: string } | null;
   estadiaId: string | null;
   huesped: string | null;
@@ -107,9 +109,25 @@ export function Habitaciones() {
     }
   }
 
+  async function marcarDisponible(hab: Habitacion) {
+    if (!hotelActual) return;
+    try {
+      await api.patch(`/hoteles/${hotelActual.hotelId}/habitaciones/${hab.id}/marcar-disponible`);
+      cargar();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'No se pudo marcar disponible');
+    }
+  }
+
   function preciosDe(tipoId: string | undefined): TipoHabitacionPrecios | null {
     if (!tipoId) return null;
     return tiposHabitacion.find((t) => t.id === tipoId) ?? null;
+  }
+
+  function etiquetaEstado(h: Habitacion): string {
+    if (h.tareaHkEnProceso === 'limpieza' && h.estado === 'limpieza') return 'En proceso de limpieza';
+    if (h.tareaHkEnProceso === 'mantenimiento' && h.estado === 'ocupada') return 'En proceso de mantenimiento';
+    return ESTADO_LABEL[h.estado];
   }
 
   if (!hotelActual) return <p style={{ color: 'var(--text-muted)' }}>Cargando hotel...</p>;
@@ -180,7 +198,7 @@ export function Habitaciones() {
                       fontSize: 11,
                     }}
                   >
-                    {ESTADO_LABEL[h.estado]}
+                    {etiquetaEstado(h)}
                   </span>
                 </td>
                 <td style={tdStyle}>{h.huesped ?? ''}</td>
@@ -220,6 +238,20 @@ export function Habitaciones() {
                   {h.estado === 'disponible' && (
                     <button onClick={() => setCheckinHab(h)} style={linkBtnStyle}>
                       Check-in
+                    </button>
+                  )}
+                  {h.estado === 'ocupada' && h.estadiaId && (
+                    <Link to={`/estadias/${h.estadiaId}`} style={linkBtnStyle}>
+                      Check-out
+                    </Link>
+                  )}
+                  {(h.estado === 'limpieza' || h.estado === 'mantenimiento') && (
+                    <button
+                      onClick={() => marcarDisponible(h)}
+                      style={linkBtnStyle}
+                      title="Usar solo si HK ya terminó pero se le olvidó cerrar la tarea"
+                    >
+                      Marcar disponible
                     </button>
                   )}
                 </td>

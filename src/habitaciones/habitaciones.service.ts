@@ -30,6 +30,18 @@ export class HabitacionesService {
 
     if (error) throw error;
 
+    const { data: tareasEnProceso, error: tareasError } = await client
+      .from('tareas_hk')
+      .select('habitacion_id, tipo')
+      .eq('hotel_id', hotelId)
+      .eq('estado', 'en_proceso');
+    if (tareasError) throw tareasError;
+
+    const tareaEnProcesoPorHabitacion = new Map<string, 'limpieza' | 'mantenimiento'>();
+    for (const t of tareasEnProceso ?? []) {
+      tareaEnProcesoPorHabitacion.set(t.habitacion_id, t.tipo);
+    }
+
     const { data: lineasActivas, error: lineasError } = await client
       .from('reserva_habitacion')
       .select(
@@ -94,6 +106,7 @@ export class HabitacionesService {
 
     return (habitaciones ?? []).map((hab) => ({
       ...hab,
+      tareaHkEnProceso: tareaEnProcesoPorHabitacion.get(hab.id) ?? null,
       ...(detallePorHabitacion.get(hab.id) ?? {
         estadiaId: null,
         huesped: null,
@@ -112,12 +125,12 @@ export class HabitacionesService {
   /**
    * "Solicitar mantenimiento con huésped dentro" desde el panel de
    * Habitaciones. Solo tiene sentido si la habitación está 'ocupada'
-   * (CLAUDE.md 3.2): el HK todavía no entra, la habitación sigue en rojo
-   * hasta que él inicia la tarea desde TareasHkModule. Activar crea la
-   * tarea (para que el HK la vea en su cola); desactivar la cancela SI
-   * todavía no la empezó -- si ya la inició, el estado de la habitación ya
-   * cambió a 'mantenimiento' y esta acción deja de estar disponible sola,
-   * porque el checkbox solo se habilita con estado 'ocupada'.
+   * (CLAUDE.md 3.2): con huésped dentro la habitación se queda 'ocupada'
+   * (rojo) todo el tiempo, incluso mientras HK ya está trabajando en ella
+   * (ver TareasHkService.iniciar), así que el checkbox sigue habilitado
+   * de principio a fin. Activar crea la tarea (para que el HK la vea en
+   * su cola); desactivar la cancela si todavía no la empezó, o la marca
+   * como terminada si el HK ya la inició y se le olvidó cerrarla.
    */
   async alternarMantenimientoConHuesped(
     client: SupabaseClient,
@@ -156,8 +169,21 @@ export class HabitacionesService {
         .delete()
         .eq('habitacion_id', habitacionId)
         .eq('tipo', 'mantenimiento')
+        .eq('con_huesped_dentro', true)
         .eq('estado', 'planificado');
       if (cancelError) throw cancelError;
+
+      // Si el HK ya la había iniciado y se le olvidó marcarla terminada,
+      // recepción puede cerrarla igual desmarcando el checkbox -- se
+      // finaliza en vez de borrarse para no perder el registro histórico.
+      const { error: finalizarError } = await client
+        .from('tareas_hk')
+        .update({ estado: 'terminado', finalizado_en: new Date().toISOString() })
+        .eq('habitacion_id', habitacionId)
+        .eq('tipo', 'mantenimiento')
+        .eq('con_huesped_dentro', true)
+        .eq('estado', 'en_proceso');
+      if (finalizarError) throw finalizarError;
     }
 
     const { error: updError } = await client
@@ -167,6 +193,52 @@ export class HabitacionesService {
     if (updError) throw updError;
 
     return { mantenimientoPlanificado: activar };
+  }
+
+  /**
+   * "Marcar disponible" manual desde el panel de Habitaciones: para cuando
+   * HK ya terminó de limpiar/reparar en la vida real pero se le olvidó
+   * cerrar la tarea desde su formulario. Solo aplica a 'limpieza' o
+   * 'mantenimiento' -- nunca a 'ocupada' (habría un huésped adentro) ni a
+   * mantenimiento con huésped dentro (ese caso nunca sale de 'ocupada',
+   * se corrige desmarcando el checkbox, no desde aquí).
+   */
+  async marcarDisponible(client: SupabaseClient, hotelId: string, habitacionId: string) {
+    const { data: hab, error: habError } = await client
+      .from('habitaciones')
+      .select('id, estado')
+      .eq('id', habitacionId)
+      .eq('hotel_id', hotelId)
+      .maybeSingle();
+    if (habError) throw habError;
+    if (!hab) throw new NotFoundException('La habitación no existe en este hotel');
+    if (hab.estado !== 'limpieza' && hab.estado !== 'mantenimiento') {
+      throw new BadRequestException(
+        `Solo se puede marcar disponible una habitación en 'limpieza' o 'mantenimiento' (está en '${hab.estado}')`,
+      );
+    }
+
+    const tipoTarea = hab.estado === 'limpieza' ? 'limpieza' : 'mantenimiento';
+    const { error: finalizarError } = await client
+      .from('tareas_hk')
+      .update({ estado: 'terminado', finalizado_en: new Date().toISOString() })
+      .eq('habitacion_id', habitacionId)
+      .eq('tipo', tipoTarea)
+      .in('estado', ['planificado', 'en_proceso']);
+    if (finalizarError) throw finalizarError;
+
+    const cambiosHabitacion: Record<string, unknown> = { estado: 'disponible' };
+    if (tipoTarea === 'mantenimiento') {
+      cambiosHabitacion.mantenimiento_planificado = false;
+    }
+
+    const { error: updError } = await client
+      .from('habitaciones')
+      .update(cambiosHabitacion)
+      .eq('id', habitacionId);
+    if (updError) throw updError;
+
+    return { estado: 'disponible' };
   }
 
   async validarDisponibilidad(

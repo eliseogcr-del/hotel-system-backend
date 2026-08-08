@@ -80,10 +80,12 @@ export class TareasHkService {
 
   /**
    * Inicia la tarea (el HK la toma desde su celular). Si nadie la tenía
-   * asignada, queda auto-asignada a quien la inicia. Solo si es
-   * 'mantenimiento' la habitación pasa a ese estado ahora — antes de
-   * iniciar, sigue mostrando lo que ya tenía (ocupada si hay huésped
-   * dentro), ver CLAUDE.md 3.2.
+   * asignada, queda auto-asignada a quien la inicia. Si es 'mantenimiento'
+   * SIN huésped dentro, la habitación pasa a ese estado ahora. Con huésped
+   * dentro el huésped sigue físicamente en el cuarto, así que la
+   * habitación se queda 'ocupada' (rojo) todo el tiempo que dure la
+   * tarea -- el frontend usa tareaHkEnProceso para mostrar "en proceso de
+   * mantenimiento" sin cambiar el color. Ver CLAUDE.md 3.2.
    */
   async iniciar(client: SupabaseClient, hotelId: string, tareaId: string, personalId: string) {
     const tarea = await this.cargarTareaHotel(client, hotelId, tareaId);
@@ -101,7 +103,7 @@ export class TareasHkService {
       .eq('id', tareaId);
     if (updError) throw updError;
 
-    if (tarea.tipo === 'mantenimiento') {
+    if (tarea.tipo === 'mantenimiento' && !tarea.con_huesped_dentro) {
       const { error: habError } = await client
         .from('habitaciones')
         .update({ estado: 'mantenimiento' })
@@ -115,7 +117,8 @@ export class TareasHkService {
   /**
    * Termina la tarea. La habitación queda 'disponible', salvo mantenimiento
    * con huésped dentro: en ese caso vuelve a 'ocupada' (el huésped nunca se
-   * fue de la habitación).
+   * fue de la habitación) y se desmarca mantenimiento_planificado (el
+   * checkbox que ve recepción en Habitaciones) porque ya se atendió.
    */
   async terminar(client: SupabaseClient, hotelId: string, tareaId: string) {
     const tarea = await this.cargarTareaHotel(client, hotelId, tareaId);
@@ -132,9 +135,14 @@ export class TareasHkService {
     const nuevoEstadoHabitacion =
       tarea.tipo === 'mantenimiento' && tarea.con_huesped_dentro ? 'ocupada' : 'disponible';
 
+    const cambiosHabitacion: Record<string, unknown> = { estado: nuevoEstadoHabitacion };
+    if (tarea.tipo === 'mantenimiento') {
+      cambiosHabitacion.mantenimiento_planificado = false;
+    }
+
     const { error: habError } = await client
       .from('habitaciones')
-      .update({ estado: nuevoEstadoHabitacion })
+      .update(cambiosHabitacion)
       .eq('id', tarea.habitacion_id);
     if (habError) throw habError;
 
