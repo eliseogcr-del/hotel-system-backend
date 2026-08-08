@@ -10,6 +10,20 @@ const TIPOS_DOC = [
   { value: 'otro', label: 'Otro' },
 ];
 
+const NACIONALIDAD_LABEL: Record<string, string> = {
+  peruano: 'Peruano',
+  extranjero: 'Extranjero',
+};
+
+function formatoFechaNacimiento(iso: string | null): string {
+  if (!iso) return '—';
+  return new Date(`${iso}T00:00:00`).toLocaleDateString('es-PE', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+  });
+}
+
 interface Huesped {
   id: string;
   tipo_doc: string;
@@ -91,28 +105,71 @@ export function Huespedes() {
 
       {!loading && (
         <div style={{ overflowX: 'auto', border: '1px solid var(--border)', borderRadius: 12 }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, minWidth: 1080 }}>
             <thead>
-              <tr style={{ textAlign: 'left', color: 'var(--text-secondary)', fontSize: 11, background: 'var(--surface-1)' }}>
+              <tr
+                style={{
+                  textAlign: 'left',
+                  color: 'var(--text-secondary)',
+                  fontSize: 11,
+                  textTransform: 'uppercase',
+                  letterSpacing: 0.3,
+                  background: 'var(--surface-1)',
+                }}
+              >
                 <th style={thStyle}>Documento</th>
                 <th style={thStyle}>Nombres</th>
+                <th style={thStyle}>Teléfono</th>
+                <th style={thStyle}>Correo</th>
+                <th style={thStyle}>Nacionalidad</th>
+                <th style={thStyle}>F. nacimiento</th>
                 <th style={thStyle}>RUC</th>
                 <th style={thStyle}>Razón social</th>
-                <th style={thStyle}>Acciones</th>
+                <th style={{ ...thStyle, textAlign: 'right' }}>Acciones</th>
               </tr>
             </thead>
             <tbody>
-              {huespedes.map((h) => (
-                <tr key={h.id} style={{ borderTop: '1px solid var(--border)' }}>
+              {huespedes.map((h, i) => (
+                <tr
+                  key={h.id}
+                  style={{
+                    borderTop: '1px solid var(--border)',
+                    background: i % 2 === 1 ? 'var(--surface-1)' : 'transparent',
+                  }}
+                >
                   <td style={tdStyle}>
-                    {TIPOS_DOC.find((t) => t.value === h.tipo_doc)?.label ?? h.tipo_doc} {h.nro_doc}
+                    <span style={{ color: 'var(--text-muted)', fontSize: 11 }}>
+                      {TIPOS_DOC.find((t) => t.value === h.tipo_doc)?.label ?? h.tipo_doc}
+                    </span>{' '}
+                    <span style={{ fontFamily: 'monospace' }}>{h.nro_doc}</span>
                   </td>
                   <td style={{ ...tdStyle, fontWeight: 500, color: 'var(--text-primary)' }}>
                     {h.nombres} {h.apellidos}
                   </td>
-                  <td style={tdStyle}>{h.ruc ?? ''}</td>
-                  <td style={tdStyle}>{h.razon_social ?? ''}</td>
+                  <td style={tdStyle}>{h.telefono ?? '—'}</td>
+                  <td style={tdStyle}>{h.correo ?? '—'}</td>
                   <td style={tdStyle}>
+                    {h.nacionalidad ? (
+                      <span
+                        style={{
+                          background: 'var(--surface-1)',
+                          border: '1px solid var(--border)',
+                          borderRadius: 999,
+                          padding: '2px 8px',
+                          fontSize: 11.5,
+                        }}
+                      >
+                        {NACIONALIDAD_LABEL[h.nacionalidad] ?? h.nacionalidad}
+                        {h.nacionalidad === 'extranjero' && h.origen ? ` · ${h.origen}` : ''}
+                      </span>
+                    ) : (
+                      '—'
+                    )}
+                  </td>
+                  <td style={tdStyle}>{formatoFechaNacimiento(h.fecha_nacimiento)}</td>
+                  <td style={{ ...tdStyle, fontFamily: 'monospace' }}>{h.ruc ?? '—'}</td>
+                  <td style={tdStyle}>{h.razon_social ?? '—'}</td>
+                  <td style={{ ...tdStyle, textAlign: 'right' }}>
                     <button onClick={() => abrirEditar(h)} style={btnSecondary}>
                       Editar
                     </button>
@@ -333,8 +390,13 @@ const modalStyle: CSSProperties = {
   maxWidth: 560,
 };
 
-const thStyle: CSSProperties = { padding: '8px 10px', whiteSpace: 'nowrap' };
-const tdStyle: CSSProperties = { padding: '8px 10px', color: 'var(--text-secondary)' };
+const thStyle: CSSProperties = { padding: '10px 14px', whiteSpace: 'nowrap', fontWeight: 600 };
+const tdStyle: CSSProperties = {
+  padding: '10px 14px',
+  color: 'var(--text-secondary)',
+  whiteSpace: 'nowrap',
+  fontSize: 13,
+};
 
 const labelStyle: CSSProperties = {
   fontSize: 11,
