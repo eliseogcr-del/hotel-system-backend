@@ -115,11 +115,12 @@ export function Habitaciones() {
 
   return (
     <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 16 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr auto 1fr', alignItems: 'baseline', marginBottom: 16 }}>
         <h1 style={{ fontSize: 20 }}>Habitaciones</h1>
-        <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
+        <span style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)', textAlign: 'center' }}>
           {ahora.toLocaleString('es-PE', { dateStyle: 'full', timeStyle: 'medium' })}
         </span>
+        <span />
       </div>
 
       <div style={{ display: 'flex', gap: 16, fontSize: 12, color: 'var(--text-secondary)', marginBottom: 16 }}>
