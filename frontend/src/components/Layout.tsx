@@ -15,6 +15,11 @@ export function Layout() {
   const { signOut } = useAuth();
   const { asignaciones, hotelActual, cambiarHotel } = useHotel();
 
+  const navItems =
+    hotelActual?.rol === 'admin'
+      ? [...NAV_ITEMS, { to: '/configuracion', label: 'Configuración', icon: '⚙' }]
+      : NAV_ITEMS;
+
   return (
     <div style={{ display: 'flex', minHeight: '100vh' }}>
       <aside
@@ -49,7 +54,7 @@ export function Layout() {
           <span style={{ fontSize: 13, fontWeight: 500 }}>Hotel Suite</span>
         </div>
 
-        {NAV_ITEMS.map((item) => (
+        {navItems.map((item) => (
           <NavLink
             key={item.to}
             to={item.to}

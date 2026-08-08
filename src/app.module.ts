@@ -9,6 +9,7 @@ import { PersonalModule } from './personal/personal.module';
 import { TareasHkModule } from './tareas-hk/tareas-hk.module';
 import { CotizacionesModule } from './cotizaciones/cotizaciones.module';
 import { ImportacionesCanalModule } from './importaciones-canal/importaciones-canal.module';
+import { ConfiguracionModule } from './configuracion/configuracion.module';
 
 @Module({
   imports: [
@@ -22,6 +23,7 @@ import { ImportacionesCanalModule } from './importaciones-canal/importaciones-ca
     TareasHkModule,
     CotizacionesModule,
     ImportacionesCanalModule,
+    ConfiguracionModule,
   ],
 })
 export class AppModule {}

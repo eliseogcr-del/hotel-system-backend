@@ -11,6 +11,7 @@ import { Caja } from './pages/Caja';
 import { TareasHk } from './pages/TareasHk';
 import { Cotizaciones } from './pages/Cotizaciones';
 import { CotizacionDetalle } from './pages/CotizacionDetalle';
+import { Configuracion } from './pages/Configuracion';
 
 export function App() {
   return (
@@ -34,6 +35,7 @@ export function App() {
         <Route path="/tareas-hk" element={<TareasHk />} />
         <Route path="/cotizaciones" element={<Cotizaciones />} />
         <Route path="/cotizaciones/:id" element={<CotizacionDetalle />} />
+        <Route path="/configuracion" element={<Configuracion />} />
       </Route>
 
       <Route path="*" element={<Navigate to="/" replace />} />
