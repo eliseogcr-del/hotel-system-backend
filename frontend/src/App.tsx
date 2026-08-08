@@ -4,6 +4,7 @@ import { ProtectedRoute } from './components/ProtectedRoute';
 import { Login } from './pages/Login';
 import { Habitaciones } from './pages/Habitaciones';
 import { Reservas } from './pages/Reservas';
+import { Huespedes } from './pages/Huespedes';
 import { ReservaDetalle } from './pages/ReservaDetalle';
 import { Estadias } from './pages/Estadias';
 import { EstadiaDetalle } from './pages/EstadiaDetalle';
@@ -28,6 +29,7 @@ export function App() {
         <Route path="/" element={<Navigate to="/habitaciones" replace />} />
         <Route path="/habitaciones" element={<Habitaciones />} />
         <Route path="/reservas" element={<Reservas />} />
+        <Route path="/huespedes" element={<Huespedes />} />
         <Route path="/reservas/:id" element={<ReservaDetalle />} />
         <Route path="/estadias" element={<Estadias />} />
         <Route path="/estadias/:id" element={<EstadiaDetalle />} />

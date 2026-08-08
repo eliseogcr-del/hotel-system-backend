@@ -10,6 +10,7 @@ import { TareasHkModule } from './tareas-hk/tareas-hk.module';
 import { CotizacionesModule } from './cotizaciones/cotizaciones.module';
 import { ImportacionesCanalModule } from './importaciones-canal/importaciones-canal.module';
 import { ConfiguracionModule } from './configuracion/configuracion.module';
+import { HuespedesModule } from './huespedes/huespedes.module';
 
 @Module({
   imports: [
@@ -24,6 +25,7 @@ import { ConfiguracionModule } from './configuracion/configuracion.module';
     CotizacionesModule,
     ImportacionesCanalModule,
     ConfiguracionModule,
+    HuespedesModule,
   ],
 })
 export class AppModule {}

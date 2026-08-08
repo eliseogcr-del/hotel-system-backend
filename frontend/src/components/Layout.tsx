@@ -15,10 +15,13 @@ export function Layout() {
   const { signOut } = useAuth();
   const { asignaciones, hotelActual, cambiarHotel } = useHotel();
 
-  const navItems =
-    hotelActual?.rol === 'admin'
-      ? [...NAV_ITEMS, { to: '/configuracion', label: 'Configuración', icon: '⚙' }]
-      : NAV_ITEMS;
+  const navItems = [...NAV_ITEMS];
+  if (hotelActual?.rol === 'admin' || hotelActual?.rol === 'recepcion') {
+    navItems.splice(1, 0, { to: '/huespedes', label: 'Huéspedes', icon: '🧑' });
+  }
+  if (hotelActual?.rol === 'admin') {
+    navItems.push({ to: '/configuracion', label: 'Configuración', icon: '⚙' });
+  }
 
   return (
     <div style={{ display: 'flex', minHeight: '100vh' }}>
