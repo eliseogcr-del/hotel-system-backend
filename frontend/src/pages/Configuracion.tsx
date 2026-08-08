@@ -10,6 +10,14 @@ interface TipoHabitacion {
   activo: boolean;
 }
 
+interface Habitacion {
+  id: string;
+  hab_numero: number;
+  piso: number;
+  estado: string;
+  tipos_habitacion: { id: string; nombre: string } | null;
+}
+
 interface Tarifa {
   id: string;
   minimo: number | null;
@@ -32,6 +40,7 @@ interface Cochera {
 export function Configuracion() {
   const { hotelActual } = useHotel();
   const [tipos, setTipos] = useState<TipoHabitacion[]>([]);
+  const [habitaciones, setHabitaciones] = useState<Habitacion[]>([]);
   const [tarifas, setTarifas] = useState<Tarifa[]>([]);
   const [cocheras, setCocheras] = useState<Cochera[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -40,6 +49,7 @@ export function Configuracion() {
     if (!hotelActual) return;
     const h = hotelActual.hotelId;
     api.get<TipoHabitacion[]>(`/hoteles/${h}/tipos-habitacion`).then(setTipos).catch(() => {});
+    api.get<Habitacion[]>(`/hoteles/${h}/habitaciones`).then(setHabitaciones).catch(() => {});
     api.get<Tarifa[]>(`/hoteles/${h}/tarifas`).then(setTarifas).catch(() => {});
     api.get<Cochera[]>(`/hoteles/${h}/cocheras`).then(setCocheras).catch(() => {});
   }
@@ -58,7 +68,13 @@ export function Configuracion() {
       {error && <p style={{ color: 'var(--danger)' }}>{error}</p>}
 
       <SeccionTipos hotelId={hotelActual.hotelId} tipos={tipos} onCambio={cargarTodo} setError={setError} />
-      <SeccionHabitaciones hotelId={hotelActual.hotelId} tipos={tipos} setError={setError} />
+      <SeccionHabitaciones
+        hotelId={hotelActual.hotelId}
+        tipos={tipos}
+        habitaciones={habitaciones}
+        onCambio={cargarTodo}
+        setError={setError}
+      />
       <SeccionTarifas hotelId={hotelActual.hotelId} tipos={tipos} tarifas={tarifas} onCambio={cargarTodo} setError={setError} />
       <SeccionCocheras hotelId={hotelActual.hotelId} cocheras={cocheras} onCambio={cargarTodo} setError={setError} />
     </div>
@@ -237,31 +253,30 @@ function EditarTipoForm({
 function SeccionHabitaciones({
   hotelId,
   tipos,
+  habitaciones,
+  onCambio,
   setError,
 }: {
   hotelId: string;
   tipos: TipoHabitacion[];
+  habitaciones: Habitacion[];
+  onCambio: () => void;
   setError: (e: string | null) => void;
 }) {
   const [habNumero, setHabNumero] = useState('');
   const [tipoId, setTipoId] = useState('');
   const [piso, setPiso] = useState(1);
   const [enviando, setEnviando] = useState(false);
-  const [ok, setOk] = useState<string | null>(null);
+  const [editandoId, setEditandoId] = useState<string | null>(null);
 
   async function crear(e: FormEvent) {
     e.preventDefault();
     setEnviando(true);
     setError(null);
-    setOk(null);
     try {
-      const creada = await api.post<{ hab_numero: number }>(`/hoteles/${hotelId}/habitaciones`, {
-        habNumero: Number(habNumero),
-        tipoId,
-        piso,
-      });
-      setOk(`Habitación ${creada.hab_numero} creada.`);
+      await api.post(`/hoteles/${hotelId}/habitaciones`, { habNumero: Number(habNumero), tipoId, piso });
       setHabNumero('');
+      onCambio();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'No se pudo crear la habitación');
     } finally {
@@ -269,13 +284,57 @@ function SeccionHabitaciones({
     }
   }
 
+  async function alternarFueraDeServicio(hab: Habitacion) {
+    setError(null);
+    try {
+      await api.patch(`/hoteles/${hotelId}/habitaciones/${hab.id}`, {
+        estado: hab.estado === 'mantenimiento' ? 'disponible' : 'mantenimiento',
+      });
+      onCambio();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'No se pudo actualizar');
+    }
+  }
+
+  const ordenadas = [...habitaciones].sort((a, b) => a.hab_numero - b.hab_numero);
+
   return (
     <section>
-      <h2 style={{ fontSize: 15, marginBottom: 10 }}>Agregar habitación</h2>
-      <p style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 8 }}>
-        Para ver/editar las habitaciones existentes, ve a la pantalla de Habitaciones.
-      </p>
-      {ok && <p style={{ fontSize: 12, color: 'var(--disponible)', marginBottom: 8 }}>{ok}</p>}
+      <h2 style={{ fontSize: 15, marginBottom: 10 }}>Habitaciones</h2>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 12 }}>
+        {ordenadas.map((h) =>
+          editandoId === h.id ? (
+            <EditarHabitacionForm
+              key={h.id}
+              hotelId={hotelId}
+              habitacion={h}
+              tipos={tipos}
+              onGuardado={() => {
+                setEditandoId(null);
+                onCambio();
+              }}
+              onCancelar={() => setEditandoId(null)}
+              setError={setError}
+            />
+          ) : (
+            <div key={h.id} style={filaStyle}>
+              <span>Hab. {h.hab_numero}</span>
+              <span style={{ color: 'var(--text-secondary)' }}>Piso {h.piso}</span>
+              <span style={{ color: 'var(--text-secondary)' }}>{h.tipos_habitacion?.nombre ?? '—'}</span>
+              <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{h.estado}</span>
+              <span style={{ display: 'flex', gap: 6 }}>
+                <button onClick={() => setEditandoId(h.id)} style={btnSecondary}>
+                  Editar
+                </button>
+                <button onClick={() => alternarFueraDeServicio(h)} style={btnSecondary}>
+                  {h.estado === 'mantenimiento' ? 'Reactivar' : 'Sacar de servicio'}
+                </button>
+              </span>
+            </div>
+          ),
+        )}
+        {habitaciones.length === 0 && <p style={{ color: 'var(--text-muted)', fontSize: 13 }}>No hay habitaciones creadas.</p>}
+      </div>
       <form onSubmit={crear} style={formInlineStyle}>
         <input
           type="number"
@@ -307,6 +366,67 @@ function SeccionHabitaciones({
         </button>
       </form>
     </section>
+  );
+}
+
+function EditarHabitacionForm({
+  hotelId,
+  habitacion,
+  tipos,
+  onGuardado,
+  onCancelar,
+  setError,
+}: {
+  hotelId: string;
+  habitacion: Habitacion;
+  tipos: TipoHabitacion[];
+  onGuardado: () => void;
+  onCancelar: () => void;
+  setError: (e: string | null) => void;
+}) {
+  const [tipoId, setTipoId] = useState(habitacion.tipos_habitacion?.id ?? '');
+  const [piso, setPiso] = useState(habitacion.piso);
+  const [guardando, setGuardando] = useState(false);
+
+  async function guardar(e: FormEvent) {
+    e.preventDefault();
+    setGuardando(true);
+    setError(null);
+    try {
+      await api.patch(`/hoteles/${hotelId}/habitaciones/${habitacion.id}`, { tipoId, piso });
+      onGuardado();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'No se pudo guardar');
+    } finally {
+      setGuardando(false);
+    }
+  }
+
+  return (
+    <form onSubmit={guardar} style={{ ...filaStyle, justifyContent: 'flex-start', gap: 8 }}>
+      <span style={{ minWidth: 70 }}>Hab. {habitacion.hab_numero}</span>
+      <select value={tipoId} onChange={(e) => setTipoId(e.target.value)} style={inputStyle} required>
+        {tipos.map((t) => (
+          <option key={t.id} value={t.id}>
+            {t.nombre}
+          </option>
+        ))}
+      </select>
+      <input
+        type="number"
+        min={1}
+        value={piso}
+        onChange={(e) => setPiso(Number(e.target.value))}
+        style={{ ...inputStyle, width: 90 }}
+        title="Piso"
+      />
+      <button type="submit" disabled={guardando} style={btnPrimary}>
+        Guardar
+      </button>
+      <button type="button" onClick={onCancelar} style={btnSecondary}>
+        Cancelar
+      </button>
+    </form>
   );
 }
 
