@@ -96,6 +96,8 @@ function SeccionTipos({
     }
   }
 
+  const [editandoId, setEditandoId] = useState<string | null>(null);
+
   async function alternarActivo(tipo: TipoHabitacion) {
     setError(null);
     try {
@@ -110,16 +112,35 @@ function SeccionTipos({
     <section>
       <h2 style={{ fontSize: 15, marginBottom: 10 }}>Tipos de habitación</h2>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 12 }}>
-        {tipos.map((t) => (
-          <div key={t.id} style={filaStyle}>
-            <span>{t.nombre}</span>
-            <span style={{ color: 'var(--text-secondary)' }}>Aforo {t.aforo_max}</span>
-            <span style={{ color: 'var(--text-secondary)' }}>Limpieza {t.tiempo_limpieza_min} min</span>
-            <button onClick={() => alternarActivo(t)} style={btnSecondary}>
-              {t.activo ? 'Desactivar' : 'Activar'}
-            </button>
-          </div>
-        ))}
+        {tipos.map((t) =>
+          editandoId === t.id ? (
+            <EditarTipoForm
+              key={t.id}
+              hotelId={hotelId}
+              tipo={t}
+              onGuardado={() => {
+                setEditandoId(null);
+                onCambio();
+              }}
+              onCancelar={() => setEditandoId(null)}
+              setError={setError}
+            />
+          ) : (
+            <div key={t.id} style={filaStyle}>
+              <span>{t.nombre}</span>
+              <span style={{ color: 'var(--text-secondary)' }}>Aforo {t.aforo_max}</span>
+              <span style={{ color: 'var(--text-secondary)' }}>Limpieza {t.tiempo_limpieza_min} min</span>
+              <span style={{ display: 'flex', gap: 6 }}>
+                <button onClick={() => setEditandoId(t.id)} style={btnSecondary}>
+                  Editar
+                </button>
+                <button onClick={() => alternarActivo(t)} style={btnSecondary}>
+                  {t.activo ? 'Desactivar' : 'Activar'}
+                </button>
+              </span>
+            </div>
+          ),
+        )}
         {tipos.length === 0 && <p style={{ color: 'var(--text-muted)', fontSize: 13 }}>No hay tipos creados.</p>}
       </div>
       <form onSubmit={crear} style={formInlineStyle}>
@@ -145,6 +166,71 @@ function SeccionTipos({
         </button>
       </form>
     </section>
+  );
+}
+
+function EditarTipoForm({
+  hotelId,
+  tipo,
+  onGuardado,
+  onCancelar,
+  setError,
+}: {
+  hotelId: string;
+  tipo: TipoHabitacion;
+  onGuardado: () => void;
+  onCancelar: () => void;
+  setError: (e: string | null) => void;
+}) {
+  const [nombre, setNombre] = useState(tipo.nombre);
+  const [aforoMax, setAforoMax] = useState(tipo.aforo_max);
+  const [tiempoLimpiezaMin, setTiempoLimpiezaMin] = useState(tipo.tiempo_limpieza_min);
+  const [guardando, setGuardando] = useState(false);
+
+  async function guardar(e: FormEvent) {
+    e.preventDefault();
+    setGuardando(true);
+    setError(null);
+    try {
+      await api.patch(`/hoteles/${hotelId}/tipos-habitacion/${tipo.id}`, {
+        nombre,
+        aforoMax,
+        tiempoLimpiezaMin,
+      });
+      onGuardado();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'No se pudo guardar');
+    } finally {
+      setGuardando(false);
+    }
+  }
+
+  return (
+    <form onSubmit={guardar} style={{ ...filaStyle, justifyContent: 'flex-start', gap: 8 }}>
+      <input value={nombre} onChange={(e) => setNombre(e.target.value)} style={{ ...inputStyle, flex: 1 }} required />
+      <input
+        type="number"
+        min={1}
+        value={aforoMax}
+        onChange={(e) => setAforoMax(Number(e.target.value))}
+        style={{ ...inputStyle, width: 90 }}
+        title="Aforo máximo"
+      />
+      <input
+        type="number"
+        min={1}
+        value={tiempoLimpiezaMin}
+        onChange={(e) => setTiempoLimpiezaMin(Number(e.target.value))}
+        style={{ ...inputStyle, width: 110 }}
+        title="Minutos de limpieza"
+      />
+      <button type="submit" disabled={guardando} style={btnPrimary}>
+        Guardar
+      </button>
+      <button type="button" onClick={onCancelar} style={btnSecondary}>
+        Cancelar
+      </button>
+    </form>
   );
 }
 
