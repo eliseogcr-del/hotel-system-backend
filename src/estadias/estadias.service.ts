@@ -13,6 +13,7 @@ import {
   MetodoPago,
 } from './dto/registrar-movimiento.dto';
 import { ListarEstadiasQueryDto } from './dto/listar-estadias-query.dto';
+import { ActualizarNotasDto } from './dto/actualizar-notas.dto';
 
 interface EstadiaConReserva {
   id: string;
@@ -277,6 +278,29 @@ export class EstadiasService {
     if (error) throw error;
 
     return { ...estadia, movimientos: movimientos ?? [] };
+  }
+
+  /**
+   * Notas libres de recepción sobre el huésped actual (incidencias, hora
+   * de desayuno, algo que se le prestó, etc). Vive en
+   * reserva_habitacion.observaciones -- ya existía el campo, solo faltaba
+   * un endpoint para editarlo desde el panel de habitaciones.
+   */
+  async actualizarNotas(
+    client: SupabaseClient,
+    hotelId: string,
+    estadiaId: string,
+    dto: ActualizarNotasDto,
+  ) {
+    const estadia = await this.cargarEstadiaHotel(client, hotelId, estadiaId);
+
+    const { error } = await client
+      .from('reserva_habitacion')
+      .update({ observaciones: dto.notas })
+      .eq('id', estadia.reserva_habitacion.id);
+    if (error) throw error;
+
+    return { ok: true };
   }
 
   private async cargarEstadiaHotel(
