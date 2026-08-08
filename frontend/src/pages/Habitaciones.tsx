@@ -6,7 +6,7 @@ interface Habitacion {
   id: string;
   hab_numero: number;
   piso: number;
-  estado: 'disponible' | 'ocupada' | 'limpieza' | 'mantenimiento';
+  estado: 'disponible' | 'ocupada' | 'limpieza' | 'mantenimiento' | 'bloqueada';
   tipos_habitacion: { nombre: string } | null;
   proximaReserva: { fecha_hora_checkin_prevista: string } | null;
 }
@@ -16,6 +16,7 @@ const ESTADO_LABEL: Record<Habitacion['estado'], string> = {
   ocupada: 'Ocupada',
   limpieza: 'Limpieza',
   mantenimiento: 'Mantenimiento',
+  bloqueada: 'Bloqueada',
 };
 
 export function Habitaciones() {

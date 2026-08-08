@@ -11,7 +11,7 @@ export class ActualizarHabitacionDto {
   piso?: number;
 
   @IsOptional()
-  @IsEnum(['disponible', 'ocupada', 'limpieza', 'mantenimiento'])
+  @IsEnum(['disponible', 'ocupada', 'limpieza', 'mantenimiento', 'bloqueada'])
   estado?: string;
 
   @IsOptional()

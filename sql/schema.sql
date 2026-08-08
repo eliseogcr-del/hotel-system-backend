@@ -96,7 +96,7 @@ create table habitaciones (
     hab_numero int not null,
     tipo_id uuid not null references tipos_habitacion(id),
     piso int not null,
-    estado text not null default 'disponible' check (estado in ('disponible','ocupada','limpieza','mantenimiento')),
+    estado text not null default 'disponible' check (estado in ('disponible','ocupada','limpieza','mantenimiento','bloqueada')),
     mantenimiento_planificado boolean not null default false,
     unique (hotel_id, hab_numero)
 );

@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   Param,
   Patch,
@@ -66,6 +67,17 @@ export class ConfiguracionController {
     return this.configuracionService.actualizarTipoHabitacion(client, hotelId, id, dto);
   }
 
+  @Delete('tipos-habitacion/:id')
+  @Roles('admin')
+  async eliminarTipoHabitacion(
+    @Param('hotelId') hotelId: string,
+    @Param('id') id: string,
+    @CurrentUser() user: RequestUser,
+  ) {
+    const client = this.supabase.getClientForRequest(user.accessToken);
+    return this.configuracionService.eliminarTipoHabitacion(client, hotelId, id);
+  }
+
   // ---------- Habitaciones ----------
 
   @Post('habitaciones')
@@ -89,6 +101,17 @@ export class ConfiguracionController {
   ) {
     const client = this.supabase.getClientForRequest(user.accessToken);
     return this.configuracionService.actualizarHabitacion(client, hotelId, id, dto);
+  }
+
+  @Delete('habitaciones/:id')
+  @Roles('admin')
+  async eliminarHabitacion(
+    @Param('hotelId') hotelId: string,
+    @Param('id') id: string,
+    @CurrentUser() user: RequestUser,
+  ) {
+    const client = this.supabase.getClientForRequest(user.accessToken);
+    return this.configuracionService.eliminarHabitacion(client, hotelId, id);
   }
 
   // ---------- Tarifas ----------

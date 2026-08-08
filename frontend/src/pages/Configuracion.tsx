@@ -124,6 +124,17 @@ function SeccionTipos({
     }
   }
 
+  async function eliminar(tipo: TipoHabitacion) {
+    if (!confirm(`¿Eliminar el tipo "${tipo.nombre}"? Solo funciona si no tiene habitaciones ni tarifas asociadas.`)) return;
+    setError(null);
+    try {
+      await api.delete(`/hoteles/${hotelId}/tipos-habitacion/${tipo.id}`);
+      onCambio();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'No se pudo eliminar');
+    }
+  }
+
   return (
     <section>
       <h2 style={{ fontSize: 15, marginBottom: 10 }}>Tipos de habitación</h2>
@@ -152,6 +163,9 @@ function SeccionTipos({
                 </button>
                 <button onClick={() => alternarActivo(t)} style={btnSecondary}>
                   {t.activo ? 'Desactivar' : 'Activar'}
+                </button>
+                <button onClick={() => eliminar(t)} style={btnDanger}>
+                  Eliminar
                 </button>
               </span>
             </div>
@@ -284,15 +298,24 @@ function SeccionHabitaciones({
     }
   }
 
-  async function alternarFueraDeServicio(hab: Habitacion) {
+  async function cambiarEstado(hab: Habitacion, estado: string) {
     setError(null);
     try {
-      await api.patch(`/hoteles/${hotelId}/habitaciones/${hab.id}`, {
-        estado: hab.estado === 'mantenimiento' ? 'disponible' : 'mantenimiento',
-      });
+      await api.patch(`/hoteles/${hotelId}/habitaciones/${hab.id}`, { estado });
       onCambio();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'No se pudo actualizar');
+    }
+  }
+
+  async function eliminar(hab: Habitacion) {
+    if (!confirm(`¿Eliminar la habitación ${hab.hab_numero}? Solo funciona si no tiene reservas ni historial.`)) return;
+    setError(null);
+    try {
+      await api.delete(`/hoteles/${hotelId}/habitaciones/${hab.id}`);
+      onCambio();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'No se pudo eliminar');
     }
   }
 
@@ -321,13 +344,23 @@ function SeccionHabitaciones({
               <span>Hab. {h.hab_numero}</span>
               <span style={{ color: 'var(--text-secondary)' }}>Piso {h.piso}</span>
               <span style={{ color: 'var(--text-secondary)' }}>{h.tipos_habitacion?.nombre ?? '—'}</span>
-              <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{h.estado}</span>
+              <select
+                value={h.estado}
+                onChange={(e) => cambiarEstado(h, e.target.value)}
+                style={{ ...inputStyle, padding: '4px 8px', fontSize: 12 }}
+              >
+                <option value="disponible">Disponible</option>
+                <option value="ocupada">Ocupada</option>
+                <option value="limpieza">Limpieza</option>
+                <option value="mantenimiento">Mantenimiento</option>
+                <option value="bloqueada">Bloqueada</option>
+              </select>
               <span style={{ display: 'flex', gap: 6 }}>
                 <button onClick={() => setEditandoId(h.id)} style={btnSecondary}>
                   Editar
                 </button>
-                <button onClick={() => alternarFueraDeServicio(h)} style={btnSecondary}>
-                  {h.estado === 'mantenimiento' ? 'Reactivar' : 'Sacar de servicio'}
+                <button onClick={() => eliminar(h)} style={btnDanger}>
+                  Eliminar
                 </button>
               </span>
             </div>
@@ -610,6 +643,15 @@ const btnSecondary: CSSProperties = {
   padding: '6px 12px',
   background: 'transparent',
   border: '1px solid var(--border)',
+  borderRadius: 'var(--radius)',
+  fontSize: 12,
+};
+
+const btnDanger: CSSProperties = {
+  padding: '6px 12px',
+  background: 'transparent',
+  color: 'var(--danger)',
+  border: '1px solid var(--ocupada)',
   borderRadius: 'var(--radius)',
   fontSize: 12,
 };

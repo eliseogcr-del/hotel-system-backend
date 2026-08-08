@@ -9,6 +9,7 @@ import { CrearCocheraDto } from './dto/crear-cochera.dto';
 import { ActualizarCocheraDto } from './dto/actualizar-cochera.dto';
 
 const CODIGO_UNIQUE_VIOLATION = '23505';
+const CODIGO_FOREIGN_KEY_VIOLATION = '23503';
 
 @Injectable()
 export class ConfiguracionService {
@@ -76,6 +77,27 @@ export class ConfiguracionService {
     return data;
   }
 
+  async eliminarTipoHabitacion(client: SupabaseClient, hotelId: string, id: string) {
+    const { data, error } = await client
+      .from('tipos_habitacion')
+      .delete()
+      .eq('id', id)
+      .eq('hotel_id', hotelId)
+      .select('id')
+      .maybeSingle();
+
+    if (error) {
+      if ((error as { code?: string }).code === CODIGO_FOREIGN_KEY_VIOLATION) {
+        throw new ConflictException(
+          'No se puede eliminar: hay habitaciones o tarifas usando este tipo. Desactívalo en vez de eliminarlo.',
+        );
+      }
+      throw error;
+    }
+    if (!data) throw new NotFoundException('Tipo de habitación no encontrado en este hotel');
+    return { eliminado: true };
+  }
+
   // ---------- Habitaciones ----------
 
   async crearHabitacion(client: SupabaseClient, hotelId: string, dto: CrearHabitacionDto) {
@@ -134,6 +156,27 @@ export class ConfiguracionService {
     if (error) throw error;
     if (!data) throw new NotFoundException('Habitación no encontrada en este hotel');
     return data;
+  }
+
+  async eliminarHabitacion(client: SupabaseClient, hotelId: string, id: string) {
+    const { data, error } = await client
+      .from('habitaciones')
+      .delete()
+      .eq('id', id)
+      .eq('hotel_id', hotelId)
+      .select('id')
+      .maybeSingle();
+
+    if (error) {
+      if ((error as { code?: string }).code === CODIGO_FOREIGN_KEY_VIOLATION) {
+        throw new ConflictException(
+          'No se puede eliminar: esta habitación ya tiene reservas o historial asociado.',
+        );
+      }
+      throw error;
+    }
+    if (!data) throw new NotFoundException('Habitación no encontrada en este hotel');
+    return { eliminado: true };
   }
 
   // ---------- Tarifas ----------
