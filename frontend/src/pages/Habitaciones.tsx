@@ -24,9 +24,13 @@ interface Habitacion {
   notas: string | null;
 }
 
-interface Tarifa {
-  tipo_hab_id: string;
-  normal: number;
+interface TipoHabitacionPrecios {
+  id: string;
+  precio_normal: number;
+  precio_corporativo: number;
+  precio_web: number;
+  precio_por_hora: number | null;
+  precio_costo: number;
 }
 
 const ESTADO_LABEL: Record<Estado, string> = {
@@ -50,7 +54,7 @@ function formatoMonto(n: number | null) {
 export function Habitaciones() {
   const { hotelActual } = useHotel();
   const [habitaciones, setHabitaciones] = useState<Habitacion[]>([]);
-  const [tarifas, setTarifas] = useState<Tarifa[]>([]);
+  const [tiposHabitacion, setTiposHabitacion] = useState<TipoHabitacionPrecios[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [ahora, setAhora] = useState(new Date());
@@ -71,8 +75,8 @@ export function Habitaciones() {
       .catch((err) => setError(err instanceof ApiError ? err.message : 'Error al cargar'))
       .finally(() => setLoading(false));
     api
-      .get<Tarifa[]>(`/hoteles/${hotelActual.hotelId}/tarifas`)
-      .then(setTarifas)
+      .get<TipoHabitacionPrecios[]>(`/hoteles/${hotelActual.hotelId}/tipos-habitacion`)
+      .then(setTiposHabitacion)
       .catch(() => {});
   }
 
@@ -103,10 +107,9 @@ export function Habitaciones() {
     }
   }
 
-  function tarifaNormalDe(tipoId: string | undefined): number | null {
+  function preciosDe(tipoId: string | undefined): TipoHabitacionPrecios | null {
     if (!tipoId) return null;
-    const t = tarifas.find((t) => t.tipo_hab_id === tipoId);
-    return t ? Number(t.normal) : null;
+    return tiposHabitacion.find((t) => t.id === tipoId) ?? null;
   }
 
   if (!hotelActual) return <p style={{ color: 'var(--text-muted)' }}>Cargando hotel...</p>;
@@ -235,7 +238,7 @@ export function Habitaciones() {
           hotelId={hotelActual.hotelId}
           habitacionId={checkinHab.id}
           habNumero={checkinHab.hab_numero}
-          tarifaNormalDefault={tarifaNormalDe(checkinHab.tipos_habitacion?.id)}
+          precios={preciosDe(checkinHab.tipos_habitacion?.id)}
           onClose={() => setCheckinHab(null)}
           onCreado={cargar}
         />

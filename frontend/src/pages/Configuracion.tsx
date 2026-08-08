@@ -8,6 +8,11 @@ interface TipoHabitacion {
   aforo_max: number;
   tiempo_limpieza_min: number;
   activo: boolean;
+  precio_normal: number;
+  precio_corporativo: number;
+  precio_web: number;
+  precio_por_hora: number | null;
+  precio_costo: number;
 }
 
 interface Habitacion {
@@ -16,16 +21,6 @@ interface Habitacion {
   piso: number;
   estado: string;
   tipos_habitacion: { id: string; nombre: string } | null;
-}
-
-interface Tarifa {
-  id: string;
-  minimo: number | null;
-  normal: number;
-  booking: number | null;
-  airbnb: number | null;
-  vigente_desde: string;
-  tipos_habitacion: { nombre: string } | null;
 }
 
 interface Cochera {
@@ -49,7 +44,6 @@ export function Configuracion() {
   const { hotelActual } = useHotel();
   const [tipos, setTipos] = useState<TipoHabitacion[]>([]);
   const [habitaciones, setHabitaciones] = useState<Habitacion[]>([]);
-  const [tarifas, setTarifas] = useState<Tarifa[]>([]);
   const [cocheras, setCocheras] = useState<Cochera[]>([]);
   const [hotel, setHotel] = useState<HotelConfig | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -59,7 +53,6 @@ export function Configuracion() {
     const h = hotelActual.hotelId;
     api.get<TipoHabitacion[]>(`/hoteles/${h}/tipos-habitacion`).then(setTipos).catch(() => {});
     api.get<Habitacion[]>(`/hoteles/${h}/habitaciones`).then(setHabitaciones).catch(() => {});
-    api.get<Tarifa[]>(`/hoteles/${h}/tarifas`).then(setTarifas).catch(() => {});
     api.get<Cochera[]>(`/hoteles/${h}/cocheras`).then(setCocheras).catch(() => {});
     api.get<HotelConfig>(`/hoteles/${h}`).then(setHotel).catch(() => {});
   }
@@ -86,7 +79,6 @@ export function Configuracion() {
         onCambio={cargarTodo}
         setError={setError}
       />
-      <SeccionTarifas hotelId={hotelActual.hotelId} tipos={tipos} tarifas={tarifas} onCambio={cargarTodo} setError={setError} />
       <SeccionCocheras hotelId={hotelActual.hotelId} cocheras={cocheras} onCambio={cargarTodo} setError={setError} />
     </div>
   );
@@ -184,6 +176,11 @@ function SeccionTipos({
   const [nombre, setNombre] = useState('');
   const [aforoMax, setAforoMax] = useState(2);
   const [tiempoLimpiezaMin, setTiempoLimpiezaMin] = useState(45);
+  const [precioNormal, setPrecioNormal] = useState('');
+  const [precioCorporativo, setPrecioCorporativo] = useState('');
+  const [precioWeb, setPrecioWeb] = useState('');
+  const [precioPorHora, setPrecioPorHora] = useState('');
+  const [precioCosto, setPrecioCosto] = useState('');
   const [enviando, setEnviando] = useState(false);
 
   async function crear(e: FormEvent) {
@@ -191,8 +188,22 @@ function SeccionTipos({
     setEnviando(true);
     setError(null);
     try {
-      await api.post(`/hoteles/${hotelId}/tipos-habitacion`, { nombre, aforoMax, tiempoLimpiezaMin });
+      await api.post(`/hoteles/${hotelId}/tipos-habitacion`, {
+        nombre,
+        aforoMax,
+        tiempoLimpiezaMin,
+        precioNormal: Number(precioNormal),
+        precioCorporativo: precioCorporativo ? Number(precioCorporativo) : undefined,
+        precioWeb: precioWeb ? Number(precioWeb) : undefined,
+        precioPorHora: precioPorHora ? Number(precioPorHora) : undefined,
+        precioCosto: precioCosto ? Number(precioCosto) : undefined,
+      });
       setNombre('');
+      setPrecioNormal('');
+      setPrecioCorporativo('');
+      setPrecioWeb('');
+      setPrecioPorHora('');
+      setPrecioCosto('');
       onCambio();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'No se pudo crear el tipo');
@@ -242,21 +253,32 @@ function SeccionTipos({
               setError={setError}
             />
           ) : (
-            <div key={t.id} style={filaStyle}>
-              <span>{t.nombre}</span>
-              <span style={{ color: 'var(--text-secondary)' }}>Aforo {t.aforo_max}</span>
-              <span style={{ color: 'var(--text-secondary)' }}>Limpieza {t.tiempo_limpieza_min} min</span>
-              <span style={{ display: 'flex', gap: 6 }}>
-                <button onClick={() => setEditandoId(t.id)} style={btnSecondary}>
-                  Editar
-                </button>
-                <button onClick={() => alternarActivo(t)} style={btnSecondary}>
-                  {t.activo ? 'Desactivar' : 'Activar'}
-                </button>
-                <button onClick={() => eliminar(t)} style={btnDanger}>
-                  Eliminar
-                </button>
-              </span>
+            <div key={t.id} style={{ ...filaStyle, flexDirection: 'column', alignItems: 'stretch', gap: 6 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ fontWeight: 500 }}>{t.nombre}</span>
+                <span style={{ display: 'flex', gap: 6 }}>
+                  <button onClick={() => setEditandoId(t.id)} style={btnSecondary}>
+                    Editar
+                  </button>
+                  <button onClick={() => alternarActivo(t)} style={btnSecondary}>
+                    {t.activo ? 'Desactivar' : 'Activar'}
+                  </button>
+                  <button onClick={() => eliminar(t)} style={btnDanger}>
+                    Eliminar
+                  </button>
+                </span>
+              </div>
+              <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', fontSize: 12, color: 'var(--text-secondary)' }}>
+                <span>Aforo {t.aforo_max}</span>
+                <span>Limpieza {t.tiempo_limpieza_min} min</span>
+                <span>Normal: {t.precio_normal}</span>
+                <span>Corporativo: {t.precio_corporativo}</span>
+                <span>Web: {t.precio_web}</span>
+                <span>Por hora: {t.precio_por_hora ?? '—'}</span>
+                <span style={t.precio_costo > 0 ? {} : { color: 'var(--text-muted)' }}>
+                  Costo: {t.precio_costo > 0 ? t.precio_costo : 'sin definir'}
+                </span>
+              </div>
             </div>
           ),
         )}
@@ -279,6 +301,52 @@ function SeccionTipos({
           onChange={(e) => setTiempoLimpiezaMin(Number(e.target.value))}
           style={{ ...inputStyle, width: 110 }}
           title="Minutos de limpieza"
+        />
+        <input
+          type="number"
+          min={0}
+          step={0.01}
+          placeholder="Precio normal"
+          value={precioNormal}
+          onChange={(e) => setPrecioNormal(e.target.value)}
+          style={{ ...inputStyle, width: 120 }}
+          required
+        />
+        <input
+          type="number"
+          min={0}
+          step={0.01}
+          placeholder="Corporativo (= normal)"
+          value={precioCorporativo}
+          onChange={(e) => setPrecioCorporativo(e.target.value)}
+          style={{ ...inputStyle, width: 150 }}
+        />
+        <input
+          type="number"
+          min={0}
+          step={0.01}
+          placeholder="Web (= normal)"
+          value={precioWeb}
+          onChange={(e) => setPrecioWeb(e.target.value)}
+          style={{ ...inputStyle, width: 120 }}
+        />
+        <input
+          type="number"
+          min={0}
+          step={0.01}
+          placeholder="Por hora (opcional)"
+          value={precioPorHora}
+          onChange={(e) => setPrecioPorHora(e.target.value)}
+          style={{ ...inputStyle, width: 140 }}
+        />
+        <input
+          type="number"
+          min={0}
+          step={0.01}
+          placeholder="Precio de costo"
+          value={precioCosto}
+          onChange={(e) => setPrecioCosto(e.target.value)}
+          style={{ ...inputStyle, width: 120 }}
         />
         <button type="submit" disabled={enviando} style={btnPrimary}>
           + Agregar tipo
@@ -304,6 +372,11 @@ function EditarTipoForm({
   const [nombre, setNombre] = useState(tipo.nombre);
   const [aforoMax, setAforoMax] = useState(tipo.aforo_max);
   const [tiempoLimpiezaMin, setTiempoLimpiezaMin] = useState(tipo.tiempo_limpieza_min);
+  const [precioNormal, setPrecioNormal] = useState(String(tipo.precio_normal));
+  const [precioCorporativo, setPrecioCorporativo] = useState(String(tipo.precio_corporativo));
+  const [precioWeb, setPrecioWeb] = useState(String(tipo.precio_web));
+  const [precioPorHora, setPrecioPorHora] = useState(tipo.precio_por_hora != null ? String(tipo.precio_por_hora) : '');
+  const [precioCosto, setPrecioCosto] = useState(String(tipo.precio_costo));
   const [guardando, setGuardando] = useState(false);
 
   async function guardar(e: FormEvent) {
@@ -315,6 +388,11 @@ function EditarTipoForm({
         nombre,
         aforoMax,
         tiempoLimpiezaMin,
+        precioNormal: Number(precioNormal),
+        precioCorporativo: Number(precioCorporativo),
+        precioWeb: Number(precioWeb),
+        precioPorHora: precioPorHora ? Number(precioPorHora) : undefined,
+        precioCosto: Number(precioCosto),
       });
       onGuardado();
     } catch (err) {
@@ -325,30 +403,99 @@ function EditarTipoForm({
   }
 
   return (
-    <form onSubmit={guardar} style={{ ...filaStyle, justifyContent: 'flex-start', gap: 8 }}>
-      <input value={nombre} onChange={(e) => setNombre(e.target.value)} style={{ ...inputStyle, flex: 1 }} required />
-      <input
-        type="number"
-        min={1}
-        value={aforoMax}
-        onChange={(e) => setAforoMax(Number(e.target.value))}
-        style={{ ...inputStyle, width: 90 }}
-        title="Aforo máximo"
-      />
-      <input
-        type="number"
-        min={1}
-        value={tiempoLimpiezaMin}
-        onChange={(e) => setTiempoLimpiezaMin(Number(e.target.value))}
-        style={{ ...inputStyle, width: 110 }}
-        title="Minutos de limpieza"
-      />
-      <button type="submit" disabled={guardando} style={btnPrimary}>
-        Guardar
-      </button>
-      <button type="button" onClick={onCancelar} style={btnSecondary}>
-        Cancelar
-      </button>
+    <form
+      onSubmit={guardar}
+      style={{ ...filaStyle, flexDirection: 'column', alignItems: 'stretch', gap: 8 }}
+    >
+      <div style={{ display: 'flex', gap: 8 }}>
+        <input value={nombre} onChange={(e) => setNombre(e.target.value)} style={{ ...inputStyle, flex: 1 }} required />
+        <input
+          type="number"
+          min={1}
+          value={aforoMax}
+          onChange={(e) => setAforoMax(Number(e.target.value))}
+          style={{ ...inputStyle, width: 90 }}
+          title="Aforo máximo"
+        />
+        <input
+          type="number"
+          min={1}
+          value={tiempoLimpiezaMin}
+          onChange={(e) => setTiempoLimpiezaMin(Number(e.target.value))}
+          style={{ ...inputStyle, width: 110 }}
+          title="Minutos de limpieza"
+        />
+      </div>
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+        <label style={{ display: 'flex', flexDirection: 'column', fontSize: 11, color: 'var(--text-secondary)', gap: 2 }}>
+          Normal
+          <input
+            type="number"
+            min={0}
+            step={0.01}
+            value={precioNormal}
+            onChange={(e) => setPrecioNormal(e.target.value)}
+            style={{ ...inputStyle, width: 110 }}
+            required
+          />
+        </label>
+        <label style={{ display: 'flex', flexDirection: 'column', fontSize: 11, color: 'var(--text-secondary)', gap: 2 }}>
+          Corporativo
+          <input
+            type="number"
+            min={0}
+            step={0.01}
+            value={precioCorporativo}
+            onChange={(e) => setPrecioCorporativo(e.target.value)}
+            style={{ ...inputStyle, width: 110 }}
+            required
+          />
+        </label>
+        <label style={{ display: 'flex', flexDirection: 'column', fontSize: 11, color: 'var(--text-secondary)', gap: 2 }}>
+          Web
+          <input
+            type="number"
+            min={0}
+            step={0.01}
+            value={precioWeb}
+            onChange={(e) => setPrecioWeb(e.target.value)}
+            style={{ ...inputStyle, width: 110 }}
+            required
+          />
+        </label>
+        <label style={{ display: 'flex', flexDirection: 'column', fontSize: 11, color: 'var(--text-secondary)', gap: 2 }}>
+          Por hora
+          <input
+            type="number"
+            min={0}
+            step={0.01}
+            placeholder="opcional"
+            value={precioPorHora}
+            onChange={(e) => setPrecioPorHora(e.target.value)}
+            style={{ ...inputStyle, width: 110 }}
+          />
+        </label>
+        <label style={{ display: 'flex', flexDirection: 'column', fontSize: 11, color: 'var(--text-secondary)', gap: 2 }}>
+          Precio de costo
+          <input
+            type="number"
+            min={0}
+            step={0.01}
+            value={precioCosto}
+            onChange={(e) => setPrecioCosto(e.target.value)}
+            style={{ ...inputStyle, width: 110 }}
+            required
+          />
+        </label>
+      </div>
+      <div style={{ display: 'flex', gap: 8 }}>
+        <button type="submit" disabled={guardando} style={btnPrimary}>
+          Guardar
+        </button>
+        <button type="button" onClick={onCancelar} style={btnSecondary}>
+          Cancelar
+        </button>
+      </div>
     </form>
   );
 }
@@ -549,90 +696,6 @@ function EditarHabitacionForm({
         Cancelar
       </button>
     </form>
-  );
-}
-
-function SeccionTarifas({
-  hotelId,
-  tipos,
-  tarifas,
-  onCambio,
-  setError,
-}: {
-  hotelId: string;
-  tipos: TipoHabitacion[];
-  tarifas: Tarifa[];
-  onCambio: () => void;
-  setError: (e: string | null) => void;
-}) {
-  const [tipoHabId, setTipoHabId] = useState('');
-  const [normal, setNormal] = useState('');
-  const [minimo, setMinimo] = useState('');
-  const [booking, setBooking] = useState('');
-  const [airbnb, setAirbnb] = useState('');
-  const [enviando, setEnviando] = useState(false);
-
-  async function crear(e: FormEvent) {
-    e.preventDefault();
-    setEnviando(true);
-    setError(null);
-    try {
-      await api.post(`/hoteles/${hotelId}/tarifas`, {
-        tipoHabId,
-        normal: Number(normal),
-        minimo: minimo ? Number(minimo) : undefined,
-        booking: booking ? Number(booking) : undefined,
-        airbnb: airbnb ? Number(airbnb) : undefined,
-      });
-      setNormal('');
-      setMinimo('');
-      setBooking('');
-      setAirbnb('');
-      onCambio();
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'No se pudo crear la tarifa');
-    } finally {
-      setEnviando(false);
-    }
-  }
-
-  return (
-    <section>
-      <h2 style={{ fontSize: 15, marginBottom: 10 }}>Tarifas</h2>
-      <p style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 8 }}>
-        Cada tarifa nueva rige desde hoy; las anteriores quedan como historial (no se borran).
-      </p>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 12 }}>
-        {tarifas.map((t) => (
-          <div key={t.id} style={filaStyle}>
-            <span>{t.tipos_habitacion?.nombre}</span>
-            <span style={{ color: 'var(--text-secondary)' }}>Normal: {t.normal}</span>
-            <span style={{ color: 'var(--text-secondary)' }}>Mín/hora: {t.minimo ?? '—'}</span>
-            <span style={{ color: 'var(--text-secondary)' }}>Booking: {t.booking ?? '—'}</span>
-            <span style={{ color: 'var(--text-secondary)' }}>Airbnb: {t.airbnb ?? '—'}</span>
-            <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>desde {t.vigente_desde}</span>
-          </div>
-        ))}
-        {tarifas.length === 0 && <p style={{ color: 'var(--text-muted)', fontSize: 13 }}>No hay tarifas creadas.</p>}
-      </div>
-      <form onSubmit={crear} style={formInlineStyle}>
-        <select value={tipoHabId} onChange={(e) => setTipoHabId(e.target.value)} style={inputStyle} required>
-          <option value="">Tipo...</option>
-          {tipos.map((t) => (
-            <option key={t.id} value={t.id}>
-              {t.nombre}
-            </option>
-          ))}
-        </select>
-        <input type="number" min={0} step={0.01} placeholder="Normal" value={normal} onChange={(e) => setNormal(e.target.value)} style={{ ...inputStyle, width: 100 }} required />
-        <input type="number" min={0} step={0.01} placeholder="Mín/hora" value={minimo} onChange={(e) => setMinimo(e.target.value)} style={{ ...inputStyle, width: 100 }} />
-        <input type="number" min={0} step={0.01} placeholder="Booking" value={booking} onChange={(e) => setBooking(e.target.value)} style={{ ...inputStyle, width: 100 }} />
-        <input type="number" min={0} step={0.01} placeholder="Airbnb" value={airbnb} onChange={(e) => setAirbnb(e.target.value)} style={{ ...inputStyle, width: 100 }} />
-        <button type="submit" disabled={enviando} style={btnPrimary}>
-          + Agregar tarifa
-        </button>
-      </form>
-    </section>
   );
 }
 

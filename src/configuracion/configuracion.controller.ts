@@ -6,7 +6,6 @@ import {
   Param,
   Patch,
   Post,
-  Query,
   UseGuards,
 } from '@nestjs/common';
 import { AuthGuard } from '../common/guards/auth.guard';
@@ -20,7 +19,6 @@ import { CrearTipoHabitacionDto } from './dto/crear-tipo-habitacion.dto';
 import { ActualizarTipoHabitacionDto } from './dto/actualizar-tipo-habitacion.dto';
 import { CrearHabitacionDto } from './dto/crear-habitacion.dto';
 import { ActualizarHabitacionDto } from './dto/actualizar-habitacion.dto';
-import { CrearTarifaDto } from './dto/crear-tarifa.dto';
 import { CrearCocheraDto } from './dto/crear-cochera.dto';
 import { ActualizarCocheraDto } from './dto/actualizar-cochera.dto';
 import { ActualizarHotelDto } from './dto/actualizar-hotel.dto';
@@ -67,7 +65,7 @@ export class ConfiguracionController {
   }
 
   @Get('tipos-habitacion')
-  @Roles('admin')
+  @Roles('admin', 'recepcion')
   async listarTiposHabitacion(
     @Param('hotelId') hotelId: string,
     @CurrentUser() user: RequestUser,
@@ -133,30 +131,6 @@ export class ConfiguracionController {
   ) {
     const client = this.supabase.getClientForRequest(user.accessToken);
     return this.configuracionService.eliminarHabitacion(client, hotelId, id);
-  }
-
-  // ---------- Tarifas ----------
-
-  @Post('tarifas')
-  @Roles('admin')
-  async crearTarifa(
-    @Param('hotelId') hotelId: string,
-    @Body() dto: CrearTarifaDto,
-    @CurrentUser() user: RequestUser,
-  ) {
-    const client = this.supabase.getClientForRequest(user.accessToken);
-    return this.configuracionService.crearTarifa(client, hotelId, dto);
-  }
-
-  @Get('tarifas')
-  @Roles('admin')
-  async listarTarifas(
-    @Param('hotelId') hotelId: string,
-    @Query('tipoHabId') tipoHabId: string | undefined,
-    @CurrentUser() user: RequestUser,
-  ) {
-    const client = this.supabase.getClientForRequest(user.accessToken);
-    return this.configuracionService.listarTarifas(client, hotelId, tipoHabId);
   }
 
   // ---------- Cocheras ----------

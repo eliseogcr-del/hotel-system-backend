@@ -1,4 +1,4 @@
-import { IsBoolean, IsInt, IsOptional, IsString, Min } from 'class-validator';
+import { IsBoolean, IsInt, IsNumber, IsOptional, IsString, Min } from 'class-validator';
 
 export class ActualizarTipoHabitacionDto {
   @IsOptional()
@@ -18,4 +18,29 @@ export class ActualizarTipoHabitacionDto {
   @IsOptional()
   @IsBoolean()
   activo?: boolean;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  precioNormal?: number;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  precioCorporativo?: number;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  precioWeb?: number;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  precioPorHora?: number;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  precioCosto?: number;
 }

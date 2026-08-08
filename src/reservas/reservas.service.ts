@@ -10,14 +10,16 @@ import { CrearReservaDto, OrigenReserva } from './dto/crear-reserva.dto';
 import {
   CrearReservaHabitacionDto,
   TipoAlquiler,
+  TipoCliente,
 } from './dto/crear-reserva-habitacion.dto';
 import { ListarReservasQueryDto } from './dto/listar-reservas-query.dto';
 
-interface TarifaVigente {
-  minimo: number | null;
-  normal: number;
-  booking: number | null;
-  airbnb: number | null;
+interface PreciosTipoHabitacion {
+  precio_normal: number;
+  precio_corporativo: number;
+  precio_web: number;
+  precio_por_hora: number | null;
+  precio_costo: number;
 }
 
 interface LineaConCosto {
@@ -64,7 +66,7 @@ export class ReservasService {
     // 2. Resolver tarifa y costo de cada línea.
     const lineasConCosto = await Promise.all(
       dto.habitaciones.map((linea) =>
-        this.resolverCostoLinea(client, hotelId, dto.origen, linea),
+        this.resolverCostoLinea(client, hotelId, dto.origen, linea, dto.empresaId),
       ),
     );
 
@@ -256,7 +258,7 @@ export class ReservasService {
   ) {
     const { data: reserva, error: reservaError } = await client
       .from('reservas')
-      .select('id, origen, descuento_total, estado')
+      .select('id, origen, empresa_id, descuento_total, estado')
       .eq('id', reservaId)
       .eq('hotel_id', hotelId)
       .maybeSingle();
@@ -281,6 +283,7 @@ export class ReservasService {
       hotelId,
       reserva.origen as OrigenReserva,
       linea,
+      reserva.empresa_id ?? undefined,
     );
 
     const { data: nuevaLinea, error: insertError } = await client
@@ -393,10 +396,13 @@ export class ReservasService {
     hotelId: string,
     origen: OrigenReserva,
     linea: CrearReservaHabitacionDto,
+    empresaId?: string,
   ): Promise<LineaConCosto> {
     const { data: hab, error: habError } = await client
       .from('habitaciones')
-      .select('id, tipo_id')
+      .select(
+        'id, tipo_id, tipos_habitacion(precio_normal, precio_corporativo, precio_web, precio_por_hora, precio_costo)',
+      )
       .eq('id', linea.habitacionId)
       .eq('hotel_id', hotelId)
       .maybeSingle();
@@ -408,27 +414,27 @@ export class ReservasService {
       );
     }
 
+    const precios = (hab as any).tipos_habitacion as PreciosTipoHabitacion | null;
+    if (!precios) {
+      throw new NotFoundException(
+        `No se encontró el tipo de habitación de ${linea.habitacionId}`,
+      );
+    }
+
     let tarifaDia = linea.tarifaDiaManual;
     if (tarifaDia === undefined) {
-      const hoy = new Date().toISOString().slice(0, 10);
-      const { data: tarifa, error: tarifaError } = await client
-        .from('tarifas')
-        .select('minimo, normal, booking, airbnb')
-        .eq('hotel_id', hotelId)
-        .eq('tipo_hab_id', hab.tipo_id)
-        .lte('vigente_desde', hoy)
-        .order('vigente_desde', { ascending: false })
-        .limit(1)
-        .maybeSingle<TarifaVigente>();
+      tarifaDia = this.tarifaSegunTipoCliente(
+        precios,
+        linea.tipoCliente ?? this.inferirTipoCliente(origen, empresaId),
+        linea.tipoAlquiler,
+      );
+    }
 
-      if (tarifaError) throw tarifaError;
-      if (!tarifa) {
-        throw new NotFoundException(
-          `No hay tarifa vigente para el tipo de habitación de ${linea.habitacionId}`,
-        );
-      }
-
-      tarifaDia = this.tarifaSegunOrigen(tarifa, origen, linea.tipoAlquiler);
+    const precioCosto = Number(precios.precio_costo);
+    if (precioCosto > 0 && tarifaDia < precioCosto) {
+      throw new BadRequestException(
+        `La tarifa (S/. ${tarifaDia}) no puede ser menor al precio de costo configurado para este tipo de habitación (S/. ${precioCosto})`,
+      );
     }
 
     const dias =
@@ -443,15 +449,31 @@ export class ReservasService {
     return { linea, tarifaDia, dias, cargoAforoExtra, cobroEarly, cobroLate, subtotal };
   }
 
-  private tarifaSegunOrigen(
-    tarifa: TarifaVigente,
-    origen: OrigenReserva,
+  // Sin selección explícita del recepcionista: empresa asociada -> cliente
+  // corporativo; reserva que llegó de un canal online (Booking/Airbnb) ->
+  // precio web; el resto (teléfono/whatsapp/directo/walkin) -> normal.
+  private inferirTipoCliente(origen: OrigenReserva, empresaId?: string): TipoCliente {
+    if (empresaId) return 'corporativo';
+    if (origen === 'booking' || origen === 'airbnb') return 'web';
+    return 'normal';
+  }
+
+  private tarifaSegunTipoCliente(
+    precios: PreciosTipoHabitacion,
+    tipoCliente: TipoCliente,
     tipoAlquiler: TipoAlquiler,
   ): number {
-    if (tipoAlquiler === 'por_horas') return tarifa.minimo ?? tarifa.normal;
-    if (origen === 'booking') return tarifa.booking ?? tarifa.normal;
-    if (origen === 'airbnb') return tarifa.airbnb ?? tarifa.normal;
-    return tarifa.normal;
+    if (tipoAlquiler === 'por_horas') {
+      if (precios.precio_por_hora == null) {
+        throw new BadRequestException(
+          'Este tipo de habitación no tiene configurado un precio por hora',
+        );
+      }
+      return Number(precios.precio_por_hora);
+    }
+    if (tipoCliente === 'corporativo') return Number(precios.precio_corporativo);
+    if (tipoCliente === 'web') return Number(precios.precio_web);
+    return Number(precios.precio_normal);
   }
 
   private calcularDias(

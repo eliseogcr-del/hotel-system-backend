@@ -1,10 +1,9 @@
-import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { SupabaseClient } from '@supabase/supabase-js';
 import { CrearTipoHabitacionDto } from './dto/crear-tipo-habitacion.dto';
 import { ActualizarTipoHabitacionDto } from './dto/actualizar-tipo-habitacion.dto';
 import { CrearHabitacionDto } from './dto/crear-habitacion.dto';
 import { ActualizarHabitacionDto } from './dto/actualizar-habitacion.dto';
-import { CrearTarifaDto } from './dto/crear-tarifa.dto';
 import { CrearCocheraDto } from './dto/crear-cochera.dto';
 import { ActualizarCocheraDto } from './dto/actualizar-cochera.dto';
 import { ActualizarHotelDto } from './dto/actualizar-hotel.dto';
@@ -47,6 +46,14 @@ export class ConfiguracionService {
   // ---------- Tipos de habitación ----------
 
   async crearTipoHabitacion(client: SupabaseClient, hotelId: string, dto: CrearTipoHabitacionDto) {
+    const precioCosto = dto.precioCosto ?? 0;
+    const precioCorporativo = dto.precioCorporativo ?? dto.precioNormal;
+    const precioWeb = dto.precioWeb ?? dto.precioNormal;
+    this.validarPisoDeCosto(
+      { normal: dto.precioNormal, corporativo: precioCorporativo, web: precioWeb, porHora: dto.precioPorHora },
+      precioCosto,
+    );
+
     const { data, error } = await client
       .from('tipos_habitacion')
       .insert({
@@ -55,6 +62,11 @@ export class ConfiguracionService {
         aforo_max: dto.aforoMax,
         tiempo_limpieza_min: dto.tiempoLimpiezaMin ?? 45,
         activo: true,
+        precio_normal: dto.precioNormal,
+        precio_corporativo: precioCorporativo,
+        precio_web: precioWeb,
+        precio_por_hora: dto.precioPorHora ?? null,
+        precio_costo: precioCosto,
       })
       .select()
       .single();
@@ -84,11 +96,50 @@ export class ConfiguracionService {
     id: string,
     dto: ActualizarTipoHabitacionDto,
   ) {
+    const tocaPrecios =
+      dto.precioNormal !== undefined ||
+      dto.precioCorporativo !== undefined ||
+      dto.precioWeb !== undefined ||
+      dto.precioPorHora !== undefined ||
+      dto.precioCosto !== undefined;
+
+    if (tocaPrecios) {
+      const { data: actual, error: actualError } = await client
+        .from('tipos_habitacion')
+        .select('precio_normal, precio_corporativo, precio_web, precio_por_hora, precio_costo')
+        .eq('id', id)
+        .eq('hotel_id', hotelId)
+        .maybeSingle();
+      if (actualError) throw actualError;
+      if (!actual) throw new NotFoundException('Tipo de habitación no encontrado en este hotel');
+
+      const precioCosto = dto.precioCosto ?? Number(actual.precio_costo);
+      this.validarPisoDeCosto(
+        {
+          normal: dto.precioNormal ?? Number(actual.precio_normal),
+          corporativo: dto.precioCorporativo ?? Number(actual.precio_corporativo),
+          web: dto.precioWeb ?? Number(actual.precio_web),
+          porHora:
+            dto.precioPorHora !== undefined
+              ? dto.precioPorHora
+              : actual.precio_por_hora != null
+                ? Number(actual.precio_por_hora)
+                : undefined,
+        },
+        precioCosto,
+      );
+    }
+
     const cambios: Record<string, unknown> = {};
     if (dto.nombre !== undefined) cambios.nombre = dto.nombre;
     if (dto.aforoMax !== undefined) cambios.aforo_max = dto.aforoMax;
     if (dto.tiempoLimpiezaMin !== undefined) cambios.tiempo_limpieza_min = dto.tiempoLimpiezaMin;
     if (dto.activo !== undefined) cambios.activo = dto.activo;
+    if (dto.precioNormal !== undefined) cambios.precio_normal = dto.precioNormal;
+    if (dto.precioCorporativo !== undefined) cambios.precio_corporativo = dto.precioCorporativo;
+    if (dto.precioWeb !== undefined) cambios.precio_web = dto.precioWeb;
+    if (dto.precioPorHora !== undefined) cambios.precio_por_hora = dto.precioPorHora;
+    if (dto.precioCosto !== undefined) cambios.precio_costo = dto.precioCosto;
 
     const { data, error } = await client
       .from('tipos_habitacion')
@@ -106,6 +157,26 @@ export class ConfiguracionService {
     }
     if (!data) throw new NotFoundException('Tipo de habitación no encontrado en este hotel');
     return data;
+  }
+
+  private validarPisoDeCosto(
+    precios: { normal: number; corporativo: number; web: number; porHora?: number },
+    precioCosto: number,
+  ) {
+    if (precioCosto <= 0) return; // sin piso configurado todavía
+    const entradas: [string, number | undefined][] = [
+      ['normal', precios.normal],
+      ['corporativo', precios.corporativo],
+      ['web', precios.web],
+      ['por hora', precios.porHora],
+    ];
+    for (const [nombre, valor] of entradas) {
+      if (valor !== undefined && valor < precioCosto) {
+        throw new BadRequestException(
+          `El precio ${nombre} (S/. ${valor}) no puede ser menor al precio de costo (S/. ${precioCosto})`,
+        );
+      }
+    }
   }
 
   async eliminarTipoHabitacion(client: SupabaseClient, hotelId: string, id: string) {
@@ -208,49 +279,6 @@ export class ConfiguracionService {
     }
     if (!data) throw new NotFoundException('Habitación no encontrada en este hotel');
     return { eliminado: true };
-  }
-
-  // ---------- Tarifas ----------
-
-  async crearTarifa(client: SupabaseClient, hotelId: string, dto: CrearTarifaDto) {
-    const { data: tipo, error: tipoError } = await client
-      .from('tipos_habitacion')
-      .select('id')
-      .eq('id', dto.tipoHabId)
-      .eq('hotel_id', hotelId)
-      .maybeSingle();
-    if (tipoError) throw tipoError;
-    if (!tipo) throw new NotFoundException('El tipo de habitación no existe en este hotel');
-
-    const { data, error } = await client
-      .from('tarifas')
-      .insert({
-        hotel_id: hotelId,
-        tipo_hab_id: dto.tipoHabId,
-        minimo: dto.minimo ?? null,
-        normal: dto.normal,
-        booking: dto.booking ?? null,
-        airbnb: dto.airbnb ?? null,
-        vigente_desde: dto.vigenteDesde ?? new Date().toISOString().slice(0, 10),
-      })
-      .select()
-      .single();
-    if (error) throw error;
-    return data;
-  }
-
-  async listarTarifas(client: SupabaseClient, hotelId: string, tipoHabId?: string) {
-    let query = client
-      .from('tarifas')
-      .select('*, tipos_habitacion(nombre)')
-      .eq('hotel_id', hotelId)
-      .order('vigente_desde', { ascending: false });
-
-    if (tipoHabId) query = query.eq('tipo_hab_id', tipoHabId);
-
-    const { data, error } = await query;
-    if (error) throw error;
-    return data;
   }
 
   // ---------- Cocheras ----------

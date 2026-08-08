@@ -231,7 +231,7 @@ export class CotizacionesService {
   ): Promise<LineaConCosto> {
     const { data: hab, error: habError } = await client
       .from('habitaciones')
-      .select('id, tipo_id')
+      .select('id, tipo_id, tipos_habitacion(precio_normal, precio_costo)')
       .eq('id', linea.habitacionId)
       .eq('hotel_id', hotelId)
       .maybeSingle();
@@ -240,9 +240,15 @@ export class CotizacionesService {
       throw new NotFoundException(`La habitación ${linea.habitacionId} no existe en este hotel`);
     }
 
-    let precioNoche = linea.precioNocheManual;
-    let tarifaId: string | null = null;
+    const precios = (hab as any).tipos_habitacion as
+      | { precio_normal: number; precio_costo: number }
+      | null;
 
+    let precioNoche = linea.precioNocheManual;
+
+    // Empresa con tarifa negociada -> esa tarifa. Si no, el precio normal
+    // configurado en el tipo de habitación (ver ReservasService, mismo
+    // criterio que para reservas walk-in/telefónicas).
     if (precioNoche === undefined && empresaId) {
       const { data: especial, error: especialError } = await client
         .from('tarifas_especiales')
@@ -257,27 +263,22 @@ export class CotizacionesService {
     }
 
     if (precioNoche === undefined) {
-      const hoy = new Date().toISOString().slice(0, 10);
-      const { data: tarifa, error: tarifaError } = await client
-        .from('tarifas')
-        .select('id, normal')
-        .eq('hotel_id', hotelId)
-        .eq('tipo_hab_id', hab.tipo_id)
-        .lte('vigente_desde', hoy)
-        .order('vigente_desde', { ascending: false })
-        .limit(1)
-        .maybeSingle();
-      if (tarifaError) throw tarifaError;
-      if (!tarifa) {
+      if (!precios) {
         throw new NotFoundException(
-          `No hay tarifa vigente para el tipo de habitación de ${linea.habitacionId}`,
+          `No se encontró el tipo de habitación de ${linea.habitacionId}`,
         );
       }
-      precioNoche = Number(tarifa.normal);
-      tarifaId = tarifa.id;
+      precioNoche = Number(precios.precio_normal);
+    }
+
+    const precioCosto = precios ? Number(precios.precio_costo) : 0;
+    if (precioCosto > 0 && precioNoche < precioCosto) {
+      throw new BadRequestException(
+        `El precio por noche (S/. ${precioNoche}) no puede ser menor al precio de costo configurado para este tipo de habitación (S/. ${precioCosto})`,
+      );
     }
 
     const subtotal = precioNoche * dias;
-    return { linea, precioNoche, tarifaId, subtotal };
+    return { linea, precioNoche, tarifaId: null, subtotal };
   }
 }

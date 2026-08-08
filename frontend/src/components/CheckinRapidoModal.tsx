@@ -17,20 +17,38 @@ function ahoraLocal(): string {
   return d.toISOString().slice(0, 16);
 }
 
+type TipoCliente = 'normal' | 'corporativo' | 'web';
+
+interface TipoHabitacionPrecios {
+  id: string;
+  precio_normal: number;
+  precio_corporativo: number;
+  precio_web: number;
+  precio_por_hora: number | null;
+  precio_costo: number;
+}
+
 interface Props {
   hotelId: string;
   habitacionId: string;
   habNumero: number;
-  tarifaNormalDefault: number | null;
+  precios: TipoHabitacionPrecios | null;
   onClose: () => void;
   onCreado: () => void;
+}
+
+function precioSegunTipoCliente(precios: TipoHabitacionPrecios | null, tipoCliente: TipoCliente): number {
+  if (!precios) return 0;
+  if (tipoCliente === 'corporativo') return Number(precios.precio_corporativo);
+  if (tipoCliente === 'web') return Number(precios.precio_web);
+  return Number(precios.precio_normal);
 }
 
 export function CheckinRapidoModal({
   hotelId,
   habitacionId,
   habNumero,
-  tarifaNormalDefault,
+  precios,
   onClose,
   onCreado,
 }: Props) {
@@ -47,13 +65,22 @@ export function CheckinRapidoModal({
   const [fechaNacimiento, setFechaNacimiento] = useState('');
 
   const [nroPersonas, setNroPersonas] = useState(1);
-  const [tarifaDia, setTarifaDia] = useState(tarifaNormalDefault ?? 0);
+  const [tipoCliente, setTipoCliente] = useState<TipoCliente>('normal');
+  const [tarifaDia, setTarifaDia] = useState(precioSegunTipoCliente(precios, 'normal'));
   const [dias, setDias] = useState(1);
   const [checkinPrevisto, setCheckinPrevisto] = useState(ahoraLocal());
   const [cobroEarly, setCobroEarly] = useState('');
 
   const [enviando, setEnviando] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const precioCosto = precios ? Number(precios.precio_costo) : 0;
+  const tarifaBajoCosto = precioCosto > 0 && tarifaDia < precioCosto;
+
+  function cambiarTipoCliente(valor: TipoCliente) {
+    setTipoCliente(valor);
+    setTarifaDia(precioSegunTipoCliente(precios, valor));
+  }
 
   async function buscar() {
     if (!nroDoc.trim()) return;
@@ -205,7 +232,7 @@ export function CheckinRapidoModal({
           <hr style={{ border: 'none', borderTop: '1px solid var(--border)' }} />
 
           <div style={{ display: 'flex', gap: 8 }}>
-            <div style={{ width: 110 }}>
+            <div style={{ width: 130 }}>
               <label style={labelStyle}>N° personas</label>
               <input
                 type="number"
@@ -216,17 +243,17 @@ export function CheckinRapidoModal({
                 required
               />
             </div>
-            <div style={{ width: 130 }}>
-              <label style={labelStyle}>Tarifa/día (S/.)</label>
-              <input
-                type="number"
-                min={0}
-                step={0.01}
-                value={tarifaDia}
-                onChange={(e) => setTarifaDia(Number(e.target.value))}
+            <div style={{ width: 150 }}>
+              <label style={labelStyle}>Tipo de cliente</label>
+              <select
+                value={tipoCliente}
+                onChange={(e) => cambiarTipoCliente(e.target.value as TipoCliente)}
                 style={inputStyle}
-                required
-              />
+              >
+                <option value="normal">Normal</option>
+                <option value="corporativo">Corporativo</option>
+                <option value="web">Web</option>
+              </select>
             </div>
             <div style={{ width: 90 }}>
               <label style={labelStyle}>Días</label>
@@ -239,6 +266,29 @@ export function CheckinRapidoModal({
                 required
               />
             </div>
+          </div>
+
+          <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end' }}>
+            <div style={{ width: 150 }}>
+              <label style={labelStyle}>Tarifa/día (S/.)</label>
+              <input
+                type="number"
+                min={0}
+                step={0.01}
+                value={tarifaDia}
+                onChange={(e) => setTarifaDia(Number(e.target.value))}
+                style={{
+                  ...inputStyle,
+                  ...(tarifaBajoCosto ? { borderColor: 'var(--danger)' } : {}),
+                }}
+                required
+              />
+            </div>
+            <p style={{ fontSize: 11, color: tarifaBajoCosto ? 'var(--danger)' : 'var(--text-muted)', margin: 0 }}>
+              {precioCosto > 0
+                ? `Precio de costo: S/. ${precioCosto}${tarifaBajoCosto ? ' — la tarifa no puede quedar por debajo de este valor.' : ''}`
+                : 'Este tipo de habitación no tiene un precio de costo configurado.'}
+            </p>
           </div>
 
           <div style={{ display: 'flex', gap: 8 }}>
@@ -275,7 +325,7 @@ export function CheckinRapidoModal({
             <button type="button" onClick={onClose} style={btnSecondary}>
               Cancelar
             </button>
-            <button type="submit" disabled={enviando} style={btnPrimary}>
+            <button type="submit" disabled={enviando || tarifaBajoCosto} style={btnPrimary}>
               {enviando ? 'Registrando...' : 'Confirmar check-in'}
             </button>
           </div>

@@ -95,6 +95,15 @@ create table tipos_habitacion (
     aforo_max int not null default 1,
     tiempo_limpieza_min int not null default 45,
     activo boolean not null default true,
+    -- Precios por tipo de cliente (el recepcionista elige cuál aplica al
+    -- momento de alquilar, ver CLAUDE.md: normal=cliente eventual,
+    -- corporativo=empresa, web=reservas de canales online). Todos editables
+    -- en el momento de la reserva, pero nunca por debajo de precio_costo.
+    precio_normal numeric(10,2) not null default 0,
+    precio_corporativo numeric(10,2) not null default 0,
+    precio_web numeric(10,2) not null default 0,
+    precio_por_hora numeric(10,2),     -- null = este tipo no admite alquiler por horas
+    precio_costo numeric(10,2) not null default 0,  -- 0 = sin piso configurado todavía
     unique (hotel_id, nombre)
 );
 

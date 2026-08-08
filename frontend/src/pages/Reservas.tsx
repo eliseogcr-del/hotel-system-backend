@@ -7,7 +7,30 @@ import { buscarHuespedPorDni, crearHuesped } from '../lib/huespedes';
 interface Habitacion {
   id: string;
   hab_numero: number;
-  tipos_habitacion: { nombre: string } | null;
+  tipos_habitacion: { id: string; nombre: string } | null;
+}
+
+interface TipoHabitacionPrecios {
+  id: string;
+  precio_normal: number;
+  precio_corporativo: number;
+  precio_web: number;
+  precio_por_hora: number | null;
+  precio_costo: number;
+}
+
+type TipoCliente = 'normal' | 'corporativo' | 'web';
+
+function precioSegunTipoCliente(
+  precios: TipoHabitacionPrecios | undefined,
+  tipoCliente: TipoCliente,
+  tipoAlquiler: 'pernocte' | 'por_horas',
+): number {
+  if (!precios) return 0;
+  if (tipoAlquiler === 'por_horas') return Number(precios.precio_por_hora ?? 0);
+  if (tipoCliente === 'corporativo') return Number(precios.precio_corporativo);
+  if (tipoCliente === 'web') return Number(precios.precio_web);
+  return Number(precios.precio_normal);
 }
 
 interface Reserva {
@@ -29,6 +52,7 @@ export function Reservas() {
   const { hotelActual } = useHotel();
   const [reservas, setReservas] = useState<Reserva[]>([]);
   const [habitaciones, setHabitaciones] = useState<Habitacion[]>([]);
+  const [tiposHabitacion, setTiposHabitacion] = useState<TipoHabitacionPrecios[]>([]);
   const [filtroEstado, setFiltroEstado] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -53,6 +77,10 @@ export function Reservas() {
       .get<Habitacion[]>(`/hoteles/${hotelActual.hotelId}/habitaciones`)
       .then(setHabitaciones)
       .catch(() => {});
+    api
+      .get<TipoHabitacionPrecios[]>(`/hoteles/${hotelActual.hotelId}/tipos-habitacion`)
+      .then(setTiposHabitacion)
+      .catch(() => {});
   }, [hotelActual]);
 
   if (!hotelActual) return null;
@@ -70,6 +98,7 @@ export function Reservas() {
         <NuevaReservaForm
           hotelId={hotelActual.hotelId}
           habitaciones={habitaciones}
+          tiposHabitacion={tiposHabitacion}
           onCreada={() => {
             setMostrarForm(false);
             cargarReservas();
@@ -156,10 +185,12 @@ export function EstadoBadge({ estado }: { estado: string }) {
 function NuevaReservaForm({
   hotelId,
   habitaciones,
+  tiposHabitacion,
   onCreada,
 }: {
   hotelId: string;
   habitaciones: Habitacion[];
+  tiposHabitacion: TipoHabitacionPrecios[];
   onCreada: () => void;
 }) {
   const [dni, setDni] = useState('');
@@ -172,10 +203,25 @@ function NuevaReservaForm({
   const [habitacionId, setHabitacionId] = useState('');
   const [nroPersonas, setNroPersonas] = useState(2);
   const [tipoAlquiler, setTipoAlquiler] = useState<'pernocte' | 'por_horas'>('pernocte');
+  const [tipoCliente, setTipoCliente] = useState<TipoCliente>('normal');
+  const [tarifaDia, setTarifaDia] = useState(0);
   const [checkin, setCheckin] = useState('');
   const [checkout, setCheckout] = useState('');
   const [enviando, setEnviando] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  function preciosDe(habId: string): TipoHabitacionPrecios | undefined {
+    const hab = habitaciones.find((h) => h.id === habId);
+    if (!hab?.tipos_habitacion) return undefined;
+    return tiposHabitacion.find((t) => t.id === hab.tipos_habitacion!.id);
+  }
+
+  function recalcularTarifa(habId: string, tc: TipoCliente, ta: 'pernocte' | 'por_horas') {
+    setTarifaDia(precioSegunTipoCliente(preciosDe(habId), tc, ta));
+  }
+
+  const precioCosto = Number(preciosDe(habitacionId)?.precio_costo ?? 0);
+  const tarifaBajoCosto = precioCosto > 0 && tarifaDia < precioCosto;
 
   async function buscar() {
     if (!dni) return;
@@ -219,6 +265,8 @@ function NuevaReservaForm({
             habitacionId,
             nroPersonas,
             tipoAlquiler,
+            tipoCliente,
+            tarifaDiaManual: tarifaDia,
             checkinPrevisto: new Date(checkin).toISOString(),
             checkoutPrevisto: new Date(checkout).toISOString(),
           },
@@ -286,7 +334,15 @@ function NuevaReservaForm({
         </div>
         <div style={{ flex: 1 }}>
           <label style={labelStyle}>Habitación</label>
-          <select value={habitacionId} onChange={(e) => setHabitacionId(e.target.value)} style={selectStyle} required>
+          <select
+            value={habitacionId}
+            onChange={(e) => {
+              setHabitacionId(e.target.value);
+              recalcularTarifa(e.target.value, tipoCliente, tipoAlquiler);
+            }}
+            style={selectStyle}
+            required
+          >
             <option value="">Selecciona...</option>
             {habitaciones.map((h) => (
               <option key={h.id} value={h.id}>
@@ -307,11 +363,56 @@ function NuevaReservaForm({
         </div>
         <div style={{ width: 130 }}>
           <label style={labelStyle}>Tipo</label>
-          <select value={tipoAlquiler} onChange={(e) => setTipoAlquiler(e.target.value as 'pernocte' | 'por_horas')} style={selectStyle}>
+          <select
+            value={tipoAlquiler}
+            onChange={(e) => {
+              const valor = e.target.value as 'pernocte' | 'por_horas';
+              setTipoAlquiler(valor);
+              recalcularTarifa(habitacionId, tipoCliente, valor);
+            }}
+            style={selectStyle}
+          >
             <option value="pernocte">Pernocte</option>
             <option value="por_horas">Por horas</option>
           </select>
         </div>
+      </div>
+
+      <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end' }}>
+        <div style={{ width: 150 }}>
+          <label style={labelStyle}>Tipo de cliente</label>
+          <select
+            value={tipoCliente}
+            onChange={(e) => {
+              const valor = e.target.value as TipoCliente;
+              setTipoCliente(valor);
+              recalcularTarifa(habitacionId, valor, tipoAlquiler);
+            }}
+            style={selectStyle}
+          >
+            <option value="normal">Normal</option>
+            <option value="corporativo">Corporativo</option>
+            <option value="web">Web</option>
+          </select>
+        </div>
+        <div style={{ width: 150 }}>
+          <label style={labelStyle}>Tarifa/día (S/.)</label>
+          <input
+            type="number"
+            min={0}
+            step={0.01}
+            value={tarifaDia}
+            onChange={(e) => setTarifaDia(Number(e.target.value))}
+            style={{ ...inputStyle, ...(tarifaBajoCosto ? { borderColor: 'var(--danger)' } : {}) }}
+            required
+          />
+        </div>
+        {precioCosto > 0 && (
+          <p style={{ fontSize: 11, color: tarifaBajoCosto ? 'var(--danger)' : 'var(--text-muted)', margin: 0 }}>
+            Costo: S/. {precioCosto}
+            {tarifaBajoCosto ? ' — la tarifa no puede quedar por debajo' : ''}
+          </p>
+        )}
       </div>
 
       <div style={{ display: 'flex', gap: 8 }}>
@@ -327,7 +428,7 @@ function NuevaReservaForm({
 
       {error && <p style={{ color: 'var(--danger)', fontSize: 12 }}>{error}</p>}
 
-      <button type="submit" disabled={enviando} style={btnPrimary}>
+      <button type="submit" disabled={enviando || tarifaBajoCosto} style={btnPrimary}>
         {enviando ? 'Creando...' : 'Crear reserva'}
       </button>
     </form>

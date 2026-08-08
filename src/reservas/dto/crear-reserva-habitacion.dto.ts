@@ -11,6 +11,7 @@ import {
 } from 'class-validator';
 
 export type TipoAlquiler = 'pernocte' | 'por_horas';
+export type TipoCliente = 'normal' | 'corporativo' | 'web';
 
 /**
  * Una línea = una habitación dentro de la reserva (una reserva puede
@@ -37,8 +38,18 @@ export class CrearReservaHabitacionDto {
   @IsISO8601()
   checkoutPrevisto: string;
 
-  // tarifa_dia es editable por diseño (ver CLAUDE.md 3.3): si no viene,
-  // se calcula sola a partir de tarifas + origen + tipoAlquiler.
+  // El recepcionista determina qué tipo de cliente es (empresa, cliente
+  // web/OTA, o eventual/normal) y de ahí sale el precio por defecto
+  // configurado en el tipo de habitación. Si no se envía, se infiere de
+  // origen/empresaId (ver ReservasService.inferirTipoCliente).
+  @IsOptional()
+  @IsEnum(['normal', 'corporativo', 'web'])
+  tipoCliente?: TipoCliente;
+
+  // tarifa_dia es editable por diseño (ver CLAUDE.md 3.3): si no viene, se
+  // calcula sola a partir del precio del tipo de habitación + tipoCliente +
+  // tipoAlquiler. En cualquier caso (con o sin override) nunca puede quedar
+  // por debajo del precio_costo configurado para ese tipo de habitación.
   @IsOptional()
   @IsNumber()
   @Min(0)
