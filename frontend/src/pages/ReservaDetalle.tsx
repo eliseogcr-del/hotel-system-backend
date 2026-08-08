@@ -1,5 +1,5 @@
 import { useEffect, useState, type CSSProperties, type FormEvent } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import { api, ApiError } from '../lib/api';
 import { useHotel } from '../contexts/HotelContext';
 import { EstadoBadge } from './Reservas';
@@ -38,6 +38,8 @@ interface ReservaDetalle {
 export function ReservaDetalle() {
   const { id } = useParams<{ id: string }>();
   const { hotelActual } = useHotel();
+  const navigate = useNavigate();
+  const [haciendoCheckin, setHaciendoCheckin] = useState<string | null>(null);
   const [reserva, setReserva] = useState<ReservaDetalle | null>(null);
   const [habitaciones, setHabitaciones] = useState<Habitacion[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -87,6 +89,22 @@ export function ReservaDetalle() {
       setError(err instanceof ApiError ? err.message : 'No se pudo cancelar');
     } finally {
       setAccionando(false);
+    }
+  }
+
+  async function hacerCheckin(reservaHabitacionId: string) {
+    if (!hotelActual) return;
+    setHaciendoCheckin(reservaHabitacionId);
+    setError(null);
+    try {
+      const estadia = await api.post<{ id: string }>(`/hoteles/${hotelActual.hotelId}/estadias/checkin`, {
+        reservaHabitacionId,
+      });
+      navigate(`/estadias/${estadia.id}`);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'No se pudo hacer el check-in');
+    } finally {
+      setHaciendoCheckin(null);
     }
   }
 
@@ -154,6 +172,7 @@ export function ReservaDetalle() {
             <th style={thStyle}>Tarifa/día</th>
             <th style={thStyle}>Días</th>
             <th style={thStyle}>Subtotal</th>
+            <th style={thStyle}></th>
           </tr>
         </thead>
         <tbody>
@@ -168,6 +187,17 @@ export function ReservaDetalle() {
               <td style={tdStyle}>{l.tarifa_dia}</td>
               <td style={tdStyle}>{l.dias}</td>
               <td style={tdStyle}>{l.subtotal}</td>
+              <td style={tdStyle}>
+                {reserva.estado === 'confirmada' && (
+                  <button
+                    onClick={() => hacerCheckin(l.id)}
+                    disabled={haciendoCheckin === l.id}
+                    style={btnSecondary}
+                  >
+                    {haciendoCheckin === l.id ? 'Procesando...' : 'Check-in'}
+                  </button>
+                )}
+              </td>
             </tr>
           ))}
         </tbody>

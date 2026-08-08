@@ -24,7 +24,12 @@ interface EstadiaConReserva {
     id: string;
     habitacion_id: string;
     subtotal: number;
-    reservas: { hotel_id: string; estado: string };
+    habitaciones: { hab_numero: number; piso: number } | null;
+    reservas: {
+      hotel_id: string;
+      estado: string;
+      huespedes: { nombres: string; apellidos: string } | null;
+    };
   };
 }
 
@@ -286,7 +291,8 @@ export class EstadiasService {
         id, estado_actual, saldo, checkin_real, checkout_real,
         reserva_habitacion!inner(
           id, habitacion_id, subtotal,
-          reservas!inner(hotel_id, estado)
+          habitaciones(hab_numero, piso),
+          reservas!inner(hotel_id, estado, huespedes(nombres, apellidos))
         )
       `,
       )
