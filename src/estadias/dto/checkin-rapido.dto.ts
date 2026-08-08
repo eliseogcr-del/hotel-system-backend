@@ -7,11 +7,13 @@ import {
   IsOptional,
   IsString,
   IsUUID,
+  Matches,
   Min,
   MinLength,
 } from 'class-validator';
 
 export type TipoDocHuesped = 'dni' | 'pasaporte' | 'carnet_extranjeria' | 'cedula' | 'otro';
+export type NacionalidadHuesped = 'peruano' | 'extranjero';
 
 /**
  * Check-in directo desde el panel de Habitaciones: busca al huésped por
@@ -50,12 +52,26 @@ export class CheckinRapidoDto {
   correo?: string;
 
   @IsOptional()
+  @IsEnum(['peruano', 'extranjero'])
+  nacionalidad?: NacionalidadHuesped;
+
+  // País de origen -- solo tiene sentido si nacionalidad='extranjero'.
+  @IsOptional()
   @IsString()
-  nacionalidad?: string;
+  origen?: string;
 
   @IsOptional()
   @IsISO8601()
   fechaNacimiento?: string;
+
+  // RUC del huésped o de la empresa que paga su estadía (para factura).
+  @IsOptional()
+  @Matches(/^\d{11}$/, { message: 'El RUC debe tener 11 dígitos' })
+  ruc?: string;
+
+  @IsOptional()
+  @IsString()
+  razonSocial?: string;
 
   @IsInt()
   @Min(1)

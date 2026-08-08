@@ -17,9 +17,12 @@ interface Huesped {
   nombres: string;
   apellidos: string;
   nacionalidad: string | null;
+  origen: string | null;
   fecha_nacimiento: string | null;
   telefono: string | null;
   correo: string | null;
+  ruc: string | null;
+  razon_social: string | null;
 }
 
 export function Huespedes() {
@@ -28,8 +31,8 @@ export function Huespedes() {
   const [buscar, setBuscar] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [mostrarForm, setMostrarForm] = useState(false);
-  const [editandoId, setEditandoId] = useState<string | null>(null);
+  const [modalAbierto, setModalAbierto] = useState(false);
+  const [huespedEditando, setHuespedEditando] = useState<Huesped | null>(null);
 
   function cargar() {
     if (!hotelActual) return;
@@ -50,33 +53,33 @@ export function Huespedes() {
     cargar();
   }
 
+  function abrirNuevo() {
+    setHuespedEditando(null);
+    setModalAbierto(true);
+  }
+
+  function abrirEditar(h: Huesped) {
+    setHuespedEditando(h);
+    setModalAbierto(true);
+  }
+
   if (!hotelActual) return null;
 
   return (
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
         <h1 style={{ fontSize: 20 }}>Huéspedes</h1>
-        <button style={btnPrimary} onClick={() => setMostrarForm((v) => !v)}>
-          {mostrarForm ? 'Cancelar' : '+ Nuevo huésped'}
+        <button style={btnPrimary} onClick={abrirNuevo}>
+          + Nuevo huésped
         </button>
       </div>
 
-      {mostrarForm && (
-        <NuevoHuespedForm
-          hotelId={hotelActual.hotelId}
-          onCreado={() => {
-            setMostrarForm(false);
-            cargar();
-          }}
-        />
-      )}
-
-      <form onSubmit={handleBuscarSubmit} style={{ display: 'flex', gap: 8, margin: '16px 0' }}>
+      <form onSubmit={handleBuscarSubmit} style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
         <input
           value={buscar}
           onChange={(e) => setBuscar(e.target.value)}
-          placeholder="Buscar por nombre, apellido o documento..."
-          style={{ ...inputStyle, flex: 1, maxWidth: 360 }}
+          placeholder="Buscar por nombre, apellido, documento, RUC o razón social..."
+          style={{ ...inputStyle, flex: 1, maxWidth: 420 }}
         />
         <button type="submit" style={btnSecondary}>
           Buscar
@@ -87,247 +90,261 @@ export function Huespedes() {
       {loading && <p style={{ color: 'var(--text-muted)' }}>Cargando...</p>}
 
       {!loading && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-          {huespedes.map((h) =>
-            editandoId === h.id ? (
-              <EditarHuespedForm
-                key={h.id}
-                hotelId={hotelActual.hotelId}
-                huesped={h}
-                onGuardado={() => {
-                  setEditandoId(null);
-                  cargar();
-                }}
-                onCancelar={() => setEditandoId(null)}
-              />
-            ) : (
-              <div key={h.id} style={filaStyle}>
-                <span style={{ fontWeight: 500, minWidth: 180 }}>
-                  {h.nombres} {h.apellidos}
-                </span>
-                <span style={{ color: 'var(--text-secondary)' }}>
-                  {TIPOS_DOC.find((t) => t.value === h.tipo_doc)?.label ?? h.tipo_doc}: {h.nro_doc}
-                </span>
-                <span style={{ color: 'var(--text-secondary)' }}>{h.telefono ?? '—'}</span>
-                <span style={{ color: 'var(--text-secondary)' }}>{h.correo ?? '—'}</span>
-                <span style={{ color: 'var(--text-secondary)' }}>{h.nacionalidad ?? '—'}</span>
-                <button onClick={() => setEditandoId(h.id)} style={btnSecondary}>
-                  Editar
-                </button>
-              </div>
-            ),
-          )}
+        <div style={{ overflowX: 'auto', border: '1px solid var(--border)', borderRadius: 12 }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+            <thead>
+              <tr style={{ textAlign: 'left', color: 'var(--text-secondary)', fontSize: 11, background: 'var(--surface-1)' }}>
+                <th style={thStyle}>Documento</th>
+                <th style={thStyle}>Nombres</th>
+                <th style={thStyle}>RUC</th>
+                <th style={thStyle}>Razón social</th>
+                <th style={thStyle}>Acciones</th>
+              </tr>
+            </thead>
+            <tbody>
+              {huespedes.map((h) => (
+                <tr key={h.id} style={{ borderTop: '1px solid var(--border)' }}>
+                  <td style={tdStyle}>
+                    {TIPOS_DOC.find((t) => t.value === h.tipo_doc)?.label ?? h.tipo_doc} {h.nro_doc}
+                  </td>
+                  <td style={{ ...tdStyle, fontWeight: 500, color: 'var(--text-primary)' }}>
+                    {h.nombres} {h.apellidos}
+                  </td>
+                  <td style={tdStyle}>{h.ruc ?? ''}</td>
+                  <td style={tdStyle}>{h.razon_social ?? ''}</td>
+                  <td style={tdStyle}>
+                    <button onClick={() => abrirEditar(h)} style={btnSecondary}>
+                      Editar
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
           {huespedes.length === 0 && (
-            <p style={{ color: 'var(--text-muted)' }}>No se encontraron huéspedes.</p>
+            <p style={{ color: 'var(--text-muted)', padding: 16 }}>No se encontraron huéspedes.</p>
           )}
         </div>
+      )}
+
+      {modalAbierto && (
+        <HuespedFormModal
+          hotelId={hotelActual.hotelId}
+          huesped={huespedEditando}
+          onClose={() => setModalAbierto(false)}
+          onGuardado={() => {
+            setModalAbierto(false);
+            cargar();
+          }}
+        />
       )}
     </div>
   );
 }
 
-function NuevoHuespedForm({ hotelId, onCreado }: { hotelId: string; onCreado: () => void }) {
-  const [tipoDoc, setTipoDoc] = useState('dni');
-  const [nroDoc, setNroDoc] = useState('');
-  const [nombres, setNombres] = useState('');
-  const [apellidos, setApellidos] = useState('');
-  const [telefono, setTelefono] = useState('');
-  const [correo, setCorreo] = useState('');
-  const [nacionalidad, setNacionalidad] = useState('');
-  const [fechaNacimiento, setFechaNacimiento] = useState('');
+function HuespedFormModal({
+  hotelId,
+  huesped,
+  onClose,
+  onGuardado,
+}: {
+  hotelId: string;
+  huesped: Huesped | null;
+  onClose: () => void;
+  onGuardado: () => void;
+}) {
+  const [tipoDoc, setTipoDoc] = useState(huesped?.tipo_doc ?? 'dni');
+  const [nroDoc, setNroDoc] = useState(huesped?.nro_doc ?? '');
+  const [nombres, setNombres] = useState(huesped?.nombres ?? '');
+  const [apellidos, setApellidos] = useState(huesped?.apellidos ?? '');
+  const [telefono, setTelefono] = useState(huesped?.telefono ?? '');
+  const [correo, setCorreo] = useState(huesped?.correo ?? '');
+  const [nacionalidad, setNacionalidad] = useState(huesped?.nacionalidad ?? '');
+  const [origen, setOrigen] = useState(huesped?.origen ?? '');
+  const [fechaNacimiento, setFechaNacimiento] = useState(huesped?.fecha_nacimiento ?? '');
+  const [ruc, setRuc] = useState(huesped?.ruc ?? '');
+  const [razonSocial, setRazonSocial] = useState(huesped?.razon_social ?? '');
   const [enviando, setEnviando] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  async function crear(e: FormEvent) {
+  async function guardar(e: FormEvent) {
     e.preventDefault();
     setEnviando(true);
     setError(null);
+    const cuerpo = {
+      tipoDoc,
+      nroDoc,
+      nombres,
+      apellidos,
+      telefono: telefono || undefined,
+      correo: correo || undefined,
+      nacionalidad: nacionalidad || undefined,
+      origen: nacionalidad === 'extranjero' ? origen || undefined : undefined,
+      fechaNacimiento: fechaNacimiento || undefined,
+      ruc: ruc || undefined,
+      razonSocial: razonSocial || undefined,
+    };
     try {
-      await api.post(`/hoteles/${hotelId}/huespedes`, {
-        tipoDoc,
-        nroDoc,
-        nombres,
-        apellidos,
-        telefono: telefono || undefined,
-        correo: correo || undefined,
-        nacionalidad: nacionalidad || undefined,
-        fechaNacimiento: fechaNacimiento || undefined,
-      });
-      onCreado();
+      if (huesped) {
+        await api.patch(`/hoteles/${hotelId}/huespedes/${huesped.id}`, cuerpo);
+      } else {
+        await api.post(`/hoteles/${hotelId}/huespedes`, cuerpo);
+      }
+      onGuardado();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'No se pudo registrar el huésped');
+      setError(err instanceof ApiError ? err.message : 'No se pudo guardar el huésped');
     } finally {
       setEnviando(false);
     }
   }
 
   return (
-    <form
-      onSubmit={crear}
-      style={{
-        background: 'var(--surface-1)',
-        border: '1px solid var(--border)',
-        borderRadius: 12,
-        padding: 16,
-        display: 'flex',
-        flexDirection: 'column',
-        gap: 10,
-      }}
-    >
-      <div style={{ display: 'flex', gap: 8 }}>
-        <select value={tipoDoc} onChange={(e) => setTipoDoc(e.target.value)} style={{ ...inputStyle, width: 170 }}>
-          {TIPOS_DOC.map((t) => (
-            <option key={t.value} value={t.value}>
-              {t.label}
-            </option>
-          ))}
-        </select>
-        <input
-          value={nroDoc}
-          onChange={(e) => setNroDoc(e.target.value)}
-          placeholder="Número de documento"
-          style={{ ...inputStyle, flex: 1 }}
-          required
-        />
+    <div style={overlayStyle} onClick={onClose}>
+      <div style={modalStyle} onClick={(e) => e.stopPropagation()}>
+        <h2 style={{ fontSize: 17, marginBottom: 16 }}>{huesped ? 'Editar huésped' : 'Nuevo huésped'}</h2>
+        {error && <p style={{ color: 'var(--danger)', fontSize: 13, marginBottom: 12 }}>{error}</p>}
+
+        <form onSubmit={guardar} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <div style={{ width: 180 }}>
+              <label style={labelStyle}>Tipo de documento</label>
+              <select value={tipoDoc} onChange={(e) => setTipoDoc(e.target.value)} style={inputStyle}>
+                {TIPOS_DOC.map((t) => (
+                  <option key={t.value} value={t.value}>
+                    {t.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div style={{ flex: 1 }}>
+              <label style={labelStyle}>Número de documento</label>
+              <input value={nroDoc} onChange={(e) => setNroDoc(e.target.value)} style={inputStyle} required />
+            </div>
+          </div>
+
+          <div style={{ display: 'flex', gap: 8 }}>
+            <div style={{ flex: 1 }}>
+              <label style={labelStyle}>Nombres</label>
+              <input value={nombres} onChange={(e) => setNombres(e.target.value)} style={inputStyle} required />
+            </div>
+            <div style={{ flex: 1 }}>
+              <label style={labelStyle}>Apellidos</label>
+              <input value={apellidos} onChange={(e) => setApellidos(e.target.value)} style={inputStyle} required />
+            </div>
+          </div>
+
+          <div style={{ display: 'flex', gap: 8 }}>
+            <div style={{ flex: 1 }}>
+              <label style={labelStyle}>Teléfono</label>
+              <input value={telefono} onChange={(e) => setTelefono(e.target.value)} style={inputStyle} />
+            </div>
+            <div style={{ flex: 1 }}>
+              <label style={labelStyle}>Correo</label>
+              <input type="email" value={correo} onChange={(e) => setCorreo(e.target.value)} style={inputStyle} />
+            </div>
+          </div>
+
+          <div style={{ display: 'flex', gap: 8 }}>
+            <div style={{ width: 180 }}>
+              <label style={labelStyle}>Nacionalidad</label>
+              <select value={nacionalidad} onChange={(e) => setNacionalidad(e.target.value)} style={inputStyle}>
+                <option value="">Sin especificar</option>
+                <option value="peruano">Peruano</option>
+                <option value="extranjero">Extranjero</option>
+              </select>
+            </div>
+            {nacionalidad === 'extranjero' && (
+              <div style={{ flex: 1 }}>
+                <label style={labelStyle}>País de origen</label>
+                <input
+                  value={origen}
+                  onChange={(e) => setOrigen(e.target.value)}
+                  placeholder="Ej. Colombia"
+                  style={inputStyle}
+                />
+              </div>
+            )}
+            <div style={{ flex: 1 }}>
+              <label style={labelStyle}>Fecha de nacimiento</label>
+              <input
+                type="date"
+                value={fechaNacimiento}
+                onChange={(e) => setFechaNacimiento(e.target.value)}
+                style={inputStyle}
+              />
+            </div>
+          </div>
+
+          <hr style={{ border: 'none', borderTop: '1px solid var(--border)' }} />
+          <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: 0 }}>
+            RUC y razón social: del propio huésped si pidió factura a su nombre, o de la empresa que paga su
+            estadía (ej. envía a su personal). Déjalo vacío si no aplica.
+          </p>
+
+          <div style={{ display: 'flex', gap: 8 }}>
+            <div style={{ width: 160 }}>
+              <label style={labelStyle}>RUC</label>
+              <input
+                value={ruc}
+                onChange={(e) => setRuc(e.target.value)}
+                placeholder="11 dígitos"
+                maxLength={11}
+                style={inputStyle}
+              />
+            </div>
+            <div style={{ flex: 1 }}>
+              <label style={labelStyle}>Razón social</label>
+              <input value={razonSocial} onChange={(e) => setRazonSocial(e.target.value)} style={inputStyle} />
+            </div>
+          </div>
+
+          <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 8 }}>
+            <button type="button" onClick={onClose} style={btnSecondary}>
+              Cancelar
+            </button>
+            <button type="submit" disabled={enviando} style={btnPrimary}>
+              {enviando ? 'Guardando...' : 'Guardar'}
+            </button>
+          </div>
+        </form>
       </div>
-      <div style={{ display: 'flex', gap: 8 }}>
-        <input value={nombres} onChange={(e) => setNombres(e.target.value)} placeholder="Nombres" style={{ ...inputStyle, flex: 1 }} required />
-        <input value={apellidos} onChange={(e) => setApellidos(e.target.value)} placeholder="Apellidos" style={{ ...inputStyle, flex: 1 }} required />
-      </div>
-      <div style={{ display: 'flex', gap: 8 }}>
-        <input value={telefono} onChange={(e) => setTelefono(e.target.value)} placeholder="Teléfono" style={{ ...inputStyle, flex: 1 }} />
-        <input type="email" value={correo} onChange={(e) => setCorreo(e.target.value)} placeholder="Correo" style={{ ...inputStyle, flex: 1 }} />
-      </div>
-      <div style={{ display: 'flex', gap: 8 }}>
-        <input
-          value={nacionalidad}
-          onChange={(e) => setNacionalidad(e.target.value)}
-          placeholder="Nacionalidad (ej. Peruana)"
-          style={{ ...inputStyle, flex: 1 }}
-        />
-        <input
-          type="date"
-          value={fechaNacimiento}
-          onChange={(e) => setFechaNacimiento(e.target.value)}
-          style={{ ...inputStyle, flex: 1 }}
-        />
-      </div>
-      {error && <p style={{ color: 'var(--danger)', fontSize: 12 }}>{error}</p>}
-      <button type="submit" disabled={enviando} style={{ ...btnPrimary, alignSelf: 'flex-start' }}>
-        {enviando ? 'Registrando...' : 'Registrar huésped'}
-      </button>
-    </form>
+    </div>
   );
 }
 
-function EditarHuespedForm({
-  hotelId,
-  huesped,
-  onGuardado,
-  onCancelar,
-}: {
-  hotelId: string;
-  huesped: Huesped;
-  onGuardado: () => void;
-  onCancelar: () => void;
-}) {
-  const [tipoDoc, setTipoDoc] = useState(huesped.tipo_doc);
-  const [nroDoc, setNroDoc] = useState(huesped.nro_doc);
-  const [nombres, setNombres] = useState(huesped.nombres);
-  const [apellidos, setApellidos] = useState(huesped.apellidos);
-  const [telefono, setTelefono] = useState(huesped.telefono ?? '');
-  const [correo, setCorreo] = useState(huesped.correo ?? '');
-  const [nacionalidad, setNacionalidad] = useState(huesped.nacionalidad ?? '');
-  const [fechaNacimiento, setFechaNacimiento] = useState(huesped.fecha_nacimiento ?? '');
-  const [guardando, setGuardando] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  async function guardar(e: FormEvent) {
-    e.preventDefault();
-    setGuardando(true);
-    setError(null);
-    try {
-      await api.patch(`/hoteles/${hotelId}/huespedes/${huesped.id}`, {
-        tipoDoc,
-        nroDoc,
-        nombres,
-        apellidos,
-        telefono: telefono || undefined,
-        correo: correo || undefined,
-        nacionalidad: nacionalidad || undefined,
-        fechaNacimiento: fechaNacimiento || undefined,
-      });
-      onGuardado();
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'No se pudo guardar');
-    } finally {
-      setGuardando(false);
-    }
-  }
-
-  return (
-    <form
-      onSubmit={guardar}
-      style={{ ...filaStyle, flexDirection: 'column', alignItems: 'stretch', gap: 8 }}
-    >
-      <div style={{ display: 'flex', gap: 8 }}>
-        <select value={tipoDoc} onChange={(e) => setTipoDoc(e.target.value)} style={{ ...inputStyle, width: 170 }}>
-          {TIPOS_DOC.map((t) => (
-            <option key={t.value} value={t.value}>
-              {t.label}
-            </option>
-          ))}
-        </select>
-        <input value={nroDoc} onChange={(e) => setNroDoc(e.target.value)} style={{ ...inputStyle, flex: 1 }} required />
-      </div>
-      <div style={{ display: 'flex', gap: 8 }}>
-        <input value={nombres} onChange={(e) => setNombres(e.target.value)} style={{ ...inputStyle, flex: 1 }} required />
-        <input value={apellidos} onChange={(e) => setApellidos(e.target.value)} style={{ ...inputStyle, flex: 1 }} required />
-      </div>
-      <div style={{ display: 'flex', gap: 8 }}>
-        <input value={telefono} onChange={(e) => setTelefono(e.target.value)} placeholder="Teléfono" style={{ ...inputStyle, flex: 1 }} />
-        <input type="email" value={correo} onChange={(e) => setCorreo(e.target.value)} placeholder="Correo" style={{ ...inputStyle, flex: 1 }} />
-      </div>
-      <div style={{ display: 'flex', gap: 8 }}>
-        <input
-          value={nacionalidad}
-          onChange={(e) => setNacionalidad(e.target.value)}
-          placeholder="Nacionalidad"
-          style={{ ...inputStyle, flex: 1 }}
-        />
-        <input
-          type="date"
-          value={fechaNacimiento}
-          onChange={(e) => setFechaNacimiento(e.target.value)}
-          style={{ ...inputStyle, flex: 1 }}
-        />
-      </div>
-      {error && <p style={{ color: 'var(--danger)', fontSize: 12 }}>{error}</p>}
-      <div style={{ display: 'flex', gap: 8 }}>
-        <button type="submit" disabled={guardando} style={btnPrimary}>
-          Guardar
-        </button>
-        <button type="button" onClick={onCancelar} style={btnSecondary}>
-          Cancelar
-        </button>
-      </div>
-    </form>
-  );
-}
-
-const filaStyle: CSSProperties = {
+const overlayStyle: CSSProperties = {
+  position: 'fixed',
+  inset: 0,
+  background: 'rgba(0,0,0,0.5)',
   display: 'flex',
-  justifyContent: 'space-between',
-  alignItems: 'center',
-  padding: '8px 12px',
-  background: 'var(--surface-1)',
+  alignItems: 'flex-start',
+  justifyContent: 'center',
+  padding: '40px 16px',
+  overflowY: 'auto',
+  zIndex: 100,
+};
+
+const modalStyle: CSSProperties = {
+  background: 'var(--surface-0, var(--surface-1))',
   border: '1px solid var(--border)',
-  borderRadius: 'var(--radius)',
-  fontSize: 13,
-  gap: 8,
+  borderRadius: 12,
+  padding: 24,
+  width: '100%',
+  maxWidth: 560,
+};
+
+const thStyle: CSSProperties = { padding: '8px 10px', whiteSpace: 'nowrap' };
+const tdStyle: CSSProperties = { padding: '8px 10px', color: 'var(--text-secondary)' };
+
+const labelStyle: CSSProperties = {
+  fontSize: 11,
+  color: 'var(--text-secondary)',
+  display: 'block',
+  marginBottom: 3,
 };
 
 const inputStyle: CSSProperties = {
+  width: '100%',
   padding: '8px 10px',
   border: '1px solid var(--border)',
   borderRadius: 'var(--radius)',

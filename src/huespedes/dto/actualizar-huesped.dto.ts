@@ -1,5 +1,5 @@
-import { IsDateString, IsEmail, IsEnum, IsOptional, IsString } from 'class-validator';
-import { TipoDocHuesped } from './crear-huesped.dto';
+import { IsDateString, IsEmail, IsEnum, IsOptional, IsString, Matches } from 'class-validator';
+import { NacionalidadHuesped, TipoDocHuesped } from './crear-huesped.dto';
 
 export class ActualizarHuespedDto {
   @IsOptional()
@@ -19,8 +19,12 @@ export class ActualizarHuespedDto {
   apellidos?: string;
 
   @IsOptional()
+  @IsEnum(['peruano', 'extranjero'])
+  nacionalidad?: NacionalidadHuesped;
+
+  @IsOptional()
   @IsString()
-  nacionalidad?: string;
+  origen?: string;
 
   @IsOptional()
   @IsDateString()
@@ -33,4 +37,12 @@ export class ActualizarHuespedDto {
   @IsOptional()
   @IsEmail()
   correo?: string;
+
+  @IsOptional()
+  @Matches(/^\d{11}$/, { message: 'El RUC debe tener 11 dígitos' })
+  ruc?: string;
+
+  @IsOptional()
+  @IsString()
+  razonSocial?: string;
 }

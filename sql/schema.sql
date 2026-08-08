@@ -151,10 +151,18 @@ create table huespedes (
     nro_doc text not null,
     nombres text not null,
     apellidos text not null,
-    nacionalidad text,
+    nacionalidad text check (nacionalidad in ('peruano','extranjero')),
+    origen text,               -- país de origen, solo tiene sentido si nacionalidad='extranjero'
     fecha_nacimiento date,
     telefono text,
     correo text,
+    -- RUC/razón social para facturación: puede ser el del propio huésped
+    -- (pidió factura a su nombre) o el de la empresa que paga su estadía
+    -- (ej. una empresa hospeda a su personal) -- es un dato del huésped en
+    -- sí, no una relación con la tabla `empresas` (que es para tarifas
+    -- corporativas negociadas, un caso de uso distinto).
+    ruc text,
+    razon_social text,
     created_at timestamptz not null default now(),
     unique (hotel_id, tipo_doc, nro_doc)
 );

@@ -9,20 +9,28 @@ export interface Huesped {
   telefono: string | null;
   correo: string | null;
   nacionalidad: string | null;
+  origen: string | null;
   fecha_nacimiento: string | null;
+  ruc: string | null;
+  razon_social: string | null;
 }
 
-// No hay HuespedesModule en el backend todavía, así que esto consulta
-// Supabase directo desde el frontend — seguro porque `huespedes` ya tiene
-// RLS 'for all' scoped por hotel_id (misma política que ya se probó desde
-// el backend). Mismo patrón que HotelContext usa para personal_hotel.
+const HUESPED_SELECT =
+  'id, nombres, apellidos, tipo_doc, nro_doc, telefono, correo, nacionalidad, origen, fecha_nacimiento, ruc, razon_social';
+
+// Búsqueda rápida durante check-in/reservas: consulta Supabase directo
+// desde el frontend en vez de pasar por HuespedesModule -- seguro porque
+// `huespedes` ya tiene RLS 'for all' scoped por hotel_id (misma política
+// que ya se probó desde el backend). Mismo patrón que HotelContext usa
+// para personal_hotel. La pantalla /huespedes (alta/edición completa) sí
+// pasa por el backend; esto es solo para el atajo de "buscar por DNI".
 export async function buscarHuespedPorDni(
   hotelId: string,
   nroDoc: string,
 ): Promise<Huesped | null> {
   const { data, error } = await supabase
     .from('huespedes')
-    .select('id, nombres, apellidos, tipo_doc, nro_doc, telefono, correo, nacionalidad, fecha_nacimiento')
+    .select(HUESPED_SELECT)
     .eq('hotel_id', hotelId)
     .eq('nro_doc', nroDoc)
     .maybeSingle();
@@ -43,7 +51,7 @@ export async function crearHuesped(
       tipo_doc: datos.tipoDoc,
       nro_doc: datos.nroDoc,
     })
-    .select('id, nombres, apellidos, tipo_doc, nro_doc, telefono, correo, nacionalidad, fecha_nacimiento')
+    .select(HUESPED_SELECT)
     .single();
   if (error) throw error;
   return data;

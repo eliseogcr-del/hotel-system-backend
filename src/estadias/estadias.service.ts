@@ -534,7 +534,10 @@ export class EstadiasService {
         telefono: dto.telefono ?? null,
         correo: dto.correo ?? null,
         nacionalidad: dto.nacionalidad ?? null,
+        origen: dto.origen ?? null,
         fecha_nacimiento: dto.fechaNacimiento ?? null,
+        ruc: dto.ruc ?? null,
+        razon_social: dto.razonSocial ?? null,
       })
       .select('id')
       .single();

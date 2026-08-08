@@ -62,7 +62,10 @@ export function CheckinRapidoModal({
   const [telefono, setTelefono] = useState('');
   const [correo, setCorreo] = useState('');
   const [nacionalidad, setNacionalidad] = useState('');
+  const [origen, setOrigen] = useState('');
   const [fechaNacimiento, setFechaNacimiento] = useState('');
+  const [ruc, setRuc] = useState('');
+  const [razonSocial, setRazonSocial] = useState('');
 
   const [nroPersonas, setNroPersonas] = useState(1);
   const [tipoCliente, setTipoCliente] = useState<TipoCliente>('normal');
@@ -96,7 +99,10 @@ export function CheckinRapidoModal({
         setTelefono(huesped.telefono ?? '');
         setCorreo(huesped.correo ?? '');
         setNacionalidad(huesped.nacionalidad ?? '');
+        setOrigen(huesped.origen ?? '');
         setFechaNacimiento(huesped.fecha_nacimiento ?? '');
+        setRuc(huesped.ruc ?? '');
+        setRazonSocial(huesped.razon_social ?? '');
       } else {
         setHuespedEncontrado(false);
         setNombres('');
@@ -104,7 +110,10 @@ export function CheckinRapidoModal({
         setTelefono('');
         setCorreo('');
         setNacionalidad('');
+        setOrigen('');
         setFechaNacimiento('');
+        setRuc('');
+        setRazonSocial('');
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'No se pudo buscar el huésped');
@@ -126,8 +135,11 @@ export function CheckinRapidoModal({
         apellidos: apellidos.trim() || undefined,
         telefono: telefono.trim() || undefined,
         correo: correo.trim() || undefined,
-        nacionalidad: nacionalidad.trim() || undefined,
+        nacionalidad: nacionalidad || undefined,
+        origen: nacionalidad === 'extranjero' ? origen.trim() || undefined : undefined,
         fechaNacimiento: fechaNacimiento || undefined,
+        ruc: ruc.trim() || undefined,
+        razonSocial: razonSocial.trim() || undefined,
         nroPersonas,
         tarifaDia,
         dias,
@@ -209,15 +221,20 @@ export function CheckinRapidoModal({
           </div>
 
           <div style={{ display: 'flex', gap: 8 }}>
-            <div style={{ flex: 1 }}>
+            <div style={{ width: 170 }}>
               <label style={labelStyle}>Nacionalidad</label>
-              <input
-                value={nacionalidad}
-                onChange={(e) => setNacionalidad(e.target.value)}
-                placeholder="Peruana"
-                style={inputStyle}
-              />
+              <select value={nacionalidad} onChange={(e) => setNacionalidad(e.target.value)} style={inputStyle}>
+                <option value="">Sin especificar</option>
+                <option value="peruano">Peruano</option>
+                <option value="extranjero">Extranjero</option>
+              </select>
             </div>
+            {nacionalidad === 'extranjero' && (
+              <div style={{ flex: 1 }}>
+                <label style={labelStyle}>País de origen</label>
+                <input value={origen} onChange={(e) => setOrigen(e.target.value)} placeholder="Ej. Colombia" style={inputStyle} />
+              </div>
+            )}
             <div style={{ flex: 1 }}>
               <label style={labelStyle}>Fecha de nacimiento</label>
               <input
@@ -228,6 +245,21 @@ export function CheckinRapidoModal({
               />
             </div>
           </div>
+
+          <div style={{ display: 'flex', gap: 8 }}>
+            <div style={{ width: 170 }}>
+              <label style={labelStyle}>RUC</label>
+              <input value={ruc} onChange={(e) => setRuc(e.target.value)} placeholder="11 dígitos" maxLength={11} style={inputStyle} />
+            </div>
+            <div style={{ flex: 1 }}>
+              <label style={labelStyle}>Razón social</label>
+              <input value={razonSocial} onChange={(e) => setRazonSocial(e.target.value)} style={inputStyle} />
+            </div>
+          </div>
+          <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: '-8px 0 0' }}>
+            RUC y razón social: del propio huésped si pidió factura a su nombre, o de la empresa que paga su
+            estadía. Déjalo vacío si no aplica.
+          </p>
 
           <hr style={{ border: 'none', borderTop: '1px solid var(--border)' }} />
 

@@ -18,9 +18,12 @@ export class HuespedesService {
         nombres: dto.nombres,
         apellidos: dto.apellidos,
         nacionalidad: dto.nacionalidad ?? null,
+        origen: dto.origen ?? null,
         fecha_nacimiento: dto.fechaNacimiento ?? null,
         telefono: dto.telefono ?? null,
         correo: dto.correo ?? null,
+        ruc: dto.ruc ?? null,
+        razon_social: dto.razonSocial ?? null,
       })
       .select()
       .single();
@@ -45,7 +48,7 @@ export class HuespedesService {
     const buscar = query.buscar?.trim().replace(/[,()%]/g, '');
     if (buscar) {
       consulta = consulta.or(
-        `nombres.ilike.%${buscar}%,apellidos.ilike.%${buscar}%,nro_doc.ilike.%${buscar}%`,
+        `nombres.ilike.%${buscar}%,apellidos.ilike.%${buscar}%,nro_doc.ilike.%${buscar}%,ruc.ilike.%${buscar}%,razon_social.ilike.%${buscar}%`,
       );
     }
 
@@ -73,9 +76,12 @@ export class HuespedesService {
     if (dto.nombres !== undefined) cambios.nombres = dto.nombres;
     if (dto.apellidos !== undefined) cambios.apellidos = dto.apellidos;
     if (dto.nacionalidad !== undefined) cambios.nacionalidad = dto.nacionalidad;
+    if (dto.origen !== undefined) cambios.origen = dto.origen;
     if (dto.fechaNacimiento !== undefined) cambios.fecha_nacimiento = dto.fechaNacimiento;
     if (dto.telefono !== undefined) cambios.telefono = dto.telefono;
     if (dto.correo !== undefined) cambios.correo = dto.correo;
+    if (dto.ruc !== undefined) cambios.ruc = dto.ruc;
+    if (dto.razonSocial !== undefined) cambios.razon_social = dto.razonSocial;
 
     const { data, error } = await client
       .from('huespedes')
