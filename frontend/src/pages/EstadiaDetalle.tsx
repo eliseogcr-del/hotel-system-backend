@@ -383,6 +383,7 @@ function RegistrarMovimientoForm({
   const [notas, setNotas] = useState('');
   const [productos, setProductos] = useState<ProductoBazar[]>([]);
   const [productoId, setProductoId] = useState('');
+  const [cantidad, setCantidad] = useState('1');
   const [pagadoAlMomento, setPagadoAlMomento] = useState(true);
   const [enviando, setEnviando] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -397,7 +398,13 @@ function RegistrarMovimientoForm({
   function elegirProducto(id: string) {
     setProductoId(id);
     const producto = productos.find((p) => p.id === id);
-    if (producto) setMonto(String(producto.precio));
+    if (producto) setMonto(String(producto.precio * (Number(cantidad) || 1)));
+  }
+
+  function cambiarCantidad(valor: string) {
+    setCantidad(valor);
+    const producto = productos.find((p) => p.id === productoId);
+    if (producto) setMonto(String(producto.precio * (Number(valor) || 1)));
   }
 
   async function handleSubmit(e: FormEvent) {
@@ -411,11 +418,13 @@ function RegistrarMovimientoForm({
         metodoPago: requiereMetodo ? metodoPago : undefined,
         productoId: tipo === 'consumo_bazar' ? productoId : undefined,
         pagadoAlMomento: tipo === 'consumo_bazar' ? pagadoAlMomento : undefined,
+        cantidad: tipo === 'consumo_bazar' ? Number(cantidad) || 1 : undefined,
         notas: notas || undefined,
       });
       setMonto('');
       setNotas('');
       setProductoId('');
+      setCantidad('1');
       onRegistrado();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'No se pudo registrar el movimiento');
@@ -466,6 +475,20 @@ function RegistrarMovimientoForm({
           )}
         </div>
       )}
+      {tipo === 'consumo_bazar' && (
+        <div style={{ width: 80 }}>
+          <label style={labelStyle}>Cantidad</label>
+          <input
+            type="number"
+            min={1}
+            step={1}
+            value={cantidad}
+            onChange={(e) => cambiarCantidad(e.target.value)}
+            style={inputStyle}
+            required
+          />
+        </div>
+      )}
       <div style={{ width: 100 }}>
         <label style={labelStyle}>Monto</label>
         <input type="number" min={0.01} step={0.01} value={monto} onChange={(e) => setMonto(e.target.value)} style={inputStyle} required />
@@ -490,7 +513,12 @@ function RegistrarMovimientoForm({
       )}
       <div style={{ flex: 1, minWidth: 140 }}>
         <label style={labelStyle}>Notas</label>
-        <input value={notas} onChange={(e) => setNotas(e.target.value)} style={inputStyle} />
+        <input
+          value={notas}
+          onChange={(e) => setNotas(e.target.value)}
+          style={inputStyle}
+          placeholder={tipo === 'consumo_bazar' ? 'Opcional, se agrega al nombre del producto' : undefined}
+        />
       </div>
       <button type="submit" disabled={enviando} style={btnPrimary}>
         {enviando ? 'Guardando...' : 'Registrar'}

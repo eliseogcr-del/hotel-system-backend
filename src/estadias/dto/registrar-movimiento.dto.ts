@@ -1,10 +1,12 @@
 import {
   IsBoolean,
   IsEnum,
+  IsInt,
   IsNumber,
   IsOptional,
   IsString,
   IsUUID,
+  Min,
 } from 'class-validator';
 
 export type TipoMovimientoCuenta =
@@ -47,6 +49,11 @@ export class RegistrarMovimientoDto {
   @IsOptional()
   @IsBoolean()
   pagadoAlMomento?: boolean;
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  cantidad?: number;
 
   @IsOptional()
   @IsString()

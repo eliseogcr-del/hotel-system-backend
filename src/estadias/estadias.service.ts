@@ -347,6 +347,24 @@ export class EstadiasService {
       sesionTurnoId = await this.obtenerSesionAbierta(client, hotelId, personalId);
     }
 
+    // Para consumo_bazar, las notas se arman con el nombre del producto (y la
+    // cantidad si es más de 1) en vez de depender de que el personal lo tipee,
+    // así queda visible en el libro qué compró el huésped.
+    let notasCargo = dto.notas;
+    if (dto.tipo === 'consumo_bazar') {
+      const { data: producto, error: prodError } = await client
+        .from('productos_bazar')
+        .select('nombre')
+        .eq('id', dto.productoId)
+        .maybeSingle();
+      if (prodError) throw prodError;
+      if (!producto) throw new NotFoundException('Producto de bazar no encontrado');
+
+      const cantidad = dto.cantidad ?? 1;
+      const descripcion = `${producto.nombre}${cantidad > 1 ? ` x${cantidad}` : ''}`;
+      notasCargo = dto.notas ? `${descripcion} — ${dto.notas}` : descripcion;
+    }
+
     await this.insertarMovimiento(client, estadiaId, {
       tipo: dto.tipo,
       monto: montoFinal,
@@ -354,19 +372,31 @@ export class EstadiasService {
       productoId: dto.productoId,
       pagadoAlMomento,
       sesionTurnoId,
-      notas: dto.notas,
+      notas: notasCargo,
       registradoPor: personalId,
     });
+
+    // El consumo_bazar pagado al momento genera además el pago que compensa
+    // esa deuda en el libro de la estadía (antes solo se registraba el
+    // ingreso en caja y el cargo quedaba como saldo pendiente).
+    if (dto.tipo === 'consumo_bazar' && pagadoAlMomento) {
+      await this.insertarMovimiento(client, estadiaId, {
+        tipo: 'pago',
+        monto: -Math.abs(dto.monto),
+        metodoPago: dto.metodoPago,
+        registradoPor: personalId,
+        notas: `Pago: ${notasCargo}`,
+      });
+    }
 
     if (generaCaja && sesionTurnoId) {
       const { error: cajaError } = await client.from('movimientos_caja').insert({
         sesion_turno_id: sesionTurnoId,
         tipo: 'ingreso',
         monto: Math.abs(dto.monto),
-        concepto:
-          dto.tipo === 'pago' ? 'Pago de huésped' : 'Consumo de bazar pagado al momento',
+        concepto: dto.tipo === 'pago' ? 'Pago de huésped' : 'Consumo de bazar pagado al momento',
         metodo_pago: dto.metodoPago,
-        notas: dto.notas ?? null,
+        notas: notasCargo ?? null,
       });
       if (cajaError) throw cajaError;
     }
