@@ -32,14 +32,17 @@ export class HabitacionesService {
 
     const { data: tareasEnProceso, error: tareasError } = await client
       .from('tareas_hk')
-      .select('habitacion_id, tipo')
+      .select('habitacion_id, tipo, notas')
       .eq('hotel_id', hotelId)
       .eq('estado', 'en_proceso');
     if (tareasError) throw tareasError;
 
-    const tareaEnProcesoPorHabitacion = new Map<string, 'limpieza' | 'mantenimiento'>();
+    const tareaEnProcesoPorHabitacion = new Map<
+      string,
+      { tipo: 'limpieza' | 'mantenimiento'; notas: string | null }
+    >();
     for (const t of tareasEnProceso ?? []) {
-      tareaEnProcesoPorHabitacion.set(t.habitacion_id, t.tipo);
+      tareaEnProcesoPorHabitacion.set(t.habitacion_id, { tipo: t.tipo, notas: t.notas });
     }
 
     const { data: lineasActivas, error: lineasError } = await client
@@ -175,15 +178,21 @@ export class HabitacionesService {
 
       // Si el HK ya la había iniciado y se le olvidó marcarla terminada,
       // recepción puede cerrarla igual desmarcando el checkbox -- se
-      // finaliza en vez de borrarse para no perder el registro histórico.
-      const { error: finalizarError } = await client
+      // finaliza en vez de borrarse para no perder el registro histórico,
+      // y se asume que el trabajo sí se hizo (por eso agrega la misma
+      // nota que si el HK la hubiera cerrado él mismo).
+      const { data: finalizadas, error: finalizarError } = await client
         .from('tareas_hk')
-        .update({ estado: 'terminado', finalizado_en: new Date().toISOString() })
+        .update({ estado: 'terminado', finalizado_en: new Date().toISOString(), notas: null })
         .eq('habitacion_id', habitacionId)
         .eq('tipo', 'mantenimiento')
         .eq('con_huesped_dentro', true)
-        .eq('estado', 'en_proceso');
+        .eq('estado', 'en_proceso')
+        .select('id');
       if (finalizarError) throw finalizarError;
+      if (finalizadas && finalizadas.length > 0) {
+        await this.agregarNotaMantenimiento(client, habitacionId);
+      }
     }
 
     const { error: updError } = await client
@@ -239,6 +248,36 @@ export class HabitacionesService {
     if (updError) throw updError;
 
     return { estado: 'disponible' };
+  }
+
+  /**
+   * Agrega "se realizó el mantenimiento" a las notas del huésped activo
+   * (reserva_habitacion.observaciones, la misma columna que edita
+   * recepción desde Habitaciones) sin borrar lo que ya tenía escrito.
+   * Duplica TareasHkService.agregarNotaMantenimiento -- son módulos
+   * distintos y esta es la única pieza compartida, no vale la pena
+   * extraer un servicio común solo para esto.
+   */
+  private async agregarNotaMantenimiento(client: SupabaseClient, habitacionId: string) {
+    const { data: rh, error } = await client
+      .from('reserva_habitacion')
+      .select('id, observaciones, estadias!inner(estado_actual)')
+      .eq('habitacion_id', habitacionId)
+      .eq('estadias.estado_actual', 'en_curso')
+      .maybeSingle();
+    if (error) throw error;
+    if (!rh) return;
+
+    const notaNueva = 'Se realizó el mantenimiento.';
+    const observaciones = (rh as any).observaciones
+      ? `${(rh as any).observaciones} | ${notaNueva}`
+      : notaNueva;
+
+    const { error: updError } = await client
+      .from('reserva_habitacion')
+      .update({ observaciones })
+      .eq('id', (rh as any).id);
+    if (updError) throw updError;
   }
 
   async validarDisponibilidad(

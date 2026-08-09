@@ -99,6 +99,10 @@ export class TareasHkService {
         estado: 'en_proceso',
         iniciado_en: new Date().toISOString(),
         asignado_a: tarea.asignado_a ?? personalId,
+        // Mensaje corto que recepción ve en la columna Notas de
+        // Habitaciones mientras la habitación no tiene huésped activo
+        // (limpieza post-checkout, sin fila de huésped que mostrar).
+        notas: tarea.tipo === 'limpieza' ? 'Empezó la limpieza' : null,
       })
       .eq('id', tareaId);
     if (updError) throw updError;
@@ -118,7 +122,10 @@ export class TareasHkService {
    * Termina la tarea. La habitación queda 'disponible', salvo mantenimiento
    * con huésped dentro: en ese caso vuelve a 'ocupada' (el huésped nunca se
    * fue de la habitación) y se desmarca mantenimiento_planificado (el
-   * checkbox que ve recepción en Habitaciones) porque ya se atendió.
+   * checkbox que ve recepción en Habitaciones) porque ya se atendió. Si
+   * había huésped dentro, se agrega una nota a su registro para que
+   * recepción vea que se hizo el mantenimiento. tareas_hk.notas se limpia
+   * siempre (el mensaje de "en proceso" ya no aplica).
    */
   async terminar(client: SupabaseClient, hotelId: string, tareaId: string) {
     const tarea = await this.cargarTareaHotel(client, hotelId, tareaId);
@@ -128,7 +135,7 @@ export class TareasHkService {
 
     const { error: updError } = await client
       .from('tareas_hk')
-      .update({ estado: 'terminado', finalizado_en: new Date().toISOString() })
+      .update({ estado: 'terminado', finalizado_en: new Date().toISOString(), notas: null })
       .eq('id', tareaId);
     if (updError) throw updError;
 
@@ -146,7 +153,36 @@ export class TareasHkService {
       .eq('id', tarea.habitacion_id);
     if (habError) throw habError;
 
+    if (tarea.tipo === 'mantenimiento' && tarea.con_huesped_dentro) {
+      await this.agregarNotaMantenimiento(client, tarea.habitacion_id);
+    }
+
     return this.obtenerDetalle(client, hotelId, tareaId);
+  }
+
+  /**
+   * Agrega "se realizó el mantenimiento" a las notas del huésped activo
+   * (reserva_habitacion.observaciones, la misma columna que edita
+   * recepción desde Habitaciones) sin borrar lo que ya tenía escrito.
+   */
+  private async agregarNotaMantenimiento(client: SupabaseClient, habitacionId: string) {
+    const { data: rh, error } = await client
+      .from('reserva_habitacion')
+      .select('id, observaciones, estadias!inner(estado_actual)')
+      .eq('habitacion_id', habitacionId)
+      .eq('estadias.estado_actual', 'en_curso')
+      .maybeSingle();
+    if (error) throw error;
+    if (!rh) return;
+
+    const notaNueva = 'Se realizó el mantenimiento.';
+    const observaciones = rh.observaciones ? `${rh.observaciones} | ${notaNueva}` : notaNueva;
+
+    const { error: updError } = await client
+      .from('reserva_habitacion')
+      .update({ observaciones })
+      .eq('id', rh.id);
+    if (updError) throw updError;
   }
 
   async asignar(client: SupabaseClient, hotelId: string, tareaId: string, dto: AsignarTareaHkDto) {

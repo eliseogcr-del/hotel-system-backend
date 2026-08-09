@@ -12,7 +12,7 @@ interface Habitacion {
   piso: number;
   estado: Estado;
   mantenimiento_planificado: boolean;
-  tareaHkEnProceso: 'limpieza' | 'mantenimiento' | null;
+  tareaHkEnProceso: { tipo: 'limpieza' | 'mantenimiento'; notas: string | null } | null;
   tipos_habitacion: { id: string; nombre: string } | null;
   estadiaId: string | null;
   huesped: string | null;
@@ -125,8 +125,8 @@ export function Habitaciones() {
   }
 
   function etiquetaEstado(h: Habitacion): string {
-    if (h.tareaHkEnProceso === 'limpieza' && h.estado === 'limpieza') return 'En proceso de limpieza';
-    if (h.tareaHkEnProceso === 'mantenimiento' && h.estado === 'ocupada') return 'En proceso de mantenimiento';
+    if (h.tareaHkEnProceso?.tipo === 'limpieza' && h.estado === 'limpieza') return 'En proceso de limpieza';
+    if (h.tareaHkEnProceso?.tipo === 'mantenimiento' && h.estado === 'ocupada') return 'En proceso de mantenimiento';
     return ESTADO_LABEL[h.estado];
   }
 
@@ -221,6 +221,10 @@ export function Habitaciones() {
                 <td style={tdStyle}>
                   {h.huesped ? (
                     <NotasCelda notas={h.notas ?? ''} onGuardar={(n) => guardarNotas(h, n)} />
+                  ) : h.tareaHkEnProceso?.notas ? (
+                    <span style={{ color: 'var(--text-muted)', fontStyle: 'italic' }}>
+                      {h.tareaHkEnProceso.notas}
+                    </span>
                   ) : (
                     ''
                   )}

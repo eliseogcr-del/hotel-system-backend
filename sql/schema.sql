@@ -255,6 +255,10 @@ create table tareas_hk (
     definido_por uuid references personal(id),
     iniciado_en timestamptz,
     finalizado_en timestamptz,
+    -- Mensaje de estado corto para que recepción vea qué está pasando con
+    -- la habitación mientras no hay huésped activo (ej. "Empezó la
+    -- limpieza"). Se limpia solo cuando la tarea termina.
+    notas text,
     created_at timestamptz not null default now()
 );
 

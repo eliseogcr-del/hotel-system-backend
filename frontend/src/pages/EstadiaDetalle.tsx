@@ -28,6 +28,13 @@ interface EstadiaDetalleData {
 const TIPOS_MOVIMIENTO = ['pago', 'ajuste', 'early', 'late', 'cochera'];
 const METODOS = ['efectivo', 'transferencia', 'yape', 'tarjeta'];
 
+function ahoraLocal(): string {
+  const d = new Date();
+  d.setSeconds(0, 0);
+  d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
+  return d.toISOString().slice(0, 16);
+}
+
 export function EstadiaDetalle() {
   const { id } = useParams<{ id: string }>();
   const { hotelActual } = useHotel();
@@ -36,6 +43,7 @@ export function EstadiaDetalle() {
   const [accionando, setAccionando] = useState(false);
   const [mostrarCheckout, setMostrarCheckout] = useState(false);
   const [cobroLate, setCobroLate] = useState('');
+  const [checkoutReal, setCheckoutReal] = useState(ahoraLocal());
 
   function cargar() {
     if (!hotelActual || !id) return;
@@ -54,6 +62,7 @@ export function EstadiaDetalle() {
     try {
       await api.post(`/hoteles/${hotelActual.hotelId}/estadias/${id}/checkout`, {
         cobroLateManual: cobroLate === '' ? undefined : Number(cobroLate),
+        checkoutReal: new Date(checkoutReal).toISOString(),
       });
       setMostrarCheckout(false);
       setCobroLate('');
@@ -90,7 +99,13 @@ export function EstadiaDetalle() {
       {error && <p style={{ color: 'var(--danger)', fontSize: 13, marginBottom: 12 }}>{error}</p>}
 
       {estadia.estado_actual === 'en_curso' && !mostrarCheckout && (
-        <button onClick={() => setMostrarCheckout(true)} style={{ ...btnPrimary, marginBottom: 20 }}>
+        <button
+          onClick={() => {
+            setCheckoutReal(ahoraLocal());
+            setMostrarCheckout(true);
+          }}
+          style={{ ...btnPrimary, marginBottom: 20 }}
+        >
           Hacer checkout
         </button>
       )}
@@ -109,6 +124,16 @@ export function EstadiaDetalle() {
             flexWrap: 'wrap',
           }}
         >
+          <div style={{ width: 220 }}>
+            <label style={labelStyle}>Fecha y hora de salida</label>
+            <input
+              type="datetime-local"
+              value={checkoutReal}
+              onChange={(e) => setCheckoutReal(e.target.value)}
+              style={inputStyle}
+              required
+            />
+          </div>
           <div style={{ width: 180 }}>
             <label style={labelStyle}>Cargo por late (S/.)</label>
             <input

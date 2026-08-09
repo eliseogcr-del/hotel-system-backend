@@ -190,7 +190,7 @@ export class EstadiasService {
       );
     }
 
-    const ahora = new Date();
+    const ahora = dto?.checkoutReal ? new Date(dto.checkoutReal) : new Date();
     const { error: updError } = await client
       .from('estadias')
       .update({ checkout_real: ahora.toISOString(), estado_actual: 'finalizada' })
