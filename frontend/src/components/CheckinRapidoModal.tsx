@@ -156,8 +156,8 @@ export function CheckinRapidoModal({
   }
 
   return (
-    <div style={overlayStyle} onClick={onClose}>
-      <div style={modalStyle} onClick={(e) => e.stopPropagation()}>
+    <div style={overlayStyle}>
+      <div style={modalStyle}>
         <h2 style={{ fontSize: 17, marginBottom: 16 }}>Check-in · Habitación {habNumero}</h2>
         {error && <p style={{ color: 'var(--danger)', fontSize: 13, marginBottom: 12 }}>{error}</p>}
 
