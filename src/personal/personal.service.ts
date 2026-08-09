@@ -47,24 +47,39 @@ export class PersonalService {
       authUser = creado.user;
     }
 
-    // Con el cliente de la request este insert fallaría: INSERT ... RETURNING
-    // también exige que la fila nueva pase la policy de SELECT de `personal`,
-    // y a esta altura la persona todavía no tiene fila en `personal_hotel`
-    // que la vincule a este hotel (eso se crea recién abajo) -> quedaría
-    // invisible para el propio admin que la está creando. Es la misma
-    // operación de alta que ya usa el cliente de servicio para el usuario de
-    // Auth, así que se resuelve igual.
-    const { data: personal, error: personalError } = await service
+    // Si el correo ya tiene un usuario de Auth, puede que también ya tenga
+    // fila en `personal` (ej. se le está asignando a un segundo hotel, o el
+    // admin reintenta el alta) -> hay que reutilizarla, si no se fragmenta a
+    // la misma persona en varias filas `personal` con el mismo auth_user_id.
+    const { data: personalExistente, error: personalExistenteError } = await service
       .from('personal')
-      .insert({ auth_user_id: authUser.id, nombre: dto.nombre, usuario: dto.usuario, activo: true })
       .select('id, nombre, usuario, activo')
-      .single();
+      .eq('auth_user_id', authUser.id)
+      .maybeSingle();
+    if (personalExistenteError) throw personalExistenteError;
 
-    if (personalError) {
-      if ((personalError as { code?: string }).code === CODIGO_UNIQUE_VIOLATION) {
-        throw new ConflictException('El nombre de usuario ya está en uso');
+    let personal = personalExistente;
+    if (!personal) {
+      // Con el cliente de la request este insert fallaría: INSERT ... RETURNING
+      // también exige que la fila nueva pase la policy de SELECT de `personal`,
+      // y a esta altura la persona todavía no tiene fila en `personal_hotel`
+      // que la vincule a este hotel (eso se crea recién abajo) -> quedaría
+      // invisible para el propio admin que la está creando. Es la misma
+      // operación de alta que ya usa el cliente de servicio para el usuario de
+      // Auth, así que se resuelve igual.
+      const { data: creado, error: personalError } = await service
+        .from('personal')
+        .insert({ auth_user_id: authUser.id, nombre: dto.nombre, usuario: dto.usuario, activo: true })
+        .select('id, nombre, usuario, activo')
+        .single();
+
+      if (personalError) {
+        if ((personalError as { code?: string }).code === CODIGO_UNIQUE_VIOLATION) {
+          throw new ConflictException('El nombre de usuario ya está en uso');
+        }
+        throw personalError;
       }
-      throw personalError;
+      personal = creado;
     }
 
     const { data: asignacion, error: asignacionError } = await client

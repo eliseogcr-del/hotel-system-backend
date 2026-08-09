@@ -47,12 +47,28 @@ interface HotelConfig {
   modo_24h: boolean;
 }
 
+type RolHotel = 'admin' | 'recepcion' | 'hk';
+
+interface PersonalHotel {
+  id: string;
+  rol: RolHotel;
+  activo: boolean;
+  personal: { id: string; nombre: string; usuario: string; activo: boolean } | null;
+}
+
+const ROL_LABEL: Record<RolHotel, string> = {
+  admin: 'Administrador',
+  recepcion: 'Recepcionista',
+  hk: 'Housekeeping (HK)',
+};
+
 export function Configuracion() {
   const { hotelActual } = useHotel();
   const [tipos, setTipos] = useState<TipoHabitacion[]>([]);
   const [habitaciones, setHabitaciones] = useState<Habitacion[]>([]);
   const [cocheras, setCocheras] = useState<Cochera[]>([]);
   const [productosBazar, setProductosBazar] = useState<ProductoBazar[]>([]);
+  const [personal, setPersonal] = useState<PersonalHotel[]>([]);
   const [hotel, setHotel] = useState<HotelConfig | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -63,6 +79,7 @@ export function Configuracion() {
     api.get<Habitacion[]>(`/hoteles/${h}/habitaciones`).then(setHabitaciones).catch(() => {});
     api.get<Cochera[]>(`/hoteles/${h}/cocheras`).then(setCocheras).catch(() => {});
     api.get<ProductoBazar[]>(`/hoteles/${h}/productos-bazar`).then(setProductosBazar).catch(() => {});
+    api.get<PersonalHotel[]>(`/hoteles/${h}/personal`).then(setPersonal).catch(() => {});
     api.get<HotelConfig>(`/hoteles/${h}`).then(setHotel).catch(() => {});
   }
 
@@ -80,6 +97,7 @@ export function Configuracion() {
       {error && <p style={{ color: 'var(--danger)' }}>{error}</p>}
 
       {hotel && <SeccionHotel hotelId={hotelActual.hotelId} hotel={hotel} onCambio={cargarTodo} setError={setError} />}
+      <SeccionPersonal hotelId={hotelActual.hotelId} personal={personal} onCambio={cargarTodo} setError={setError} />
       <SeccionTipos hotelId={hotelActual.hotelId} tipos={tipos} onCambio={cargarTodo} setError={setError} />
       <SeccionHabitaciones
         hotelId={hotelActual.hotelId}
@@ -169,6 +187,210 @@ function SeccionHotel({
         </button>
       </form>
     </section>
+  );
+}
+
+function SeccionPersonal({
+  hotelId,
+  personal,
+  onCambio,
+  setError,
+}: {
+  hotelId: string;
+  personal: PersonalHotel[];
+  onCambio: () => void;
+  setError: (e: string | null) => void;
+}) {
+  const [nombre, setNombre] = useState('');
+  const [usuario, setUsuario] = useState('');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [rol, setRol] = useState<RolHotel>('recepcion');
+  const [enviando, setEnviando] = useState(false);
+  const [editandoId, setEditandoId] = useState<string | null>(null);
+  const [credencialesCreadas, setCredencialesCreadas] = useState<{ email: string; password: string } | null>(null);
+
+  async function crear(e: FormEvent) {
+    e.preventDefault();
+    setEnviando(true);
+    setError(null);
+    setCredencialesCreadas(null);
+    try {
+      const resultado = await api.post<{ email: string; password: string | null }>(
+        `/hoteles/${hotelId}/personal`,
+        { nombre, usuario, email, rol, password: password || undefined },
+      );
+      if (resultado.password) {
+        setCredencialesCreadas({ email: resultado.email, password: resultado.password });
+      }
+      setNombre('');
+      setUsuario('');
+      setEmail('');
+      setPassword('');
+      setRol('recepcion');
+      onCambio();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'No se pudo crear el usuario');
+    } finally {
+      setEnviando(false);
+    }
+  }
+
+  return (
+    <section>
+      <h2 style={{ fontSize: 15, marginBottom: 10 }}>Personal</h2>
+      <p style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 8 }}>
+        Crea el acceso al sistema para cada persona del hotel e indica su perfil: Administrador
+        (todo, incluida esta pantalla), Recepcionista (operación diaria) o Housekeeping (solo
+        tareas de limpieza/mantenimiento).
+      </p>
+
+      {credencialesCreadas && (
+        <div
+          style={{
+            background: 'var(--brand-bg)',
+            border: '1px solid var(--brand)',
+            borderRadius: 'var(--radius)',
+            padding: 12,
+            marginBottom: 12,
+            fontSize: 13,
+          }}
+        >
+          Usuario creado. Contraseña generada (cópiala y compártela; no se vuelve a mostrar):{' '}
+          <strong style={{ fontFamily: 'monospace' }}>{credencialesCreadas.password}</strong>
+          <br />
+          <button
+            type="button"
+            onClick={() => setCredencialesCreadas(null)}
+            style={{ ...btnSecondary, marginTop: 8 }}
+          >
+            Entendido
+          </button>
+        </div>
+      )}
+
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 12 }}>
+        {personal.map((p) =>
+          editandoId === p.id ? (
+            <EditarAsignacionForm
+              key={p.id}
+              hotelId={hotelId}
+              asignacion={p}
+              onGuardado={() => {
+                setEditandoId(null);
+                onCambio();
+              }}
+              onCancelar={() => setEditandoId(null)}
+              setError={setError}
+            />
+          ) : (
+            <div key={p.id} style={filaStyle}>
+              <span style={{ fontWeight: 500 }}>{p.personal?.nombre ?? '—'}</span>
+              <span style={{ color: 'var(--text-secondary)' }}>@{p.personal?.usuario ?? '—'}</span>
+              <span
+                style={{
+                  fontSize: 11,
+                  padding: '2px 8px',
+                  borderRadius: 999,
+                  background: 'var(--surface-0)',
+                  border: '1px solid var(--border)',
+                }}
+              >
+                {ROL_LABEL[p.rol]}
+              </span>
+              <span style={{ fontSize: 11, color: p.activo ? 'var(--disponible)' : 'var(--text-muted)' }}>
+                {p.activo ? 'Activo' : 'Inactivo'}
+              </span>
+              <button onClick={() => setEditandoId(p.id)} style={btnSecondary}>
+                Editar
+              </button>
+            </div>
+          ),
+        )}
+        {personal.length === 0 && <p style={{ color: 'var(--text-muted)', fontSize: 13 }}>No hay personal registrado todavía.</p>}
+      </div>
+
+      <form onSubmit={crear} style={formInlineStyle}>
+        <input placeholder="Nombre completo" value={nombre} onChange={(e) => setNombre(e.target.value)} style={{ ...inputStyle, width: 180 }} required />
+        <input placeholder="Usuario" value={usuario} onChange={(e) => setUsuario(e.target.value)} style={{ ...inputStyle, width: 140 }} required />
+        <input
+          type="email"
+          placeholder="Correo"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          style={{ ...inputStyle, width: 200 }}
+          required
+        />
+        <select value={rol} onChange={(e) => setRol(e.target.value as RolHotel)} style={{ ...inputStyle, width: 170 }}>
+          <option value="admin">Administrador</option>
+          <option value="recepcion">Recepcionista</option>
+          <option value="hk">Housekeeping (HK)</option>
+        </select>
+        <input
+          type="text"
+          placeholder="Contraseña (opcional, se genera si se deja vacío)"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          style={{ ...inputStyle, width: 260 }}
+        />
+        <button type="submit" disabled={enviando} style={btnPrimary}>
+          + Crear usuario
+        </button>
+      </form>
+    </section>
+  );
+}
+
+function EditarAsignacionForm({
+  hotelId,
+  asignacion,
+  onGuardado,
+  onCancelar,
+  setError,
+}: {
+  hotelId: string;
+  asignacion: PersonalHotel;
+  onGuardado: () => void;
+  onCancelar: () => void;
+  setError: (e: string | null) => void;
+}) {
+  const [rol, setRol] = useState<RolHotel>(asignacion.rol);
+  const [activo, setActivo] = useState(asignacion.activo);
+  const [guardando, setGuardando] = useState(false);
+
+  async function guardar(e: FormEvent) {
+    e.preventDefault();
+    setGuardando(true);
+    setError(null);
+    try {
+      await api.patch(`/hoteles/${hotelId}/personal/${asignacion.id}`, { rol, activo });
+      onGuardado();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'No se pudo guardar');
+    } finally {
+      setGuardando(false);
+    }
+  }
+
+  return (
+    <form onSubmit={guardar} style={{ ...filaStyle, justifyContent: 'flex-start', gap: 8 }}>
+      <span style={{ minWidth: 120, fontWeight: 500 }}>{asignacion.personal?.nombre ?? '—'}</span>
+      <select value={rol} onChange={(e) => setRol(e.target.value as RolHotel)} style={{ ...inputStyle, width: 170 }}>
+        <option value="admin">Administrador</option>
+        <option value="recepcion">Recepcionista</option>
+        <option value="hk">Housekeeping (HK)</option>
+      </select>
+      <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13 }}>
+        <input type="checkbox" checked={activo} onChange={(e) => setActivo(e.target.checked)} />
+        Activo
+      </label>
+      <button type="submit" disabled={guardando} style={btnPrimary}>
+        Guardar
+      </button>
+      <button type="button" onClick={onCancelar} style={btnSecondary}>
+        Cancelar
+      </button>
+    </form>
   );
 }
 
