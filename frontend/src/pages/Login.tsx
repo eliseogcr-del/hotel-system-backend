@@ -36,16 +36,20 @@ export function Login() {
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
+        padding: 16,
+        boxSizing: 'border-box',
       }}
     >
       <form
         onSubmit={handleSubmit}
         style={{
-          width: 320,
+          width: '100%',
+          maxWidth: 320,
           background: 'var(--surface-1)',
           border: '1px solid var(--border)',
           borderRadius: 12,
           padding: 28,
+          boxSizing: 'border-box',
         }}
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 24 }}>

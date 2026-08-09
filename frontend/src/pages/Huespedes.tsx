@@ -81,19 +81,19 @@ export function Huespedes() {
 
   return (
     <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
         <h1 style={{ fontSize: 20 }}>Huéspedes</h1>
         <button style={btnPrimary} onClick={abrirNuevo}>
           + Nuevo huésped
         </button>
       </div>
 
-      <form onSubmit={handleBuscarSubmit} style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
+      <form onSubmit={handleBuscarSubmit} style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 16 }}>
         <input
           value={buscar}
           onChange={(e) => setBuscar(e.target.value)}
           placeholder="Buscar por nombre, apellido, documento, RUC o razón social..."
-          style={{ ...inputStyle, flex: 1, maxWidth: 420 }}
+          style={{ ...inputStyle, flex: 1, minWidth: 200, maxWidth: 420 }}
         />
         <button type="submit" style={btnSecondary}>
           Buscar
@@ -262,7 +262,7 @@ function HuespedFormModal({
         {error && <p style={{ color: 'var(--danger)', fontSize: 13, marginBottom: 12 }}>{error}</p>}
 
         <form onSubmit={guardar} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-          <div style={{ display: 'flex', gap: 8 }}>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
             <div style={{ width: 180 }}>
               <label style={labelStyle}>Tipo de documento</label>
               <select value={tipoDoc} onChange={(e) => setTipoDoc(e.target.value)} style={inputStyle}>
@@ -273,35 +273,35 @@ function HuespedFormModal({
                 ))}
               </select>
             </div>
-            <div style={{ flex: 1 }}>
+            <div style={{ flex: 1, minWidth: 140 }}>
               <label style={labelStyle}>Número de documento</label>
               <input value={nroDoc} onChange={(e) => setNroDoc(e.target.value)} style={inputStyle} required />
             </div>
           </div>
 
-          <div style={{ display: 'flex', gap: 8 }}>
-            <div style={{ flex: 1 }}>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+            <div style={{ flex: 1, minWidth: 140 }}>
               <label style={labelStyle}>Nombres</label>
               <input value={nombres} onChange={(e) => setNombres(e.target.value)} style={inputStyle} required />
             </div>
-            <div style={{ flex: 1 }}>
+            <div style={{ flex: 1, minWidth: 140 }}>
               <label style={labelStyle}>Apellidos</label>
               <input value={apellidos} onChange={(e) => setApellidos(e.target.value)} style={inputStyle} required />
             </div>
           </div>
 
-          <div style={{ display: 'flex', gap: 8 }}>
-            <div style={{ flex: 1 }}>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+            <div style={{ flex: 1, minWidth: 140 }}>
               <label style={labelStyle}>Teléfono</label>
               <input value={telefono} onChange={(e) => setTelefono(e.target.value)} style={inputStyle} />
             </div>
-            <div style={{ flex: 1 }}>
+            <div style={{ flex: 1, minWidth: 140 }}>
               <label style={labelStyle}>Correo</label>
               <input type="email" value={correo} onChange={(e) => setCorreo(e.target.value)} style={inputStyle} />
             </div>
           </div>
 
-          <div style={{ display: 'flex', gap: 8 }}>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
             <div style={{ width: 180 }}>
               <label style={labelStyle}>Nacionalidad</label>
               <select value={nacionalidad} onChange={(e) => setNacionalidad(e.target.value)} style={inputStyle}>
@@ -311,7 +311,7 @@ function HuespedFormModal({
               </select>
             </div>
             {nacionalidad === 'extranjero' && (
-              <div style={{ flex: 1 }}>
+              <div style={{ flex: 1, minWidth: 140 }}>
                 <label style={labelStyle}>País de origen</label>
                 <input
                   value={origen}
@@ -321,7 +321,7 @@ function HuespedFormModal({
                 />
               </div>
             )}
-            <div style={{ flex: 1 }}>
+            <div style={{ flex: 1, minWidth: 140 }}>
               <label style={labelStyle}>Fecha de nacimiento</label>
               <input
                 type="date"
@@ -338,7 +338,7 @@ function HuespedFormModal({
             estadía (ej. envía a su personal). Déjalo vacío si no aplica.
           </p>
 
-          <div style={{ display: 'flex', gap: 8 }}>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
             <div style={{ width: 160 }}>
               <label style={labelStyle}>RUC</label>
               <input
@@ -349,7 +349,7 @@ function HuespedFormModal({
                 style={inputStyle}
               />
             </div>
-            <div style={{ flex: 1 }}>
+            <div style={{ flex: 1, minWidth: 140 }}>
               <label style={labelStyle}>Razón social</label>
               <input value={razonSocial} onChange={(e) => setRazonSocial(e.target.value)} style={inputStyle} />
             </div>

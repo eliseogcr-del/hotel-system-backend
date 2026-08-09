@@ -164,7 +164,7 @@ export function CheckinRapidoModal({
         <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
           <div>
             <label style={labelStyle}>Documento del huésped</label>
-            <div style={{ display: 'flex', gap: 8 }}>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
               <select value={tipoDoc} onChange={(e) => setTipoDoc(e.target.value)} style={{ ...inputStyle, width: 160 }}>
                 {TIPOS_DOC.map((t) => (
                   <option key={t.value} value={t.value}>
@@ -179,7 +179,7 @@ export function CheckinRapidoModal({
                   setHuespedEncontrado(null);
                 }}
                 placeholder="Número de documento"
-                style={{ ...inputStyle, flex: 1 }}
+                style={{ ...inputStyle, flex: 1, minWidth: 140 }}
                 required
               />
               <button type="button" onClick={buscar} disabled={buscando || !nroDoc.trim()} style={btnSecondary}>
@@ -198,29 +198,29 @@ export function CheckinRapidoModal({
             )}
           </div>
 
-          <div style={{ display: 'flex', gap: 8 }}>
-            <div style={{ flex: 1 }}>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+            <div style={{ flex: 1, minWidth: 140 }}>
               <label style={labelStyle}>Nombres</label>
               <input value={nombres} onChange={(e) => setNombres(e.target.value)} style={inputStyle} required />
             </div>
-            <div style={{ flex: 1 }}>
+            <div style={{ flex: 1, minWidth: 140 }}>
               <label style={labelStyle}>Apellidos</label>
               <input value={apellidos} onChange={(e) => setApellidos(e.target.value)} style={inputStyle} required />
             </div>
           </div>
 
-          <div style={{ display: 'flex', gap: 8 }}>
-            <div style={{ flex: 1 }}>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+            <div style={{ flex: 1, minWidth: 140 }}>
               <label style={labelStyle}>Teléfono</label>
               <input value={telefono} onChange={(e) => setTelefono(e.target.value)} style={inputStyle} />
             </div>
-            <div style={{ flex: 1 }}>
+            <div style={{ flex: 1, minWidth: 140 }}>
               <label style={labelStyle}>Correo</label>
               <input type="email" value={correo} onChange={(e) => setCorreo(e.target.value)} style={inputStyle} />
             </div>
           </div>
 
-          <div style={{ display: 'flex', gap: 8 }}>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
             <div style={{ width: 170 }}>
               <label style={labelStyle}>Nacionalidad</label>
               <select value={nacionalidad} onChange={(e) => setNacionalidad(e.target.value)} style={inputStyle}>
@@ -230,12 +230,12 @@ export function CheckinRapidoModal({
               </select>
             </div>
             {nacionalidad === 'extranjero' && (
-              <div style={{ flex: 1 }}>
+              <div style={{ flex: 1, minWidth: 140 }}>
                 <label style={labelStyle}>País de origen</label>
                 <input value={origen} onChange={(e) => setOrigen(e.target.value)} placeholder="Ej. Colombia" style={inputStyle} />
               </div>
             )}
-            <div style={{ flex: 1 }}>
+            <div style={{ flex: 1, minWidth: 140 }}>
               <label style={labelStyle}>Fecha de nacimiento</label>
               <input
                 type="date"
@@ -246,12 +246,12 @@ export function CheckinRapidoModal({
             </div>
           </div>
 
-          <div style={{ display: 'flex', gap: 8 }}>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
             <div style={{ width: 170 }}>
               <label style={labelStyle}>RUC</label>
               <input value={ruc} onChange={(e) => setRuc(e.target.value)} placeholder="11 dígitos" maxLength={11} style={inputStyle} />
             </div>
-            <div style={{ flex: 1 }}>
+            <div style={{ flex: 1, minWidth: 140 }}>
               <label style={labelStyle}>Razón social</label>
               <input value={razonSocial} onChange={(e) => setRazonSocial(e.target.value)} style={inputStyle} />
             </div>
@@ -263,7 +263,7 @@ export function CheckinRapidoModal({
 
           <hr style={{ border: 'none', borderTop: '1px solid var(--border)' }} />
 
-          <div style={{ display: 'flex', gap: 8 }}>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
             <div style={{ width: 130 }}>
               <label style={labelStyle}>N° personas</label>
               <input
@@ -323,8 +323,8 @@ export function CheckinRapidoModal({
             </p>
           </div>
 
-          <div style={{ display: 'flex', gap: 8 }}>
-            <div style={{ flex: 1 }}>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+            <div style={{ flex: 1, minWidth: 140 }}>
               <label style={labelStyle}>Fecha y hora de check-in</label>
               <input
                 type="datetime-local"

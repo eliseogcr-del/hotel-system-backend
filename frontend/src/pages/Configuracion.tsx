@@ -264,7 +264,7 @@ function SeccionTipos({
             />
           ) : (
             <div key={t.id} style={{ ...filaStyle, flexDirection: 'column', alignItems: 'stretch', gap: 6 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, justifyContent: 'space-between', alignItems: 'center' }}>
                 <span style={{ fontWeight: 500 }}>{t.nombre}</span>
                 <span style={{ display: 'flex', gap: 6 }}>
                   <button onClick={() => setEditandoId(t.id)} style={btnSecondary}>
@@ -417,8 +417,8 @@ function EditarTipoForm({
       onSubmit={guardar}
       style={{ ...filaStyle, flexDirection: 'column', alignItems: 'stretch', gap: 8 }}
     >
-      <div style={{ display: 'flex', gap: 8 }}>
-        <input value={nombre} onChange={(e) => setNombre(e.target.value)} style={{ ...inputStyle, flex: 1 }} required />
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+        <input value={nombre} onChange={(e) => setNombre(e.target.value)} style={{ ...inputStyle, flex: 1, minWidth: 140 }} required />
         <input
           type="number"
           min={1}
@@ -933,8 +933,10 @@ function EditarProductoBazarForm({
 
 const filaStyle: CSSProperties = {
   display: 'flex',
+  flexWrap: 'wrap',
   justifyContent: 'space-between',
   alignItems: 'center',
+  gap: '4px 12px',
   padding: '8px 12px',
   background: 'var(--surface-1)',
   border: '1px solid var(--border)',

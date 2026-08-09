@@ -2,6 +2,7 @@ import { useEffect, useState, type CSSProperties } from 'react';
 import { Link } from 'react-router-dom';
 import { api, ApiError } from '../lib/api';
 import { useHotel } from '../contexts/HotelContext';
+import { useIsMobile } from '../hooks/useIsMobile';
 import { CheckinRapidoModal } from '../components/CheckinRapidoModal';
 
 type Estado = 'disponible' | 'ocupada' | 'limpieza' | 'mantenimiento' | 'bloqueada';
@@ -55,6 +56,7 @@ function formatoMonto(n: number | null) {
 
 export function Habitaciones() {
   const { hotelActual } = useHotel();
+  const isMobile = useIsMobile();
   const [habitaciones, setHabitaciones] = useState<Habitacion[]>([]);
   const [tiposHabitacion, setTiposHabitacion] = useState<TipoHabitacionPrecios[]>([]);
   const [loading, setLoading] = useState(true);
@@ -136,15 +138,28 @@ export function Habitaciones() {
 
   return (
     <div>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr auto 1fr', alignItems: 'baseline', marginBottom: 16 }}>
+      <div
+        style={
+          isMobile
+            ? { display: 'flex', flexDirection: 'column', gap: 4, marginBottom: 16 }
+            : { display: 'grid', gridTemplateColumns: '1fr auto 1fr', alignItems: 'baseline', marginBottom: 16 }
+        }
+      >
         <h1 style={{ fontSize: 20 }}>Habitaciones</h1>
-        <span style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)', textAlign: 'center' }}>
-          {ahora.toLocaleString('es-PE', { dateStyle: 'full', timeStyle: 'medium' })}
+        <span
+          style={{
+            fontSize: isMobile ? 13 : 15,
+            fontWeight: 700,
+            color: 'var(--text-primary)',
+            textAlign: isMobile ? 'left' : 'center',
+          }}
+        >
+          {ahora.toLocaleString('es-PE', { dateStyle: isMobile ? 'medium' : 'full', timeStyle: 'medium' })}
         </span>
-        <span />
+        {!isMobile && <span />}
       </div>
 
-      <div style={{ display: 'flex', gap: 16, fontSize: 12, color: 'var(--text-secondary)', marginBottom: 16 }}>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16, fontSize: 12, color: 'var(--text-secondary)', marginBottom: 16 }}>
         {(Object.keys(ESTADO_LABEL) as Estado[]).map((estado) => (
           <span key={estado} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
             <span
@@ -166,7 +181,7 @@ export function Habitaciones() {
       <div
         style={{
           overflow: 'auto',
-          maxHeight: 'calc(100vh - 260px)',
+          maxHeight: isMobile ? 'calc(100vh - 300px)' : 'calc(100vh - 260px)',
           border: '1px solid var(--border)',
           borderRadius: 12,
         }}

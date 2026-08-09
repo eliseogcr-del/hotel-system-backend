@@ -128,8 +128,10 @@ export function Reservas() {
               to={`/reservas/${r.id}`}
               style={{
                 display: 'flex',
+                flexWrap: 'wrap',
                 justifyContent: 'space-between',
                 alignItems: 'center',
+                gap: '4px 12px',
                 padding: '10px 14px',
                 background: 'var(--surface-1)',
                 border: '1px solid var(--border)',
@@ -294,8 +296,8 @@ function NuevaReservaForm({
         gap: 10,
       }}
     >
-      <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end' }}>
-        <div style={{ flex: 1 }}>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'flex-end' }}>
+        <div style={{ flex: 1, minWidth: 140 }}>
           <label style={labelStyle}>DNI del huésped</label>
           <input value={dni} onChange={(e) => setDni(e.target.value)} style={inputStyle} required />
         </div>
@@ -308,12 +310,12 @@ function NuevaReservaForm({
         <p style={{ fontSize: 12, color: 'var(--text-secondary)' }}>Huésped encontrado: {huespedNombre}</p>
       ) : (
         dni && (
-          <div style={{ display: 'flex', gap: 8 }}>
-            <div style={{ flex: 1 }}>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+            <div style={{ flex: 1, minWidth: 140 }}>
               <label style={labelStyle}>Nombres (huésped nuevo)</label>
               <input value={nombres} onChange={(e) => setNombres(e.target.value)} style={inputStyle} />
             </div>
-            <div style={{ flex: 1 }}>
+            <div style={{ flex: 1, minWidth: 140 }}>
               <label style={labelStyle}>Apellidos</label>
               <input value={apellidos} onChange={(e) => setApellidos(e.target.value)} style={inputStyle} />
             </div>
@@ -321,8 +323,8 @@ function NuevaReservaForm({
         )
       )}
 
-      <div style={{ display: 'flex', gap: 8 }}>
-        <div style={{ flex: 1 }}>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+        <div style={{ flex: 1, minWidth: 120 }}>
           <label style={labelStyle}>Origen</label>
           <select value={origen} onChange={(e) => setOrigen(e.target.value)} style={selectStyle}>
             {ORIGENES.map((o) => (
@@ -332,7 +334,7 @@ function NuevaReservaForm({
             ))}
           </select>
         </div>
-        <div style={{ flex: 1 }}>
+        <div style={{ flex: 1, minWidth: 160 }}>
           <label style={labelStyle}>Habitación</label>
           <select
             value={habitacionId}
@@ -378,7 +380,7 @@ function NuevaReservaForm({
         </div>
       </div>
 
-      <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end' }}>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'flex-end' }}>
         <div style={{ width: 150 }}>
           <label style={labelStyle}>Tipo de cliente</label>
           <select
@@ -415,12 +417,12 @@ function NuevaReservaForm({
         )}
       </div>
 
-      <div style={{ display: 'flex', gap: 8 }}>
-        <div style={{ flex: 1 }}>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+        <div style={{ flex: 1, minWidth: 160 }}>
           <label style={labelStyle}>Check-in</label>
           <input type="datetime-local" value={checkin} onChange={(e) => setCheckin(e.target.value)} style={inputStyle} required />
         </div>
-        <div style={{ flex: 1 }}>
+        <div style={{ flex: 1, minWidth: 160 }}>
           <label style={labelStyle}>Check-out</label>
           <input type="datetime-local" value={checkout} onChange={(e) => setCheckout(e.target.value)} style={inputStyle} required />
         </div>

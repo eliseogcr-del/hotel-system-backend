@@ -69,8 +69,10 @@ export function Estadias() {
               to={`/estadias/${f.estadias.id}`}
               style={{
                 display: 'flex',
+                flexWrap: 'wrap',
                 justifyContent: 'space-between',
                 alignItems: 'center',
+                gap: '4px 12px',
                 padding: '10px 14px',
                 background: 'var(--surface-1)',
                 border: '1px solid var(--border)',

@@ -90,7 +90,7 @@ export function TareasHk() {
 
   return (
     <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
         <h1 style={{ fontSize: 20 }}>Tareas HK</h1>
         <button style={btnPrimary} onClick={() => setMostrarForm((v) => !v)}>
           {mostrarForm ? 'Cancelar' : '+ Nueva tarea'}
@@ -131,8 +131,10 @@ export function TareasHk() {
               key={t.id}
               style={{
                 display: 'flex',
+                flexWrap: 'wrap',
                 justifyContent: 'space-between',
                 alignItems: 'center',
+                gap: '4px 12px',
                 padding: '10px 14px',
                 background: 'var(--surface-1)',
                 border: '1px solid var(--border)',
@@ -222,7 +224,7 @@ function NuevaTareaForm({
         flexWrap: 'wrap',
       }}
     >
-      <div>
+      <div style={{ width: 140 }}>
         <label style={labelStyle}>Habitación</label>
         <select value={habitacionId} onChange={(e) => setHabitacionId(e.target.value)} style={inputStyle} required>
           <option value="">Selecciona...</option>
@@ -233,7 +235,7 @@ function NuevaTareaForm({
           ))}
         </select>
       </div>
-      <div>
+      <div style={{ width: 160 }}>
         <label style={labelStyle}>Tipo</label>
         <select value={tipo} onChange={(e) => setTipo(e.target.value as 'limpieza' | 'mantenimiento')} style={inputStyle}>
           <option value="limpieza">Limpieza</option>
@@ -257,6 +259,8 @@ const inputStyle: CSSProperties = {
   border: '1px solid var(--border)',
   borderRadius: 'var(--radius)',
   fontSize: 13,
+  width: '100%',
+  boxSizing: 'border-box',
 };
 
 const labelStyle: CSSProperties = {

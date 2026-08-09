@@ -118,7 +118,7 @@ export function ReservaDetalle() {
         ← Volver a reservas
       </Link>
 
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', margin: '12px 0 20px' }}>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, justifyContent: 'space-between', alignItems: 'center', margin: '12px 0 20px' }}>
         <div>
           <h1 style={{ fontSize: 20 }}>
             {reserva.huespedes ? `${reserva.huespedes.nombres} ${reserva.huespedes.apellidos}` : reserva.empresas?.razon_social}
@@ -132,7 +132,7 @@ export function ReservaDetalle() {
 
       {error && <p style={{ color: 'var(--danger)', fontSize: 13, marginBottom: 12 }}>{error}</p>}
 
-      <div style={{ display: 'flex', gap: 8, marginBottom: 20 }}>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 20 }}>
         {reserva.estado === 'pendiente_revision' && (
           <button onClick={confirmar} disabled={accionando} style={btnPrimary}>
             Confirmar reserva
@@ -162,46 +162,48 @@ export function ReservaDetalle() {
         />
       )}
 
-      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
-        <thead>
-          <tr style={{ textAlign: 'left', color: 'var(--text-secondary)', fontSize: 11 }}>
-            <th style={thStyle}>Habitación</th>
-            <th style={thStyle}>Check-in</th>
-            <th style={thStyle}>Check-out</th>
-            <th style={thStyle}>Personas</th>
-            <th style={thStyle}>Tarifa/día</th>
-            <th style={thStyle}>Días</th>
-            <th style={thStyle}>Subtotal</th>
-            <th style={thStyle}></th>
-          </tr>
-        </thead>
-        <tbody>
-          {reserva.reserva_habitacion.map((l) => (
-            <tr key={l.id} style={{ borderTop: '1px solid var(--border)' }}>
-              <td style={tdStyle}>
-                {l.habitaciones?.hab_numero} · {l.habitaciones?.tipos_habitacion?.nombre}
-              </td>
-              <td style={tdStyle}>{new Date(l.fecha_hora_checkin_prevista).toLocaleString()}</td>
-              <td style={tdStyle}>{new Date(l.fecha_hora_checkout_prevista).toLocaleString()}</td>
-              <td style={tdStyle}>{l.nro_personas}</td>
-              <td style={tdStyle}>{l.tarifa_dia}</td>
-              <td style={tdStyle}>{l.dias}</td>
-              <td style={tdStyle}>{l.subtotal}</td>
-              <td style={tdStyle}>
-                {reserva.estado === 'confirmada' && (
-                  <button
-                    onClick={() => hacerCheckin(l.id)}
-                    disabled={haciendoCheckin === l.id}
-                    style={btnSecondary}
-                  >
-                    {haciendoCheckin === l.id ? 'Procesando...' : 'Check-in'}
-                  </button>
-                )}
-              </td>
+      <div style={{ overflowX: 'auto' }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, minWidth: 720 }}>
+          <thead>
+            <tr style={{ textAlign: 'left', color: 'var(--text-secondary)', fontSize: 11 }}>
+              <th style={thStyle}>Habitación</th>
+              <th style={thStyle}>Check-in</th>
+              <th style={thStyle}>Check-out</th>
+              <th style={thStyle}>Personas</th>
+              <th style={thStyle}>Tarifa/día</th>
+              <th style={thStyle}>Días</th>
+              <th style={thStyle}>Subtotal</th>
+              <th style={thStyle}></th>
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {reserva.reserva_habitacion.map((l) => (
+              <tr key={l.id} style={{ borderTop: '1px solid var(--border)' }}>
+                <td style={tdStyle}>
+                  {l.habitaciones?.hab_numero} · {l.habitaciones?.tipos_habitacion?.nombre}
+                </td>
+                <td style={tdStyle}>{new Date(l.fecha_hora_checkin_prevista).toLocaleString()}</td>
+                <td style={tdStyle}>{new Date(l.fecha_hora_checkout_prevista).toLocaleString()}</td>
+                <td style={tdStyle}>{l.nro_personas}</td>
+                <td style={tdStyle}>{l.tarifa_dia}</td>
+                <td style={tdStyle}>{l.dias}</td>
+                <td style={tdStyle}>{l.subtotal}</td>
+                <td style={tdStyle}>
+                  {reserva.estado === 'confirmada' && (
+                    <button
+                      onClick={() => hacerCheckin(l.id)}
+                      disabled={haciendoCheckin === l.id}
+                      style={btnSecondary}
+                    >
+                      {haciendoCheckin === l.id ? 'Procesando...' : 'Check-in'}
+                    </button>
+                  )}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
 
       {reserva.reserva_habitacion.length === 0 && (
         <p style={{ color: 'var(--text-muted)', fontSize: 13 }}>
@@ -270,7 +272,7 @@ function AgregarHabitacionForm({
         flexWrap: 'wrap',
       }}
     >
-      <div>
+      <div style={{ flex: 1, minWidth: 160 }}>
         <label style={labelStyle}>Habitación</label>
         <select value={habitacionId} onChange={(e) => setHabitacionId(e.target.value)} style={inputStyle} required>
           <option value="">Selecciona...</option>
@@ -292,11 +294,11 @@ function AgregarHabitacionForm({
           <option value="por_horas">Por horas</option>
         </select>
       </div>
-      <div>
+      <div style={{ flex: 1, minWidth: 160 }}>
         <label style={labelStyle}>Check-in</label>
         <input type="datetime-local" value={checkin} onChange={(e) => setCheckin(e.target.value)} style={inputStyle} required />
       </div>
-      <div>
+      <div style={{ flex: 1, minWidth: 160 }}>
         <label style={labelStyle}>Check-out</label>
         <input type="datetime-local" value={checkout} onChange={(e) => setCheckout(e.target.value)} style={inputStyle} required />
       </div>
@@ -316,6 +318,8 @@ const inputStyle: CSSProperties = {
   border: '1px solid var(--border)',
   borderRadius: 'var(--radius)',
   fontSize: 13,
+  width: '100%',
+  boxSizing: 'border-box',
 };
 
 const labelStyle: CSSProperties = {

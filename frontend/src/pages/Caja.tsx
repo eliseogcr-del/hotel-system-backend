@@ -137,14 +137,14 @@ export function Caja() {
         </form>
       ) : (
         <div>
-          <div style={{ display: 'flex', gap: 12, marginBottom: 20 }}>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, marginBottom: 20 }}>
             <MetricCard label="Saldo inicial" value={`PEN ${sesion.saldo_inicial}`} />
             <MetricCard label="Ingresos" value={`PEN ${sesion.totalIngresos}`} />
             <MetricCard label="Egresos" value={`PEN ${sesion.totalEgresos}`} />
             <MetricCard label="Saldo actual" value={`PEN ${sesion.saldoActual}`} destacado />
           </div>
 
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
             <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
               Abierta {new Date(sesion.abierta_en).toLocaleString()}
             </span>
@@ -159,32 +159,34 @@ export function Caja() {
             onRegistrado={cargarSesionActual}
           />
 
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, marginTop: 16 }}>
-            <thead>
-              <tr style={{ textAlign: 'left', color: 'var(--text-secondary)', fontSize: 11 }}>
-                <th style={thStyle}>Tipo</th>
-                <th style={thStyle}>Concepto</th>
-                <th style={thStyle}>Método</th>
-                <th style={thStyle}>Monto</th>
-                <th style={thStyle}>Hora</th>
-              </tr>
-            </thead>
-            <tbody>
-              {sesion.movimientos.map((m) => (
-                <tr key={m.id} style={{ borderTop: '1px solid var(--border)' }}>
-                  <td style={tdStyle}>
-                    <span style={{ color: m.tipo === 'ingreso' ? 'var(--disponible)' : 'var(--danger)' }}>
-                      {m.tipo}
-                    </span>
-                  </td>
-                  <td style={tdStyle}>{m.concepto}</td>
-                  <td style={tdStyle}>{m.metodo_pago}</td>
-                  <td style={tdStyle}>{m.monto}</td>
-                  <td style={tdStyle}>{new Date(m.created_at).toLocaleTimeString()}</td>
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, marginTop: 16, minWidth: 560 }}>
+              <thead>
+                <tr style={{ textAlign: 'left', color: 'var(--text-secondary)', fontSize: 11 }}>
+                  <th style={thStyle}>Tipo</th>
+                  <th style={thStyle}>Concepto</th>
+                  <th style={thStyle}>Método</th>
+                  <th style={thStyle}>Monto</th>
+                  <th style={thStyle}>Hora</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {sesion.movimientos.map((m) => (
+                  <tr key={m.id} style={{ borderTop: '1px solid var(--border)' }}>
+                    <td style={tdStyle}>
+                      <span style={{ color: m.tipo === 'ingreso' ? 'var(--disponible)' : 'var(--danger)' }}>
+                        {m.tipo}
+                      </span>
+                    </td>
+                    <td style={tdStyle}>{m.concepto}</td>
+                    <td style={tdStyle}>{m.metodo_pago}</td>
+                    <td style={tdStyle}>{m.monto}</td>
+                    <td style={tdStyle}>{new Date(m.created_at).toLocaleTimeString()}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
           {sesion.movimientos.length === 0 && (
             <p style={{ color: 'var(--text-muted)', fontSize: 13 }}>Todavía no hay movimientos en este turno.</p>
           )}
@@ -245,7 +247,7 @@ function RegistrarMovimientoForm({
         flexWrap: 'wrap',
       }}
     >
-      <div>
+      <div style={{ width: 150 }}>
         <label style={labelStyle}>Tipo</label>
         <select value={tipo} onChange={(e) => setTipo(e.target.value as 'ingreso' | 'egreso')} style={inputStyle}>
           <option value="egreso">Egreso (gasto)</option>
@@ -260,7 +262,7 @@ function RegistrarMovimientoForm({
         <label style={labelStyle}>Concepto</label>
         <input value={concepto} onChange={(e) => setConcepto(e.target.value)} style={inputStyle} required />
       </div>
-      <div>
+      <div style={{ width: 130 }}>
         <label style={labelStyle}>Método</label>
         <select value={metodoPago} onChange={(e) => setMetodoPago(e.target.value)} style={inputStyle}>
           {METODOS.map((m) => (
@@ -285,7 +287,8 @@ function MetricCard({ label, value, destacado }: { label: string; value: string;
         background: destacado ? 'var(--brand-bg)' : 'var(--surface-1)',
         borderRadius: 'var(--radius)',
         padding: '12px 16px',
-        flex: 1,
+        flex: '1 1 130px',
+        minWidth: 130,
       }}
     >
       <p style={{ fontSize: 12, color: 'var(--text-secondary)', margin: 0 }}>{label}</p>

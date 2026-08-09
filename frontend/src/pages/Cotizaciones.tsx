@@ -58,7 +58,7 @@ export function Cotizaciones() {
 
   return (
     <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
         <h1 style={{ fontSize: 20 }}>Cotizaciones</h1>
         <button style={btnPrimary} onClick={() => setMostrarForm((v) => !v)}>
           {mostrarForm ? 'Cancelar' : '+ Nueva cotización'}
@@ -100,8 +100,10 @@ export function Cotizaciones() {
               to={`/cotizaciones/${c.id}`}
               style={{
                 display: 'flex',
+                flexWrap: 'wrap',
                 justifyContent: 'space-between',
                 alignItems: 'center',
+                gap: '4px 12px',
                 padding: '10px 14px',
                 background: 'var(--surface-1)',
                 border: '1px solid var(--border)',
@@ -209,8 +211,8 @@ function NuevaCotizacionForm({
         gap: 10,
       }}
     >
-      <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end' }}>
-        <div style={{ flex: 1 }}>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'flex-end' }}>
+        <div style={{ flex: 1, minWidth: 140 }}>
           <label style={labelStyle}>DNI del huésped</label>
           <input value={dni} onChange={(e) => setDni(e.target.value)} style={inputStyle} required />
         </div>
@@ -223,12 +225,12 @@ function NuevaCotizacionForm({
         <p style={{ fontSize: 12, color: 'var(--text-secondary)' }}>Huésped encontrado: {huespedNombre}</p>
       ) : (
         dni && (
-          <div style={{ display: 'flex', gap: 8 }}>
-            <div style={{ flex: 1 }}>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+            <div style={{ flex: 1, minWidth: 140 }}>
               <label style={labelStyle}>Nombres (huésped nuevo)</label>
               <input value={nombres} onChange={(e) => setNombres(e.target.value)} style={inputStyle} />
             </div>
-            <div style={{ flex: 1 }}>
+            <div style={{ flex: 1, minWidth: 140 }}>
               <label style={labelStyle}>Apellidos</label>
               <input value={apellidos} onChange={(e) => setApellidos(e.target.value)} style={inputStyle} />
             </div>
@@ -236,8 +238,8 @@ function NuevaCotizacionForm({
         )
       )}
 
-      <div style={{ display: 'flex', gap: 8 }}>
-        <div style={{ flex: 1 }}>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+        <div style={{ flex: 1, minWidth: 160 }}>
           <label style={labelStyle}>Habitación</label>
           <select value={habitacionId} onChange={(e) => setHabitacionId(e.target.value)} style={inputStyle} required>
             <option value="">Selecciona...</option>
@@ -252,11 +254,11 @@ function NuevaCotizacionForm({
           <label style={labelStyle}># personas</label>
           <input type="number" min={1} value={nroPersonas} onChange={(e) => setNroPersonas(Number(e.target.value))} style={inputStyle} />
         </div>
-        <div style={{ flex: 1 }}>
+        <div style={{ flex: 1, minWidth: 140 }}>
           <label style={labelStyle}>Desde</label>
           <input type="date" value={fechaDesde} onChange={(e) => setFechaDesde(e.target.value)} style={inputStyle} required />
         </div>
-        <div style={{ flex: 1 }}>
+        <div style={{ flex: 1, minWidth: 140 }}>
           <label style={labelStyle}>Hasta</label>
           <input type="date" value={fechaHasta} onChange={(e) => setFechaHasta(e.target.value)} style={inputStyle} required />
         </div>

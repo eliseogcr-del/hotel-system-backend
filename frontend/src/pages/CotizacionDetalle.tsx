@@ -86,7 +86,7 @@ export function CotizacionDetalle() {
         ← Volver a cotizaciones
       </Link>
 
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', margin: '12px 0 20px' }}>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, justifyContent: 'space-between', alignItems: 'center', margin: '12px 0 20px' }}>
         <div>
           <h1 style={{ fontSize: 20 }}>
             {cotizacion.huespedes ? `${cotizacion.huespedes.nombres} ${cotizacion.huespedes.apellidos}` : cotizacion.empresas?.razon_social}
@@ -101,7 +101,7 @@ export function CotizacionDetalle() {
 
       {error && <p style={{ color: 'var(--danger)', fontSize: 13, marginBottom: 12 }}>{error}</p>}
 
-      <div style={{ display: 'flex', gap: 8, marginBottom: 20 }}>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 20 }}>
         {(cotizacion.estado === 'pendiente' || cotizacion.estado === 'aprobada') && (
           <button onClick={convertir} disabled={accionando} style={btnPrimary}>
             Convertir a reserva
@@ -124,30 +124,32 @@ export function CotizacionDetalle() {
         )}
       </div>
 
-      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
-        <thead>
-          <tr style={{ textAlign: 'left', color: 'var(--text-secondary)', fontSize: 11 }}>
-            <th style={thStyle}>Habitación</th>
-            <th style={thStyle}>Personas</th>
-            <th style={thStyle}>Precio/noche</th>
-            <th style={thStyle}>Días</th>
-            <th style={thStyle}>Subtotal</th>
-          </tr>
-        </thead>
-        <tbody>
-          {cotizacion.cotizacion_detalle.map((l) => (
-            <tr key={l.id} style={{ borderTop: '1px solid var(--border)' }}>
-              <td style={tdStyle}>
-                {l.habitaciones?.hab_numero} · {l.habitaciones?.tipos_habitacion?.nombre}
-              </td>
-              <td style={tdStyle}>{l.nro_personas}</td>
-              <td style={tdStyle}>{l.precio_noche}</td>
-              <td style={tdStyle}>{l.dias}</td>
-              <td style={tdStyle}>{l.subtotal}</td>
+      <div style={{ overflowX: 'auto' }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, minWidth: 520 }}>
+          <thead>
+            <tr style={{ textAlign: 'left', color: 'var(--text-secondary)', fontSize: 11 }}>
+              <th style={thStyle}>Habitación</th>
+              <th style={thStyle}>Personas</th>
+              <th style={thStyle}>Precio/noche</th>
+              <th style={thStyle}>Días</th>
+              <th style={thStyle}>Subtotal</th>
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {cotizacion.cotizacion_detalle.map((l) => (
+              <tr key={l.id} style={{ borderTop: '1px solid var(--border)' }}>
+                <td style={tdStyle}>
+                  {l.habitaciones?.hab_numero} · {l.habitaciones?.tipos_habitacion?.nombre}
+                </td>
+                <td style={tdStyle}>{l.nro_personas}</td>
+                <td style={tdStyle}>{l.precio_noche}</td>
+                <td style={tdStyle}>{l.dias}</td>
+                <td style={tdStyle}>{l.subtotal}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
 
       <p style={{ textAlign: 'right', fontWeight: 500, fontSize: 15, marginTop: 12 }}>
         Total estimado: {cotizacion.moneda} {cotizacion.total_estimado ?? 0}

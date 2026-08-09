@@ -122,7 +122,7 @@ export function EstadiaDetalle() {
         </p>
       </div>
 
-      <div style={{ display: 'flex', gap: 24, marginBottom: 20 }}>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 24, marginBottom: 20 }}>
         <div>
           <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: '0 0 2px' }}>Total cargado</p>
           <p style={{ fontSize: 18, fontWeight: 600, margin: 0 }}>PEN {totalCargos.toFixed(2)}</p>
@@ -228,32 +228,34 @@ export function EstadiaDetalle() {
         />
       )}
 
-      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, marginTop: 16 }}>
-        <thead>
-          <tr style={{ textAlign: 'left', color: 'var(--text-secondary)', fontSize: 11 }}>
-            <th style={thStyle}>Fecha</th>
-            <th style={thStyle}>Tipo</th>
-            <th style={thStyle}>Monto</th>
-            <th style={thStyle}>Método</th>
-            <th style={thStyle}>Personal</th>
-            <th style={thStyle}>Notas</th>
-          </tr>
-        </thead>
-        <tbody>
-          {estadia.movimientos.map((m) => (
-            <tr key={m.id} style={{ borderTop: '1px solid var(--border)' }}>
-              <td style={tdStyle}>{new Date(m.fecha).toLocaleString()}</td>
-              <td style={tdStyle}>{TIPO_LABEL[m.tipo] ?? m.tipo}</td>
-              <td style={{ ...tdStyle, color: Number(m.monto) < 0 ? 'var(--disponible)' : 'var(--text-secondary)' }}>
-                {m.monto}
-              </td>
-              <td style={tdStyle}>{m.metodo_pago ?? '—'}</td>
-              <td style={tdStyle}>{m.personal?.nombre ?? '—'}</td>
-              <td style={tdStyle}>{m.notas ?? ''}</td>
+      <div style={{ overflowX: 'auto' }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, marginTop: 16, minWidth: 640 }}>
+          <thead>
+            <tr style={{ textAlign: 'left', color: 'var(--text-secondary)', fontSize: 11 }}>
+              <th style={thStyle}>Fecha</th>
+              <th style={thStyle}>Tipo</th>
+              <th style={thStyle}>Monto</th>
+              <th style={thStyle}>Método</th>
+              <th style={thStyle}>Personal</th>
+              <th style={thStyle}>Notas</th>
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {estadia.movimientos.map((m) => (
+              <tr key={m.id} style={{ borderTop: '1px solid var(--border)' }}>
+                <td style={tdStyle}>{new Date(m.fecha).toLocaleString()}</td>
+                <td style={tdStyle}>{TIPO_LABEL[m.tipo] ?? m.tipo}</td>
+                <td style={{ ...tdStyle, color: Number(m.monto) < 0 ? 'var(--disponible)' : 'var(--text-secondary)' }}>
+                  {m.monto}
+                </td>
+                <td style={tdStyle}>{m.metodo_pago ?? '—'}</td>
+                <td style={tdStyle}>{m.personal?.nombre ?? '—'}</td>
+                <td style={tdStyle}>{m.notas ?? ''}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }
@@ -541,6 +543,8 @@ const inputStyle: CSSProperties = {
   border: '1px solid var(--border)',
   borderRadius: 'var(--radius)',
   fontSize: 13,
+  width: '100%',
+  boxSizing: 'border-box',
 };
 
 const labelStyle: CSSProperties = {
