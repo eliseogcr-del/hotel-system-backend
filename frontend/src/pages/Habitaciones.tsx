@@ -167,6 +167,7 @@ export function Habitaciones() {
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12.5, minWidth: 1400 }}>
           <thead>
             <tr style={{ textAlign: 'left', color: 'var(--text-secondary)', fontSize: 11, background: 'var(--surface-1)' }}>
+              <th style={thStyle}>Acciones</th>
               <th style={thStyle}>N°</th>
               <th style={thStyle}>Tipo</th>
               <th style={thStyle}>Estado</th>
@@ -180,12 +181,38 @@ export function Habitaciones() {
               <th style={thStyle}>Tarifa/día</th>
               <th style={thStyle}>Notas</th>
               <th style={thStyle}>¿Mantenim.?</th>
-              <th style={thStyle}>Acciones</th>
             </tr>
           </thead>
           <tbody>
-            {habitaciones.map((h) => (
-              <tr key={h.id} style={{ borderTop: '1px solid var(--border)' }}>
+            {habitaciones.map((h, i) => (
+              <tr
+                key={h.id}
+                style={{
+                  borderTop: '1px solid var(--border-strong)',
+                  background: i % 2 === 1 ? 'var(--surface-1)' : 'transparent',
+                }}
+              >
+                <td style={tdStyle}>
+                  {h.estado === 'disponible' && (
+                    <button onClick={() => setCheckinHab(h)} style={linkBtnStyle}>
+                      Check-in
+                    </button>
+                  )}
+                  {h.estado === 'ocupada' && h.estadiaId && (
+                    <Link to={`/estadias/${h.estadiaId}`} style={linkBtnStyle}>
+                      Check-out
+                    </Link>
+                  )}
+                  {(h.estado === 'limpieza' || h.estado === 'mantenimiento') && (
+                    <button
+                      onClick={() => marcarDisponible(h)}
+                      style={linkBtnStyle}
+                      title="Usar solo si HK ya terminó pero se le olvidó cerrar la tarea"
+                    >
+                      Marcar disponible
+                    </button>
+                  )}
+                </td>
                 <td style={{ ...tdStyle, fontWeight: 500, color: 'var(--text-primary)' }}>{h.hab_numero}</td>
                 <td style={tdStyle}>{h.tipos_habitacion?.nombre ?? '—'}</td>
                 <td style={tdStyle}>
@@ -237,27 +264,6 @@ export function Habitaciones() {
                     title={h.estado !== 'ocupada' ? 'Solo se puede marcar mientras la habitación está ocupada' : ''}
                     onChange={() => alternarMantenimientoPlanificado(h)}
                   />
-                </td>
-                <td style={tdStyle}>
-                  {h.estado === 'disponible' && (
-                    <button onClick={() => setCheckinHab(h)} style={linkBtnStyle}>
-                      Check-in
-                    </button>
-                  )}
-                  {h.estado === 'ocupada' && h.estadiaId && (
-                    <Link to={`/estadias/${h.estadiaId}`} style={linkBtnStyle}>
-                      Check-out
-                    </Link>
-                  )}
-                  {(h.estado === 'limpieza' || h.estado === 'mantenimiento') && (
-                    <button
-                      onClick={() => marcarDisponible(h)}
-                      style={linkBtnStyle}
-                      title="Usar solo si HK ya terminó pero se le olvidó cerrar la tarea"
-                    >
-                      Marcar disponible
-                    </button>
-                  )}
                 </td>
               </tr>
             ))}
