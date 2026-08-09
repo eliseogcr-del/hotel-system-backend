@@ -11,6 +11,7 @@ import { CotizacionesModule } from './cotizaciones/cotizaciones.module';
 import { ImportacionesCanalModule } from './importaciones-canal/importaciones-canal.module';
 import { ConfiguracionModule } from './configuracion/configuracion.module';
 import { HuespedesModule } from './huespedes/huespedes.module';
+import { ProductosBazarModule } from './productos-bazar/productos-bazar.module';
 
 @Module({
   imports: [
@@ -26,6 +27,7 @@ import { HuespedesModule } from './huespedes/huespedes.module';
     ImportacionesCanalModule,
     ConfiguracionModule,
     HuespedesModule,
+    ProductosBazarModule,
   ],
 })
 export class AppModule {}

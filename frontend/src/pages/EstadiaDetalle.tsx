@@ -27,8 +27,25 @@ interface EstadiaDetalleData {
   };
 }
 
-const TIPOS_MOVIMIENTO = ['pago', 'ajuste', 'early', 'late', 'cochera'];
+const TIPOS_MOVIMIENTO = ['pago', 'consumo_bazar', 'ajuste', 'early', 'late', 'cochera'];
 const METODOS = ['efectivo', 'transferencia', 'yape', 'tarjeta'];
+
+const TIPO_LABEL: Record<string, string> = {
+  alquiler: 'Alquiler',
+  pago: 'Pago',
+  consumo_bazar: 'Consumo de bazar',
+  ajuste: 'Ajuste',
+  early: 'Early (entrada temprana)',
+  late: 'Late (salida tardía)',
+  cochera: 'Cochera',
+};
+
+interface ProductoBazar {
+  id: string;
+  nombre: string;
+  precio: number;
+  activo: boolean;
+}
 
 function ahoraLocal(): string {
   const d = new Date();
@@ -226,7 +243,7 @@ export function EstadiaDetalle() {
           {estadia.movimientos.map((m) => (
             <tr key={m.id} style={{ borderTop: '1px solid var(--border)' }}>
               <td style={tdStyle}>{new Date(m.fecha).toLocaleString()}</td>
-              <td style={tdStyle}>{m.tipo}</td>
+              <td style={tdStyle}>{TIPO_LABEL[m.tipo] ?? m.tipo}</td>
               <td style={{ ...tdStyle, color: Number(m.monto) < 0 ? 'var(--disponible)' : 'var(--text-secondary)' }}>
                 {m.monto}
               </td>
@@ -364,8 +381,24 @@ function RegistrarMovimientoForm({
   const [monto, setMonto] = useState('');
   const [metodoPago, setMetodoPago] = useState('efectivo');
   const [notas, setNotas] = useState('');
+  const [productos, setProductos] = useState<ProductoBazar[]>([]);
+  const [productoId, setProductoId] = useState('');
+  const [pagadoAlMomento, setPagadoAlMomento] = useState(true);
   const [enviando, setEnviando] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    api.get<ProductoBazar[]>(`/hoteles/${hotelId}/productos-bazar`).then(setProductos).catch(() => {});
+  }, [hotelId]);
+
+  const productosActivos = productos.filter((p) => p.activo);
+  const requiereMetodo = tipo === 'pago' || (tipo === 'consumo_bazar' && pagadoAlMomento);
+
+  function elegirProducto(id: string) {
+    setProductoId(id);
+    const producto = productos.find((p) => p.id === id);
+    if (producto) setMonto(String(producto.precio));
+  }
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -375,11 +408,14 @@ function RegistrarMovimientoForm({
       await api.post(`/hoteles/${hotelId}/estadias/${estadiaId}/movimientos`, {
         tipo,
         monto: Number(monto),
-        metodoPago: tipo === 'pago' ? metodoPago : undefined,
+        metodoPago: requiereMetodo ? metodoPago : undefined,
+        productoId: tipo === 'consumo_bazar' ? productoId : undefined,
+        pagadoAlMomento: tipo === 'consumo_bazar' ? pagadoAlMomento : undefined,
         notas: notas || undefined,
       });
       setMonto('');
       setNotas('');
+      setProductoId('');
       onRegistrado();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'No se pudo registrar el movimiento');
@@ -407,16 +443,40 @@ function RegistrarMovimientoForm({
         <select value={tipo} onChange={(e) => setTipo(e.target.value)} style={inputStyle}>
           {TIPOS_MOVIMIENTO.map((t) => (
             <option key={t} value={t}>
-              {t}
+              {TIPO_LABEL[t] ?? t}
             </option>
           ))}
         </select>
       </div>
+      {tipo === 'consumo_bazar' && (
+        <div style={{ minWidth: 160 }}>
+          <label style={labelStyle}>Producto</label>
+          <select value={productoId} onChange={(e) => elegirProducto(e.target.value)} style={inputStyle} required>
+            <option value="">Selecciona...</option>
+            {productosActivos.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.nombre} (S/. {p.precio})
+              </option>
+            ))}
+          </select>
+          {productosActivos.length === 0 && (
+            <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: '4px 0 0' }}>
+              No hay productos de bazar configurados (Configuración → Bazar).
+            </p>
+          )}
+        </div>
+      )}
       <div style={{ width: 100 }}>
         <label style={labelStyle}>Monto</label>
         <input type="number" min={0.01} step={0.01} value={monto} onChange={(e) => setMonto(e.target.value)} style={inputStyle} required />
       </div>
-      {tipo === 'pago' && (
+      {tipo === 'consumo_bazar' && (
+        <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, paddingBottom: 8 }}>
+          <input type="checkbox" checked={pagadoAlMomento} onChange={(e) => setPagadoAlMomento(e.target.checked)} />
+          Pagó al momento
+        </label>
+      )}
+      {requiereMetodo && (
         <div>
           <label style={labelStyle}>Método</label>
           <select value={metodoPago} onChange={(e) => setMetodoPago(e.target.value)} style={inputStyle}>
@@ -435,6 +495,11 @@ function RegistrarMovimientoForm({
       <button type="submit" disabled={enviando} style={btnPrimary}>
         {enviando ? 'Guardando...' : 'Registrar'}
       </button>
+      {tipo === 'consumo_bazar' && !pagadoAlMomento && (
+        <p style={{ fontSize: 11, color: 'var(--text-muted)', width: '100%', margin: 0 }}>
+          No pagó al momento: solo se suma a lo que debe, no genera ingreso de caja ahora.
+        </p>
+      )}
       {error && <p style={{ color: 'var(--danger)', fontSize: 12, width: '100%' }}>{error}</p>}
     </form>
   );

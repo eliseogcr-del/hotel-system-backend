@@ -32,6 +32,13 @@ interface Cochera {
   precio_externa: number;
 }
 
+interface ProductoBazar {
+  id: string;
+  nombre: string;
+  precio: number;
+  activo: boolean;
+}
+
 interface HotelConfig {
   id: string;
   nombre: string;
@@ -45,6 +52,7 @@ export function Configuracion() {
   const [tipos, setTipos] = useState<TipoHabitacion[]>([]);
   const [habitaciones, setHabitaciones] = useState<Habitacion[]>([]);
   const [cocheras, setCocheras] = useState<Cochera[]>([]);
+  const [productosBazar, setProductosBazar] = useState<ProductoBazar[]>([]);
   const [hotel, setHotel] = useState<HotelConfig | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -54,6 +62,7 @@ export function Configuracion() {
     api.get<TipoHabitacion[]>(`/hoteles/${h}/tipos-habitacion`).then(setTipos).catch(() => {});
     api.get<Habitacion[]>(`/hoteles/${h}/habitaciones`).then(setHabitaciones).catch(() => {});
     api.get<Cochera[]>(`/hoteles/${h}/cocheras`).then(setCocheras).catch(() => {});
+    api.get<ProductoBazar[]>(`/hoteles/${h}/productos-bazar`).then(setProductosBazar).catch(() => {});
     api.get<HotelConfig>(`/hoteles/${h}`).then(setHotel).catch(() => {});
   }
 
@@ -80,6 +89,7 @@ export function Configuracion() {
         setError={setError}
       />
       <SeccionCocheras hotelId={hotelActual.hotelId} cocheras={cocheras} onCambio={cargarTodo} setError={setError} />
+      <SeccionBazar hotelId={hotelActual.hotelId} productos={productosBazar} onCambio={cargarTodo} setError={setError} />
     </div>
   );
 }
@@ -753,6 +763,171 @@ function SeccionCocheras({
         </button>
       </form>
     </section>
+  );
+}
+
+function SeccionBazar({
+  hotelId,
+  productos,
+  onCambio,
+  setError,
+}: {
+  hotelId: string;
+  productos: ProductoBazar[];
+  onCambio: () => void;
+  setError: (e: string | null) => void;
+}) {
+  const [nombre, setNombre] = useState('');
+  const [precio, setPrecio] = useState('');
+  const [enviando, setEnviando] = useState(false);
+  const [editandoId, setEditandoId] = useState<string | null>(null);
+
+  async function crear(e: FormEvent) {
+    e.preventDefault();
+    setEnviando(true);
+    setError(null);
+    try {
+      await api.post(`/hoteles/${hotelId}/productos-bazar`, { nombre, precio: Number(precio) });
+      setNombre('');
+      setPrecio('');
+      onCambio();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'No se pudo crear el producto');
+    } finally {
+      setEnviando(false);
+    }
+  }
+
+  async function alternarActivo(producto: ProductoBazar) {
+    setError(null);
+    try {
+      await api.patch(`/hoteles/${hotelId}/productos-bazar/${producto.id}`, { activo: !producto.activo });
+      onCambio();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'No se pudo actualizar');
+    }
+  }
+
+  return (
+    <section>
+      <h2 style={{ fontSize: 15, marginBottom: 10 }}>Bazar</h2>
+      <p style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 8 }}>
+        Productos que se le pueden vender al huésped durante su estadía (champú, gaseosa, etc.). Se
+        registran desde el detalle de cada estadía.
+      </p>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 12 }}>
+        {productos.map((p) =>
+          editandoId === p.id ? (
+            <EditarProductoBazarForm
+              key={p.id}
+              hotelId={hotelId}
+              producto={p}
+              onGuardado={() => {
+                setEditandoId(null);
+                onCambio();
+              }}
+              onCancelar={() => setEditandoId(null)}
+              setError={setError}
+            />
+          ) : (
+            <div key={p.id} style={filaStyle}>
+              <span>{p.nombre}</span>
+              <span style={{ color: 'var(--text-secondary)' }}>S/. {p.precio}</span>
+              <span style={{ fontSize: 11, color: p.activo ? 'var(--disponible)' : 'var(--text-muted)' }}>
+                {p.activo ? 'Activo' : 'Inactivo'}
+              </span>
+              <span style={{ display: 'flex', gap: 6 }}>
+                <button onClick={() => setEditandoId(p.id)} style={btnSecondary}>
+                  Editar
+                </button>
+                <button onClick={() => alternarActivo(p)} style={btnSecondary}>
+                  {p.activo ? 'Desactivar' : 'Activar'}
+                </button>
+              </span>
+            </div>
+          ),
+        )}
+        {productos.length === 0 && <p style={{ color: 'var(--text-muted)', fontSize: 13 }}>No hay productos creados.</p>}
+      </div>
+      <form onSubmit={crear} style={formInlineStyle}>
+        <input
+          placeholder="Nombre (ej. Champú)"
+          value={nombre}
+          onChange={(e) => setNombre(e.target.value)}
+          style={inputStyle}
+          required
+        />
+        <input
+          type="number"
+          min={0}
+          step={0.01}
+          placeholder="Precio"
+          value={precio}
+          onChange={(e) => setPrecio(e.target.value)}
+          style={{ ...inputStyle, width: 100 }}
+          required
+        />
+        <button type="submit" disabled={enviando} style={btnPrimary}>
+          + Agregar producto
+        </button>
+      </form>
+    </section>
+  );
+}
+
+function EditarProductoBazarForm({
+  hotelId,
+  producto,
+  onGuardado,
+  onCancelar,
+  setError,
+}: {
+  hotelId: string;
+  producto: ProductoBazar;
+  onGuardado: () => void;
+  onCancelar: () => void;
+  setError: (e: string | null) => void;
+}) {
+  const [nombre, setNombre] = useState(producto.nombre);
+  const [precio, setPrecio] = useState(String(producto.precio));
+  const [guardando, setGuardando] = useState(false);
+
+  async function guardar(e: FormEvent) {
+    e.preventDefault();
+    setGuardando(true);
+    setError(null);
+    try {
+      await api.patch(`/hoteles/${hotelId}/productos-bazar/${producto.id}`, {
+        nombre,
+        precio: Number(precio),
+      });
+      onGuardado();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'No se pudo guardar');
+    } finally {
+      setGuardando(false);
+    }
+  }
+
+  return (
+    <form onSubmit={guardar} style={{ ...filaStyle, justifyContent: 'flex-start', gap: 8 }}>
+      <input value={nombre} onChange={(e) => setNombre(e.target.value)} style={{ ...inputStyle, flex: 1 }} required />
+      <input
+        type="number"
+        min={0}
+        step={0.01}
+        value={precio}
+        onChange={(e) => setPrecio(e.target.value)}
+        style={{ ...inputStyle, width: 100 }}
+        required
+      />
+      <button type="submit" disabled={guardando} style={btnPrimary}>
+        Guardar
+      </button>
+      <button type="button" onClick={onCancelar} style={btnSecondary}>
+        Cancelar
+      </button>
+    </form>
   );
 }
 
