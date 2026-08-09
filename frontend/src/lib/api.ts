@@ -25,6 +25,13 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
 
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
+    // Si el token quedó inválido/expirado (ej. la pestaña estuvo dormida y
+    // el refresco automático no llegó a tiempo), cerramos la sesión local
+    // para que ProtectedRoute mande a /login en vez de dejar a la persona
+    // viendo un error críptico sin salida clara.
+    if (res.status === 401) {
+      supabase.auth.signOut();
+    }
     throw new ApiError(res.status, body.message ?? `Error ${res.status}`);
   }
 

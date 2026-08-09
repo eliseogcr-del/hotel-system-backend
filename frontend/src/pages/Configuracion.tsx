@@ -75,12 +75,15 @@ export function Configuracion() {
   function cargarTodo() {
     if (!hotelActual) return;
     const h = hotelActual.hotelId;
-    api.get<TipoHabitacion[]>(`/hoteles/${h}/tipos-habitacion`).then(setTipos).catch(() => {});
-    api.get<Habitacion[]>(`/hoteles/${h}/habitaciones`).then(setHabitaciones).catch(() => {});
-    api.get<Cochera[]>(`/hoteles/${h}/cocheras`).then(setCocheras).catch(() => {});
-    api.get<ProductoBazar[]>(`/hoteles/${h}/productos-bazar`).then(setProductosBazar).catch(() => {});
-    api.get<PersonalHotel[]>(`/hoteles/${h}/personal`).then(setPersonal).catch(() => {});
-    api.get<HotelConfig>(`/hoteles/${h}`).then(setHotel).catch(() => {});
+    const reportarError = (err: unknown) => {
+      setError(err instanceof ApiError ? err.message : 'No se pudo cargar la configuración');
+    };
+    api.get<TipoHabitacion[]>(`/hoteles/${h}/tipos-habitacion`).then(setTipos).catch(reportarError);
+    api.get<Habitacion[]>(`/hoteles/${h}/habitaciones`).then(setHabitaciones).catch(reportarError);
+    api.get<Cochera[]>(`/hoteles/${h}/cocheras`).then(setCocheras).catch(reportarError);
+    api.get<ProductoBazar[]>(`/hoteles/${h}/productos-bazar`).then(setProductosBazar).catch(reportarError);
+    api.get<PersonalHotel[]>(`/hoteles/${h}/personal`).then(setPersonal).catch(reportarError);
+    api.get<HotelConfig>(`/hoteles/${h}`).then(setHotel).catch(reportarError);
   }
 
   useEffect(cargarTodo, [hotelActual]);
