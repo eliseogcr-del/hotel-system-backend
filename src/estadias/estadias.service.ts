@@ -16,6 +16,7 @@ import {
 } from './dto/registrar-movimiento.dto';
 import { ListarEstadiasQueryDto } from './dto/listar-estadias-query.dto';
 import { ActualizarNotasDto } from './dto/actualizar-notas.dto';
+import { ActualizarEstadiaDto } from './dto/actualizar-estadia.dto';
 import { ReservasService } from '../reservas/reservas.service';
 import { CrearReservaDto } from '../reservas/dto/crear-reserva.dto';
 
@@ -150,6 +151,7 @@ export class EstadiasService {
       tipo: 'alquiler',
       monto: cargoAlquiler,
       notas: 'Cargo inicial de alquiler al check-in',
+      registradoPor: personalId,
     });
 
     const cobroEarly = Number(rhData.cobro_early ?? 0);
@@ -158,6 +160,7 @@ export class EstadiasService {
         tipo: 'early',
         monto: cobroEarly,
         notas: 'Ingreso antes de la hora de check-in',
+        registradoPor: personalId,
       });
     }
 
@@ -227,6 +230,7 @@ export class EstadiasService {
         tipo: 'late',
         monto: cobroLate,
         notas: 'Salida después de la hora de check-out',
+        registradoPor: personalId,
       });
     }
 
@@ -351,6 +355,7 @@ export class EstadiasService {
       pagadoAlMomento,
       sesionTurnoId,
       notas: dto.notas,
+      registradoPor: personalId,
     });
 
     if (generaCaja && sesionTurnoId) {
@@ -397,7 +402,7 @@ export class EstadiasService {
 
     const { data: movimientos, error } = await client
       .from('movimientos_cuenta')
-      .select('*')
+      .select('*, personal(nombre)')
       .eq('estadia_id', estadiaId)
       .order('fecha', { ascending: true });
     if (error) throw error;
@@ -426,6 +431,94 @@ export class EstadiasService {
     if (error) throw error;
 
     return { ok: true };
+  }
+
+  /**
+   * Editar una estadía en curso desde su detalle: cambiar la tarifa diaria
+   * (rige hacia adelante, ej. para el cálculo de late; no toca cargos ya
+   * registrados) y/o agregar días (extiende fecha_hora_checkout_prevista y
+   * genera el cargo de alquiler de esos días nuevos como un movimiento
+   * aparte, igual que cualquier otro cargo del libro).
+   */
+  async actualizar(
+    client: SupabaseClient,
+    hotelId: string,
+    estadiaId: string,
+    dto: ActualizarEstadiaDto,
+    personalId: string,
+  ) {
+    if (dto.tarifaDiaNueva === undefined && dto.diasAdicionales === undefined) {
+      throw new BadRequestException('Envía una nueva tarifa y/o días adicionales');
+    }
+
+    const estadia = await this.cargarEstadiaHotel(client, hotelId, estadiaId);
+    if (estadia.estado_actual !== 'en_curso') {
+      throw new BadRequestException(
+        `No se puede editar: la estadía está en estado '${estadia.estado_actual}'`,
+      );
+    }
+
+    const tarifaFinal = dto.tarifaDiaNueva ?? Number(estadia.reserva_habitacion.tarifa_dia);
+
+    if (dto.tarifaDiaNueva !== undefined) {
+      const precioCosto = await this.obtenerPrecioCosto(
+        client,
+        estadia.reserva_habitacion.habitacion_id,
+      );
+      if (precioCosto > 0 && dto.tarifaDiaNueva < precioCosto) {
+        throw new BadRequestException(
+          `La tarifa (S/. ${dto.tarifaDiaNueva}) no puede ser menor al precio de costo configurado para este tipo de habitación (S/. ${precioCosto})`,
+        );
+      }
+    }
+
+    const cambiosLinea: Record<string, unknown> = {};
+    if (dto.tarifaDiaNueva !== undefined) cambiosLinea.tarifa_dia = dto.tarifaDiaNueva;
+
+    if (dto.diasAdicionales) {
+      const { data: rhActual, error: rhError } = await client
+        .from('reserva_habitacion')
+        .select('dias, fecha_hora_checkout_prevista')
+        .eq('id', estadia.reserva_habitacion.id)
+        .single();
+      if (rhError) throw rhError;
+
+      cambiosLinea.dias = Number(rhActual.dias) + dto.diasAdicionales;
+      const nuevoCheckout = new Date(
+        new Date(rhActual.fecha_hora_checkout_prevista).getTime() +
+          dto.diasAdicionales * 24 * 60 * 60 * 1000,
+      );
+      cambiosLinea.fecha_hora_checkout_prevista = nuevoCheckout.toISOString();
+    }
+
+    if (Object.keys(cambiosLinea).length > 0) {
+      const { error: updError } = await client
+        .from('reserva_habitacion')
+        .update(cambiosLinea)
+        .eq('id', estadia.reserva_habitacion.id);
+      if (updError) throw updError;
+    }
+
+    if (dto.diasAdicionales) {
+      await this.insertarMovimiento(client, estadiaId, {
+        tipo: 'alquiler',
+        monto: tarifaFinal * dto.diasAdicionales,
+        notas: `Extensión de estadía: +${dto.diasAdicionales} día(s)`,
+        registradoPor: personalId,
+      });
+    }
+
+    return this.obtenerDetalle(client, hotelId, estadiaId);
+  }
+
+  private async obtenerPrecioCosto(client: SupabaseClient, habitacionId: string): Promise<number> {
+    const { data, error } = await client
+      .from('habitaciones')
+      .select('tipos_habitacion(precio_costo)')
+      .eq('id', habitacionId)
+      .maybeSingle();
+    if (error) throw error;
+    return Number((data as any)?.tipos_habitacion?.precio_costo ?? 0);
   }
 
   private async cargarEstadiaHotel(
@@ -467,6 +560,7 @@ export class EstadiasService {
       pagadoAlMomento?: boolean;
       sesionTurnoId?: string;
       notas?: string;
+      registradoPor?: string;
     },
   ) {
     const { error: movError } = await client.from('movimientos_cuenta').insert({
@@ -478,6 +572,7 @@ export class EstadiasService {
       pagado_al_momento: input.pagadoAlMomento ?? true,
       sesion_turno_id: input.sesionTurnoId ?? null,
       notas: input.notas ?? null,
+      registrado_por: input.registradoPor ?? null,
     });
     if (movError) throw movError;
 

@@ -10,6 +10,7 @@ interface MovimientoCuenta {
   metodo_pago: string | null;
   fecha: string;
   notas: string | null;
+  personal: { nombre: string } | null;
 }
 
 interface EstadiaDetalleData {
@@ -20,6 +21,7 @@ interface EstadiaDetalleData {
   checkout_real: string | null;
   movimientos: MovimientoCuenta[];
   reserva_habitacion: {
+    tarifa_dia: number;
     habitaciones: { hab_numero: number; piso: number } | null;
     reservas: { huespedes: { nombres: string; apellidos: string } | null } | null;
   };
@@ -78,6 +80,13 @@ export function EstadiaDetalle() {
   if (error && !estadia) return <p style={{ color: 'var(--danger)' }}>{error}</p>;
   if (!estadia) return <p style={{ color: 'var(--text-muted)' }}>Cargando...</p>;
 
+  const totalCargos = estadia.movimientos
+    .filter((m) => Number(m.monto) > 0)
+    .reduce((acc, m) => acc + Number(m.monto), 0);
+  const totalPagado = Math.abs(
+    estadia.movimientos.filter((m) => m.tipo === 'pago').reduce((acc, m) => acc + Number(m.monto), 0),
+  );
+
   return (
     <div>
       <Link to="/estadias" style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
@@ -92,11 +101,46 @@ export function EstadiaDetalle() {
             : '—'}
         </h1>
         <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '4px 0 0' }}>
-          Estado: {estadia.estado_actual} · Saldo: PEN {estadia.saldo}
+          Estado: {estadia.estado_actual}
         </p>
       </div>
 
+      <div style={{ display: 'flex', gap: 24, marginBottom: 20 }}>
+        <div>
+          <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: '0 0 2px' }}>Total cargado</p>
+          <p style={{ fontSize: 18, fontWeight: 600, margin: 0 }}>PEN {totalCargos.toFixed(2)}</p>
+        </div>
+        <div>
+          <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: '0 0 2px' }}>Pagado</p>
+          <p style={{ fontSize: 18, fontWeight: 600, margin: 0, color: 'var(--disponible)' }}>
+            PEN {totalPagado.toFixed(2)}
+          </p>
+        </div>
+        <div>
+          <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: '0 0 2px' }}>Adeudado</p>
+          <p
+            style={{
+              fontSize: 18,
+              fontWeight: 600,
+              margin: 0,
+              color: estadia.saldo > 0 ? 'var(--ocupada)' : 'var(--text-primary)',
+            }}
+          >
+            PEN {Number(estadia.saldo).toFixed(2)}
+          </p>
+        </div>
+      </div>
+
       {error && <p style={{ color: 'var(--danger)', fontSize: 13, marginBottom: 12 }}>{error}</p>}
+
+      {estadia.estado_actual === 'en_curso' && (
+        <EditarEstadiaForm
+          hotelId={hotelActual.hotelId}
+          estadiaId={estadia.id}
+          tarifaActual={estadia.reserva_habitacion.tarifa_dia}
+          onGuardado={cargar}
+        />
+      )}
 
       {estadia.estado_actual === 'en_curso' && !mostrarCheckout && (
         <button
@@ -170,27 +214,139 @@ export function EstadiaDetalle() {
       <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, marginTop: 16 }}>
         <thead>
           <tr style={{ textAlign: 'left', color: 'var(--text-secondary)', fontSize: 11 }}>
+            <th style={thStyle}>Fecha</th>
             <th style={thStyle}>Tipo</th>
             <th style={thStyle}>Monto</th>
             <th style={thStyle}>Método</th>
-            <th style={thStyle}>Fecha</th>
+            <th style={thStyle}>Personal</th>
             <th style={thStyle}>Notas</th>
           </tr>
         </thead>
         <tbody>
           {estadia.movimientos.map((m) => (
             <tr key={m.id} style={{ borderTop: '1px solid var(--border)' }}>
+              <td style={tdStyle}>{new Date(m.fecha).toLocaleString()}</td>
               <td style={tdStyle}>{m.tipo}</td>
               <td style={{ ...tdStyle, color: Number(m.monto) < 0 ? 'var(--disponible)' : 'var(--text-secondary)' }}>
                 {m.monto}
               </td>
               <td style={tdStyle}>{m.metodo_pago ?? '—'}</td>
-              <td style={tdStyle}>{new Date(m.fecha).toLocaleString()}</td>
+              <td style={tdStyle}>{m.personal?.nombre ?? '—'}</td>
               <td style={tdStyle}>{m.notas ?? ''}</td>
             </tr>
           ))}
         </tbody>
       </table>
+    </div>
+  );
+}
+
+function EditarEstadiaForm({
+  hotelId,
+  estadiaId,
+  tarifaActual,
+  onGuardado,
+}: {
+  hotelId: string;
+  estadiaId: string;
+  tarifaActual: number;
+  onGuardado: () => void;
+}) {
+  const [mostrar, setMostrar] = useState(false);
+  const [tarifaDiaNueva, setTarifaDiaNueva] = useState(String(tarifaActual));
+  const [diasAdicionales, setDiasAdicionales] = useState('');
+  const [enviando, setEnviando] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function guardar() {
+    setEnviando(true);
+    setError(null);
+    try {
+      const cuerpo: Record<string, number> = {};
+      const tarifaNum = Number(tarifaDiaNueva);
+      if (tarifaNum !== tarifaActual) cuerpo.tarifaDiaNueva = tarifaNum;
+      if (diasAdicionales) cuerpo.diasAdicionales = Number(diasAdicionales);
+
+      if (Object.keys(cuerpo).length === 0) {
+        setError('No hay cambios para guardar');
+        setEnviando(false);
+        return;
+      }
+
+      await api.patch(`/hoteles/${hotelId}/estadias/${estadiaId}`, cuerpo);
+      setDiasAdicionales('');
+      setMostrar(false);
+      onGuardado();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'No se pudo guardar');
+    } finally {
+      setEnviando(false);
+    }
+  }
+
+  if (!mostrar) {
+    return (
+      <button onClick={() => setMostrar(true)} style={{ ...btnSecondary, marginBottom: 20 }}>
+        Editar estadía
+      </button>
+    );
+  }
+
+  return (
+    <div
+      style={{
+        background: 'var(--surface-1)',
+        border: '1px solid var(--border)',
+        borderRadius: 12,
+        padding: 16,
+        marginBottom: 20,
+        display: 'flex',
+        gap: 8,
+        alignItems: 'flex-end',
+        flexWrap: 'wrap',
+      }}
+    >
+      <div style={{ width: 150 }}>
+        <label style={labelStyle}>Tarifa/día (S/.)</label>
+        <input
+          type="number"
+          min={0}
+          step={0.01}
+          value={tarifaDiaNueva}
+          onChange={(e) => setTarifaDiaNueva(e.target.value)}
+          style={inputStyle}
+        />
+      </div>
+      <div style={{ width: 150 }}>
+        <label style={labelStyle}>Días adicionales</label>
+        <input
+          type="number"
+          min={1}
+          placeholder="0"
+          value={diasAdicionales}
+          onChange={(e) => setDiasAdicionales(e.target.value)}
+          style={inputStyle}
+        />
+        <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: '4px 0 0' }}>
+          Extiende la salida programada y genera el cargo de alquiler de esos días.
+        </p>
+      </div>
+      <button onClick={guardar} disabled={enviando} style={btnPrimary}>
+        Guardar cambios
+      </button>
+      <button
+        type="button"
+        onClick={() => {
+          setMostrar(false);
+          setTarifaDiaNueva(String(tarifaActual));
+          setDiasAdicionales('');
+          setError(null);
+        }}
+        style={btnSecondary}
+      >
+        Cancelar
+      </button>
+      {error && <p style={{ color: 'var(--danger)', fontSize: 12, width: '100%' }}>{error}</p>}
     </div>
   );
 }

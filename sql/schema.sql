@@ -285,7 +285,9 @@ create table movimientos_cuenta (
     pagado_al_momento boolean default true,
     sesion_turno_id uuid references sesiones_turno(id),
     fecha timestamptz not null default now(),
-    notas text
+    notas text,
+    -- Quién generó el cargo/abono, para el detalle de cuentas x cobrar.
+    registrado_por uuid references personal(id)
 );
 
 create table comprobantes (
@@ -442,15 +444,17 @@ alter table importaciones_canal enable row level security;
 
 -- Sin esta policy nadie puede leer ni su propia fila de `personal` (RLS
 -- deniega todo por defecto sin policies) y el AuthGuard falla siempre con
--- "sin perfil de personal activo". Cada quien lee su propia fila; el admin
--- de hotel ve el personal asignado a sus hoteles; super_admin ve todo.
+-- "sin perfil de personal activo". Cada quien lee su propia fila; cualquier
+-- colega asignado a un hotel en común ve el nombre de los demás (nombres no
+-- son un dato sensible, y el libro de movimientos_cuenta necesita mostrar
+-- quién generó cada cargo, no solo el admin); super_admin ve todo.
 create policy p_personal on personal for select
     using (
         is_super_admin()
         or auth_user_id = auth.uid()
         or id in (
             select ph.personal_id from personal_hotel ph
-            where ph.hotel_id in (select my_hotel_ids_by_rol('admin'))
+            where ph.hotel_id in (select my_hotel_ids())
         )
     );
 

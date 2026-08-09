@@ -21,6 +21,7 @@ import { CheckoutDto } from './dto/checkout.dto';
 import { RegistrarMovimientoDto } from './dto/registrar-movimiento.dto';
 import { ListarEstadiasQueryDto } from './dto/listar-estadias-query.dto';
 import { ActualizarNotasDto } from './dto/actualizar-notas.dto';
+import { ActualizarEstadiaDto } from './dto/actualizar-estadia.dto';
 
 @Controller('hoteles/:hotelId/estadias')
 @UseGuards(AuthGuard, RolesGuard)
@@ -102,6 +103,18 @@ export class EstadiasController {
   ) {
     const client = this.supabase.getClientForRequest(user.accessToken);
     return this.estadiasService.obtenerDetalle(client, hotelId, id);
+  }
+
+  @Patch(':id')
+  @Roles('admin', 'recepcion')
+  async actualizar(
+    @Param('hotelId') hotelId: string,
+    @Param('id') id: string,
+    @Body() dto: ActualizarEstadiaDto,
+    @CurrentUser() user: RequestUser,
+  ) {
+    const client = this.supabase.getClientForRequest(user.accessToken);
+    return this.estadiasService.actualizar(client, hotelId, id, dto, user.personalId);
   }
 
   @Patch(':id/notas')
