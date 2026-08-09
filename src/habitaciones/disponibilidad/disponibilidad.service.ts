@@ -88,7 +88,8 @@ export class DisponibilidadService {
         id,
         fecha_hora_checkin_prevista,
         fecha_hora_checkout_prevista,
-        reservas!inner(id, estado, huespedes(nombres, apellidos))
+        reservas!inner(id, estado, huespedes(nombres, apellidos)),
+        estadias(estado_actual)
       `,
       )
       .eq('habitacion_id', habitacionId)
@@ -109,6 +110,12 @@ export class DisponibilidadService {
     const margenMs = tiempoLimpiezaMin * 60 * 1000;
 
     for (const existente of existentes ?? []) {
+      // Ya se fue: el huésped hizo check-out, esa reserva ya no ocupa la
+      // habitación aunque su rango de fechas planeado siga "vigente" en
+      // el papel (pudo haberse ido antes o después de lo previsto).
+      const estadiaExistente = (existente as any).estadias;
+      if (estadiaExistente?.estado_actual === 'finalizada') continue;
+
       const existCheckin = new Date(existente.fecha_hora_checkin_prevista);
       const existCheckout = new Date(existente.fecha_hora_checkout_prevista);
 
