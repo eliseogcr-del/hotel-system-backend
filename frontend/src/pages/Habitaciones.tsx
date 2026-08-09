@@ -163,10 +163,17 @@ export function Habitaciones() {
 
       {error && <p style={{ color: 'var(--danger)', fontSize: 13, marginBottom: 12 }}>{error}</p>}
 
-      <div style={{ overflowX: 'auto', border: '1px solid var(--border)', borderRadius: 12 }}>
+      <div
+        style={{
+          overflow: 'auto',
+          maxHeight: 'calc(100vh - 260px)',
+          border: '1px solid var(--border)',
+          borderRadius: 12,
+        }}
+      >
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12.5, minWidth: 1400 }}>
           <thead>
-            <tr style={{ textAlign: 'left', color: 'var(--text-secondary)', fontSize: 11, background: 'var(--surface-1)' }}>
+            <tr style={{ textAlign: 'left', color: 'var(--text-secondary)', fontSize: 11 }}>
               <th style={thStyle}>Acciones</th>
               <th style={thStyle}>N°</th>
               <th style={thStyle}>Tipo</th>
@@ -180,7 +187,7 @@ export function Habitaciones() {
               <th style={thStyle}>Adeudado</th>
               <th style={thStyle}>Tarifa/día</th>
               <th style={thStyle}>Notas</th>
-              <th style={thStyle}>¿Mantenim.?</th>
+              <th style={{ ...thStyle, borderRight: 'none' }}>¿Mantenim.?</th>
             </tr>
           </thead>
           <tbody>
@@ -256,7 +263,7 @@ export function Habitaciones() {
                     ''
                   )}
                 </td>
-                <td style={{ ...tdStyle, textAlign: 'center' }}>
+                <td style={{ ...tdStyle, textAlign: 'center', borderRight: 'none' }}>
                   <input
                     type="checkbox"
                     checked={h.mantenimiento_planificado}
@@ -347,8 +354,22 @@ function NotasCelda({ notas, onGuardar }: { notas: string; onGuardar: (valor: st
   );
 }
 
-const thStyle: CSSProperties = { padding: '8px 10px', whiteSpace: 'nowrap' };
-const tdStyle: CSSProperties = { padding: '8px 10px', color: 'var(--text-secondary)', whiteSpace: 'nowrap' };
+const thStyle: CSSProperties = {
+  padding: '8px 10px',
+  whiteSpace: 'nowrap',
+  position: 'sticky',
+  top: 0,
+  zIndex: 1,
+  background: 'var(--surface-1)',
+  borderRight: '1px solid var(--border)',
+  boxShadow: '0 1px 0 var(--border-strong)',
+};
+const tdStyle: CSSProperties = {
+  padding: '8px 10px',
+  color: 'var(--text-secondary)',
+  whiteSpace: 'nowrap',
+  borderRight: '1px solid var(--border)',
+};
 
 const linkBtnStyle: CSSProperties = {
   background: 'none',
