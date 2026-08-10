@@ -1,9 +1,11 @@
 import { useEffect, useState, type CSSProperties } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { api, ApiError } from '../lib/api';
 import { useHotel } from '../contexts/HotelContext';
 import { useIsMobile } from '../hooks/useIsMobile';
 import { CheckinRapidoModal } from '../components/CheckinRapidoModal';
+
+type Vista = 'tabla' | 'tarjetas';
 
 type Estado = 'disponible' | 'ocupada' | 'limpieza' | 'mantenimiento' | 'bloqueada';
 
@@ -77,6 +79,7 @@ function formatoMonto(n: number | null) {
 export function Habitaciones() {
   const { hotelActual } = useHotel();
   const isMobile = useIsMobile();
+  const navigate = useNavigate();
   const [habitaciones, setHabitaciones] = useState<Habitacion[]>([]);
   const [tiposHabitacion, setTiposHabitacion] = useState<TipoHabitacionPrecios[]>([]);
   const [cocheras, setCocheras] = useState<Cochera[]>([]);
@@ -84,6 +87,14 @@ export function Habitaciones() {
   const [error, setError] = useState<string | null>(null);
   const [ahora, setAhora] = useState(new Date());
   const [checkinHab, setCheckinHab] = useState<Habitacion | null>(null);
+  const [vista, setVista] = useState<Vista>(
+    () => (localStorage.getItem('habitaciones_vista') as Vista | null) ?? 'tabla',
+  );
+
+  function cambiarVista(v: Vista) {
+    setVista(v);
+    localStorage.setItem('habitaciones_vista', v);
+  }
 
   useEffect(() => {
     const t = setInterval(() => setAhora(new Date()), 1000);
@@ -184,25 +195,67 @@ export function Habitaciones() {
         {!isMobile && <span />}
       </div>
 
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16, fontSize: 12, color: 'var(--text-secondary)', marginBottom: 16 }}>
-        {(Object.keys(ESTADO_LABEL) as Estado[]).map((estado) => (
-          <span key={estado} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-            <span
-              style={{
-                width: 8,
-                height: 8,
-                borderRadius: '50%',
-                background: `var(--${estado})`,
-                display: 'inline-block',
-              }}
-            />
-            {ESTADO_LABEL[estado]}
-          </span>
-        ))}
+      <div
+        style={{
+          display: 'flex',
+          flexWrap: 'wrap',
+          gap: 16,
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          marginBottom: 16,
+        }}
+      >
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16, fontSize: 12, color: 'var(--text-secondary)' }}>
+          {(Object.keys(ESTADO_LABEL) as Estado[]).map((estado) => (
+            <span key={estado} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+              <span
+                style={{
+                  width: 8,
+                  height: 8,
+                  borderRadius: '50%',
+                  background: `var(--${estado})`,
+                  display: 'inline-block',
+                }}
+              />
+              {ESTADO_LABEL[estado]}
+            </span>
+          ))}
+        </div>
+
+        <div style={{ display: 'flex', border: '1px solid var(--border)', borderRadius: 'var(--radius)', overflow: 'hidden' }}>
+          <button
+            onClick={() => cambiarVista('tabla')}
+            style={{
+              padding: '6px 12px',
+              fontSize: 12,
+              border: 'none',
+              cursor: 'pointer',
+              background: vista === 'tabla' ? 'var(--brand)' : 'var(--surface-1)',
+              color: vista === 'tabla' ? '#fff' : 'var(--text-secondary)',
+            }}
+          >
+            Tabla
+          </button>
+          <button
+            onClick={() => cambiarVista('tarjetas')}
+            style={{
+              padding: '6px 12px',
+              fontSize: 12,
+              border: 'none',
+              cursor: 'pointer',
+              background: vista === 'tarjetas' ? 'var(--brand)' : 'var(--surface-1)',
+              color: vista === 'tarjetas' ? '#fff' : 'var(--text-secondary)',
+            }}
+          >
+            Tarjetas
+          </button>
+        </div>
       </div>
 
       {error && <p style={{ color: 'var(--danger)', fontSize: 13, marginBottom: 12 }}>{error}</p>}
 
+      {vista === 'tabla' && (
+      <>
       <div
         style={{
           overflow: 'auto',
@@ -382,6 +435,24 @@ export function Habitaciones() {
           </div>
         </div>
       )}
+      </>
+      )}
+
+      {vista === 'tarjetas' && (
+        <VistaTarjetas
+          habitaciones={habitaciones}
+          cocheras={cocheras}
+          onClickHabitacion={(h) => {
+            if (h.estado === 'disponible') setCheckinHab(h);
+            else if (h.estado === 'ocupada' && h.estadiaId) navigate(`/estadias/${h.estadiaId}`);
+          }}
+          onClickCochera={(c) => {
+            if (c.estado !== 'ocupada' || !c.ocupante?.habNumero) return;
+            const hab = habitaciones.find((h) => h.hab_numero === c.ocupante!.habNumero);
+            if (hab?.estadiaId) navigate(`/estadias/${hab.estadiaId}`);
+          }}
+        />
+      )}
 
       {checkinHab && (
         <CheckinRapidoModal
@@ -396,6 +467,137 @@ export function Habitaciones() {
     </div>
   );
 }
+
+function VistaTarjetas({
+  habitaciones,
+  cocheras,
+  onClickHabitacion,
+  onClickCochera,
+}: {
+  habitaciones: Habitacion[];
+  cocheras: Cochera[];
+  onClickHabitacion: (h: Habitacion) => void;
+  onClickCochera: (c: Cochera) => void;
+}) {
+  return (
+    <div>
+      <div style={tarjetasGridStyle}>
+        {habitaciones.map((h) => {
+          const clickable = h.estado === 'disponible' || (h.estado === 'ocupada' && !!h.estadiaId);
+          const notas = h.huesped ? h.notas : h.tareaHkEnProceso?.notas ?? null;
+          return (
+            <div
+              key={h.id}
+              onClick={() => clickable && onClickHabitacion(h)}
+              style={{
+                ...tarjetaStyle,
+                background: `var(--${h.estado}-bg)`,
+                border: `1px solid var(--${h.estado})`,
+                cursor: clickable ? 'pointer' : 'default',
+              }}
+              title={clickable ? (h.estado === 'disponible' ? 'Hacer check-in' : 'Ver detalle') : undefined}
+            >
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+                <span style={{ fontSize: 20, fontWeight: 700, color: 'var(--text-primary)' }}>{h.hab_numero}</span>
+                <span style={{ fontSize: 10, fontWeight: 600, color: `var(--${h.estado}-text)` }}>
+                  {ESTADO_LABEL[h.estado]}
+                </span>
+              </div>
+              <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{h.tipos_habitacion?.nombre ?? '—'}</span>
+              {h.huesped && (
+                <span
+                  style={{
+                    fontSize: 13,
+                    fontWeight: 600,
+                    color: h.saldo != null && h.saldo > 0 ? 'var(--ocupada-text)' : 'var(--text-primary)',
+                  }}
+                >
+                  Saldo: {h.saldo != null ? `S/. ${h.saldo.toFixed(2)}` : '—'}
+                </span>
+              )}
+              {notas && (
+                <span
+                  style={{
+                    fontSize: 11,
+                    color: 'var(--text-muted)',
+                    fontStyle: 'italic',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap',
+                  }}
+                  title={notas}
+                >
+                  {notas}
+                </span>
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      {habitaciones.length === 0 && (
+        <p style={{ color: 'var(--text-muted)' }}>No hay habitaciones registradas.</p>
+      )}
+
+      {cocheras.length > 0 && (
+        <div style={{ marginTop: 24 }}>
+          <h2 style={{ fontSize: 16, marginBottom: 10 }}>Cocheras</h2>
+          <div style={tarjetasGridStyle}>
+            {cocheras.map((c) => {
+              const clickable = c.estado === 'ocupada' && !!c.ocupante?.habNumero;
+              return (
+                <div
+                  key={c.id}
+                  onClick={() => clickable && onClickCochera(c)}
+                  style={{
+                    ...tarjetaStyle,
+                    background: `var(--${c.estado}-bg)`,
+                    border: `1px solid var(--${c.estado})`,
+                    cursor: clickable ? 'pointer' : 'default',
+                    minHeight: 76,
+                  }}
+                  title={clickable ? 'Ver detalle' : undefined}
+                >
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+                    <span style={{ fontSize: 18, fontWeight: 700, color: 'var(--text-primary)' }}>{c.numero}</span>
+                    <span style={{ fontSize: 10, fontWeight: 600, color: `var(--${c.estado}-text)` }}>
+                      {ESTADO_COCHERA_LABEL[c.estado]}
+                    </span>
+                  </div>
+                  <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
+                    {c.tamano}
+                    {c.tipo_vehiculo_permitido ? ` · ${c.tipo_vehiculo_permitido}` : ''}
+                    {c.es_externa ? ' · externa' : ''}
+                  </span>
+                  {c.ocupante && (
+                    <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+                      Hab. {c.ocupante.habNumero} · {c.ocupante.huesped ?? '—'}
+                    </span>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+const tarjetasGridStyle: CSSProperties = {
+  display: 'grid',
+  gridTemplateColumns: 'repeat(auto-fill, minmax(170px, 1fr))',
+  gap: 12,
+};
+
+const tarjetaStyle: CSSProperties = {
+  borderRadius: 12,
+  padding: 12,
+  display: 'flex',
+  flexDirection: 'column',
+  gap: 4,
+  minHeight: 100,
+};
 
 function NotasCelda({ notas, onGuardar }: { notas: string; onGuardar: (valor: string) => void }) {
   const [editando, setEditando] = useState(false);
