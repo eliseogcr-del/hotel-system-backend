@@ -228,6 +228,16 @@ export class EstadiasService {
     });
     if (tareaError) throw tareaError;
 
+    // La cochera es parte de la estadía igual que la habitación: si el
+    // huésped tenía una asignada, se libera al hacer checkout.
+    if (estadia.reserva_habitacion.cochera_id) {
+      const { error: cocheraError } = await client
+        .from('cocheras')
+        .update({ estado: 'disponible' })
+        .eq('id', estadia.reserva_habitacion.cochera_id);
+      if (cocheraError) throw cocheraError;
+    }
+
     const cobroLate = await this.calcularCobroLate(
       client,
       hotelId,
