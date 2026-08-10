@@ -13,6 +13,22 @@ interface MovimientoCuenta {
   personal: { nombre: string } | null;
 }
 
+interface HuespedInfo {
+  nombres: string;
+  apellidos: string;
+  tipo_doc: string;
+  nro_doc: string;
+  telefono: string | null;
+  correo: string | null;
+}
+
+interface VehiculoInfo {
+  id: string;
+  marca: string | null;
+  tipo: string | null;
+  placa: string | null;
+}
+
 interface EstadiaDetalleData {
   id: string;
   estado_actual: string;
@@ -22,9 +38,20 @@ interface EstadiaDetalleData {
   movimientos: MovimientoCuenta[];
   reserva_habitacion: {
     tarifa_dia: number;
+    cochera_id: string | null;
     habitaciones: { hab_numero: number; piso: number } | null;
-    reservas: { huespedes: { nombres: string; apellidos: string } | null } | null;
+    reservas: { huesped_id: string; huespedes: HuespedInfo | null } | null;
+    vehiculos: VehiculoInfo | null;
   };
+}
+
+interface Cochera {
+  id: string;
+  numero: string;
+  tamano: string;
+  tipo_vehiculo_permitido: string | null;
+  estado: string;
+  es_externa: boolean;
 }
 
 const TIPOS_MOVIMIENTO = ['pago', 'consumo_bazar', 'ajuste', 'early', 'late', 'cochera'];
@@ -155,6 +182,10 @@ export function EstadiaDetalle() {
           hotelId={hotelActual.hotelId}
           estadiaId={estadia.id}
           tarifaActual={estadia.reserva_habitacion.tarifa_dia}
+          huespedId={estadia.reserva_habitacion.reservas?.huesped_id ?? ''}
+          huesped={estadia.reserva_habitacion.reservas?.huespedes ?? null}
+          cocheraActualId={estadia.reserva_habitacion.cochera_id}
+          vehiculoActual={estadia.reserva_habitacion.vehiculos}
           onGuardado={cargar}
         />
       )}
@@ -264,35 +295,86 @@ function EditarEstadiaForm({
   hotelId,
   estadiaId,
   tarifaActual,
+  huespedId,
+  huesped,
+  cocheraActualId,
+  vehiculoActual,
   onGuardado,
 }: {
   hotelId: string;
   estadiaId: string;
   tarifaActual: number;
+  huespedId: string;
+  huesped: HuespedInfo | null;
+  cocheraActualId: string | null;
+  vehiculoActual: VehiculoInfo | null;
   onGuardado: () => void;
 }) {
   const [mostrar, setMostrar] = useState(false);
   const [tarifaDiaNueva, setTarifaDiaNueva] = useState(String(tarifaActual));
   const [diasAdicionales, setDiasAdicionales] = useState('');
+
+  const [nombres, setNombres] = useState(huesped?.nombres ?? '');
+  const [apellidos, setApellidos] = useState(huesped?.apellidos ?? '');
+  const [tipoDoc, setTipoDoc] = useState(huesped?.tipo_doc ?? 'dni');
+  const [nroDoc, setNroDoc] = useState(huesped?.nro_doc ?? '');
+  const [telefono, setTelefono] = useState(huesped?.telefono ?? '');
+  const [correo, setCorreo] = useState(huesped?.correo ?? '');
+
+  const [tieneVehiculo, setTieneVehiculo] = useState(!!vehiculoActual);
+  const [vehiculoMarca, setVehiculoMarca] = useState(vehiculoActual?.marca ?? '');
+  const [vehiculoTipo, setVehiculoTipo] = useState(vehiculoActual?.tipo ?? '');
+  const [vehiculoPlaca, setVehiculoPlaca] = useState(vehiculoActual?.placa ?? '');
+  const [cocheras, setCocheras] = useState<Cochera[]>([]);
+  const [cocheraId, setCocheraId] = useState(cocheraActualId ?? '');
+
   const [enviando, setEnviando] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!mostrar) return;
+    api.get<Cochera[]>(`/hoteles/${hotelId}/cocheras`).then(setCocheras).catch(() => {});
+  }, [mostrar, hotelId]);
+
+  const cocherasSeleccionables = cocheras.filter((c) => c.estado === 'disponible' || c.id === cocheraActualId);
 
   async function guardar() {
     setEnviando(true);
     setError(null);
     try {
-      const cuerpo: Record<string, number> = {};
-      const tarifaNum = Number(tarifaDiaNueva);
-      if (tarifaNum !== tarifaActual) cuerpo.tarifaDiaNueva = tarifaNum;
-      if (diasAdicionales) cuerpo.diasAdicionales = Number(diasAdicionales);
+      const cambiosHuesped: Record<string, string> = {};
+      if (nombres !== huesped?.nombres) cambiosHuesped.nombres = nombres;
+      if (apellidos !== huesped?.apellidos) cambiosHuesped.apellidos = apellidos;
+      if (tipoDoc !== huesped?.tipo_doc) cambiosHuesped.tipoDoc = tipoDoc;
+      if (nroDoc !== huesped?.nro_doc) cambiosHuesped.nroDoc = nroDoc;
+      if (telefono !== (huesped?.telefono ?? '')) cambiosHuesped.telefono = telefono;
+      if (correo !== (huesped?.correo ?? '')) cambiosHuesped.correo = correo;
 
-      if (Object.keys(cuerpo).length === 0) {
+      const cambiosEstadia: Record<string, string | number | boolean> = {};
+      const tarifaNum = Number(tarifaDiaNueva);
+      if (tarifaNum !== tarifaActual) cambiosEstadia.tarifaDiaNueva = tarifaNum;
+      if (diasAdicionales) cambiosEstadia.diasAdicionales = Number(diasAdicionales);
+      if (tieneVehiculo) {
+        if (vehiculoMarca !== (vehiculoActual?.marca ?? '')) cambiosEstadia.vehiculoMarca = vehiculoMarca;
+        if (vehiculoTipo !== (vehiculoActual?.tipo ?? '')) cambiosEstadia.vehiculoTipo = vehiculoTipo;
+        if (vehiculoPlaca !== (vehiculoActual?.placa ?? '')) cambiosEstadia.vehiculoPlaca = vehiculoPlaca;
+        if (cocheraId && cocheraId !== cocheraActualId) cambiosEstadia.cocheraId = cocheraId;
+      } else if (cocheraActualId) {
+        cambiosEstadia.quitarCochera = true;
+      }
+
+      if (Object.keys(cambiosHuesped).length === 0 && Object.keys(cambiosEstadia).length === 0) {
         setError('No hay cambios para guardar');
         setEnviando(false);
         return;
       }
 
-      await api.patch(`/hoteles/${hotelId}/estadias/${estadiaId}`, cuerpo);
+      if (Object.keys(cambiosHuesped).length > 0) {
+        await api.patch(`/hoteles/${hotelId}/huespedes/${huespedId}`, cambiosHuesped);
+      }
+      if (Object.keys(cambiosEstadia).length > 0) {
+        await api.patch(`/hoteles/${hotelId}/estadias/${estadiaId}`, cambiosEstadia);
+      }
       setDiasAdicionales('');
       setMostrar(false);
       onGuardado();
@@ -320,52 +402,145 @@ function EditarEstadiaForm({
         padding: 16,
         marginBottom: 20,
         display: 'flex',
-        gap: 8,
-        alignItems: 'flex-end',
-        flexWrap: 'wrap',
+        flexDirection: 'column',
+        gap: 14,
       }}
     >
-      <div style={{ width: 150 }}>
-        <label style={labelStyle}>Tarifa/día (S/.)</label>
-        <input
-          type="number"
-          min={0}
-          step={0.01}
-          value={tarifaDiaNueva}
-          onChange={(e) => setTarifaDiaNueva(e.target.value)}
-          style={inputStyle}
-        />
+      <div>
+        <p style={{ fontSize: 12, fontWeight: 500, color: 'var(--text-secondary)', margin: '0 0 8px' }}>
+          Datos del huésped
+        </p>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+          <div style={{ flex: 1, minWidth: 140 }}>
+            <label style={labelStyle}>Nombres</label>
+            <input value={nombres} onChange={(e) => setNombres(e.target.value)} style={inputStyle} />
+          </div>
+          <div style={{ flex: 1, minWidth: 140 }}>
+            <label style={labelStyle}>Apellidos</label>
+            <input value={apellidos} onChange={(e) => setApellidos(e.target.value)} style={inputStyle} />
+          </div>
+          <div style={{ width: 160 }}>
+            <label style={labelStyle}>Tipo de documento</label>
+            <select value={tipoDoc} onChange={(e) => setTipoDoc(e.target.value)} style={inputStyle}>
+              <option value="dni">DNI</option>
+              <option value="pasaporte">Pasaporte</option>
+              <option value="carnet_extranjeria">Carnet de extranjería</option>
+              <option value="cedula">Cédula</option>
+              <option value="otro">Otro</option>
+            </select>
+          </div>
+          <div style={{ width: 150 }}>
+            <label style={labelStyle}>N° documento</label>
+            <input value={nroDoc} onChange={(e) => setNroDoc(e.target.value)} style={inputStyle} />
+          </div>
+          <div style={{ flex: 1, minWidth: 140 }}>
+            <label style={labelStyle}>Teléfono</label>
+            <input value={telefono} onChange={(e) => setTelefono(e.target.value)} style={inputStyle} />
+          </div>
+          <div style={{ flex: 1, minWidth: 140 }}>
+            <label style={labelStyle}>Correo</label>
+            <input type="email" value={correo} onChange={(e) => setCorreo(e.target.value)} style={inputStyle} />
+          </div>
+        </div>
       </div>
-      <div style={{ width: 150 }}>
-        <label style={labelStyle}>Días adicionales</label>
-        <input
-          type="number"
-          min={1}
-          placeholder="0"
-          value={diasAdicionales}
-          onChange={(e) => setDiasAdicionales(e.target.value)}
-          style={inputStyle}
-        />
+
+      <div>
+        <p style={{ fontSize: 12, fontWeight: 500, color: 'var(--text-secondary)', margin: '0 0 8px' }}>
+          Estadía
+        </p>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'flex-end' }}>
+          <div style={{ width: 150 }}>
+            <label style={labelStyle}>Tarifa/día (S/.)</label>
+            <input
+              type="number"
+              min={0}
+              step={0.01}
+              value={tarifaDiaNueva}
+              onChange={(e) => setTarifaDiaNueva(e.target.value)}
+              style={inputStyle}
+            />
+          </div>
+          <div style={{ width: 150 }}>
+            <label style={labelStyle}>Días adicionales</label>
+            <input
+              type="number"
+              min={1}
+              placeholder="0"
+              value={diasAdicionales}
+              onChange={(e) => setDiasAdicionales(e.target.value)}
+              style={inputStyle}
+            />
+          </div>
+        </div>
         <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: '4px 0 0' }}>
-          Extiende la salida programada y genera el cargo de alquiler de esos días.
+          Los días adicionales extienden la salida programada y generan el cargo de alquiler correspondiente.
         </p>
       </div>
-      <button onClick={guardar} disabled={enviando} style={btnPrimary}>
-        Guardar cambios
-      </button>
-      <button
-        type="button"
-        onClick={() => {
-          setMostrar(false);
-          setTarifaDiaNueva(String(tarifaActual));
-          setDiasAdicionales('');
-          setError(null);
-        }}
-        style={btnSecondary}
-      >
-        Cancelar
-      </button>
-      {error && <p style={{ color: 'var(--danger)', fontSize: 12, width: '100%' }}>{error}</p>}
+
+      <div>
+        <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, marginBottom: 8 }}>
+          <input type="checkbox" checked={tieneVehiculo} onChange={(e) => setTieneVehiculo(e.target.checked)} />
+          El huésped tiene vehículo
+        </label>
+        {tieneVehiculo && (
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+            <div style={{ width: 160 }}>
+              <label style={labelStyle}>Marca</label>
+              <input value={vehiculoMarca} onChange={(e) => setVehiculoMarca(e.target.value)} style={inputStyle} />
+            </div>
+            <div style={{ width: 140 }}>
+              <label style={labelStyle}>Tipo</label>
+              <input
+                value={vehiculoTipo}
+                onChange={(e) => setVehiculoTipo(e.target.value)}
+                placeholder="Auto, camioneta..."
+                style={inputStyle}
+              />
+            </div>
+            <div style={{ width: 140 }}>
+              <label style={labelStyle}>Placa</label>
+              <input value={vehiculoPlaca} onChange={(e) => setVehiculoPlaca(e.target.value)} style={inputStyle} />
+            </div>
+            <div style={{ flex: 1, minWidth: 180 }}>
+              <label style={labelStyle}>Cochera</label>
+              <select value={cocheraId} onChange={(e) => setCocheraId(e.target.value)} style={inputStyle}>
+                <option value="">Sin asignar</option>
+                {cocherasSeleccionables.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.numero} ({c.tamano}
+                    {c.tipo_vehiculo_permitido ? ` · ${c.tipo_vehiculo_permitido}` : ''}
+                    {c.es_externa ? ' · externa' : ''})
+                  </option>
+                ))}
+              </select>
+              {cocherasSeleccionables.length === 0 && (
+                <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: '4px 0 0' }}>
+                  No hay cocheras disponibles ahora mismo.
+                </p>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+
+      <div style={{ display: 'flex', gap: 8 }}>
+        <button onClick={guardar} disabled={enviando} style={btnPrimary}>
+          Guardar cambios
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            setMostrar(false);
+            setTarifaDiaNueva(String(tarifaActual));
+            setDiasAdicionales('');
+            setError(null);
+          }}
+          style={btnSecondary}
+        >
+          Cancelar
+        </button>
+      </div>
+      {error && <p style={{ color: 'var(--danger)', fontSize: 12, margin: 0 }}>{error}</p>}
     </div>
   );
 }

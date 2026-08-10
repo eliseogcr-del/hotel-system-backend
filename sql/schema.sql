@@ -228,7 +228,9 @@ create table reserva_habitacion (
 
 create table vehiculos (
     id uuid primary key default gen_random_uuid(),
-    reserva_habitacion_id uuid not null references reserva_habitacion(id) on delete cascade,
+    reserva_habitacion_id uuid not null unique references reserva_habitacion(id) on delete cascade,
+    marca text,
+    tipo text,                         -- auto, camioneta, moto... (mismo vocabulario que cocheras.tipo_vehiculo_permitido)
     placa text,
     color text,
     caracteristicas text

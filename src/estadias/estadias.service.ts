@@ -54,12 +54,22 @@ interface EstadiaConReserva {
     habitacion_id: string;
     subtotal: number;
     tarifa_dia: number;
+    cochera_id: string | null;
     habitaciones: { hab_numero: number; piso: number } | null;
     reservas: {
       hotel_id: string;
       estado: string;
-      huespedes: { nombres: string; apellidos: string } | null;
+      huesped_id: string;
+      huespedes: {
+        nombres: string;
+        apellidos: string;
+        tipo_doc: string;
+        nro_doc: string;
+        telefono: string | null;
+        correo: string | null;
+      } | null;
     };
+    vehiculos: { id: string; marca: string | null; tipo: string | null; placa: string | null } | null;
   };
 }
 
@@ -468,7 +478,12 @@ export class EstadiasService {
    * (rige hacia adelante, ej. para el cálculo de late; no toca cargos ya
    * registrados) y/o agregar días (extiende fecha_hora_checkout_prevista y
    * genera el cargo de alquiler de esos días nuevos como un movimiento
-   * aparte, igual que cualquier otro cargo del libro).
+   * aparte, igual que cualquier otro cargo del libro); también asignar o
+   * quitar la cochera del huésped (la cochera nueva debe estar 'disponible',
+   * y la anterior queda 'disponible' de nuevo) y guardar los datos de su
+   * vehículo (marca/tipo/placa). No genera ningún cargo automático por la
+   * cochera -- si es externa/paga, se registra igual que cualquier otro
+   * servicio con el tipo 'cochera' del formulario de movimientos.
    */
   async actualizar(
     client: SupabaseClient,
@@ -477,8 +492,16 @@ export class EstadiasService {
     dto: ActualizarEstadiaDto,
     personalId: string,
   ) {
-    if (dto.tarifaDiaNueva === undefined && dto.diasAdicionales === undefined) {
-      throw new BadRequestException('Envía una nueva tarifa y/o días adicionales');
+    if (
+      dto.tarifaDiaNueva === undefined &&
+      dto.diasAdicionales === undefined &&
+      dto.cocheraId === undefined &&
+      !dto.quitarCochera &&
+      dto.vehiculoMarca === undefined &&
+      dto.vehiculoTipo === undefined &&
+      dto.vehiculoPlaca === undefined
+    ) {
+      throw new BadRequestException('No se enviaron cambios');
     }
 
     const estadia = await this.cargarEstadiaHotel(client, hotelId, estadiaId);
@@ -521,6 +544,47 @@ export class EstadiasService {
       cambiosLinea.fecha_hora_checkout_prevista = nuevoCheckout.toISOString();
     }
 
+    const cocheraActualId = estadia.reserva_habitacion.cochera_id;
+
+    if (dto.quitarCochera) {
+      if (cocheraActualId) {
+        const { error } = await client
+          .from('cocheras')
+          .update({ estado: 'disponible' })
+          .eq('id', cocheraActualId);
+        if (error) throw error;
+      }
+      cambiosLinea.cochera_id = null;
+    } else if (dto.cocheraId !== undefined && dto.cocheraId !== cocheraActualId) {
+      const { data: cocheraNueva, error: cocheraError } = await client
+        .from('cocheras')
+        .select('id, estado, hotel_id')
+        .eq('id', dto.cocheraId)
+        .maybeSingle();
+      if (cocheraError) throw cocheraError;
+      if (!cocheraNueva || cocheraNueva.hotel_id !== hotelId) {
+        throw new NotFoundException('Cochera no encontrada en este hotel');
+      }
+      if (cocheraNueva.estado !== 'disponible') {
+        throw new BadRequestException('Esa cochera ya está ocupada');
+      }
+
+      if (cocheraActualId) {
+        const { error } = await client
+          .from('cocheras')
+          .update({ estado: 'disponible' })
+          .eq('id', cocheraActualId);
+        if (error) throw error;
+      }
+      const { error: ocuparError } = await client
+        .from('cocheras')
+        .update({ estado: 'ocupada' })
+        .eq('id', dto.cocheraId);
+      if (ocuparError) throw ocuparError;
+
+      cambiosLinea.cochera_id = dto.cocheraId;
+    }
+
     if (Object.keys(cambiosLinea).length > 0) {
       const { error: updError } = await client
         .from('reserva_habitacion')
@@ -536,6 +600,29 @@ export class EstadiasService {
         notas: `Extensión de estadía: +${dto.diasAdicionales} día(s)`,
         registradoPor: personalId,
       });
+    }
+
+    // Los datos del vehículo son independientes de la cochera (se pueden
+    // guardar placa/marca antes de que haya una cochera libre para asignar).
+    if (dto.vehiculoMarca !== undefined || dto.vehiculoTipo !== undefined || dto.vehiculoPlaca !== undefined) {
+      const vehiculoExistente = estadia.reserva_habitacion.vehiculos;
+      const datosVehiculo = {
+        marca: dto.vehiculoMarca ?? vehiculoExistente?.marca ?? null,
+        tipo: dto.vehiculoTipo ?? vehiculoExistente?.tipo ?? null,
+        placa: dto.vehiculoPlaca ?? vehiculoExistente?.placa ?? null,
+      };
+      if (vehiculoExistente) {
+        const { error: vehError } = await client
+          .from('vehiculos')
+          .update(datosVehiculo)
+          .eq('id', vehiculoExistente.id);
+        if (vehError) throw vehError;
+      } else {
+        const { error: vehError } = await client
+          .from('vehiculos')
+          .insert({ reserva_habitacion_id: estadia.reserva_habitacion.id, ...datosVehiculo });
+        if (vehError) throw vehError;
+      }
     }
 
     return this.obtenerDetalle(client, hotelId, estadiaId);
@@ -562,9 +649,13 @@ export class EstadiasService {
         `
         id, estado_actual, saldo, checkin_real, checkout_real,
         reserva_habitacion!inner(
-          id, habitacion_id, subtotal, tarifa_dia,
+          id, habitacion_id, subtotal, tarifa_dia, cochera_id,
           habitaciones(hab_numero, piso),
-          reservas!inner(hotel_id, estado, huespedes(nombres, apellidos))
+          reservas!inner(
+            hotel_id, estado, huesped_id,
+            huespedes(nombres, apellidos, tipo_doc, nro_doc, telefono, correo)
+          ),
+          vehiculos(id, marca, tipo, placa)
         )
       `,
       )

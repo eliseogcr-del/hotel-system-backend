@@ -36,12 +36,32 @@ interface TipoHabitacionPrecios {
   precio_costo: number;
 }
 
+interface Cochera {
+  id: string;
+  numero: string;
+  tamano: string;
+  tipo_vehiculo_permitido: string | null;
+  estado: 'disponible' | 'ocupada';
+  es_externa: boolean;
+  precio_externa: number;
+  ocupante: {
+    habNumero: number | null;
+    huesped: string | null;
+    vehiculo: { marca: string | null; tipo: string | null; placa: string | null } | null;
+  } | null;
+}
+
 const ESTADO_LABEL: Record<Estado, string> = {
   disponible: 'Disponible',
   ocupada: 'Ocupada',
   limpieza: 'Limpieza',
   mantenimiento: 'Mantenimiento',
   bloqueada: 'Bloqueada',
+};
+
+const ESTADO_COCHERA_LABEL: Record<Cochera['estado'], string> = {
+  disponible: 'Disponible',
+  ocupada: 'Ocupada',
 };
 
 function formatoFechaHora(iso: string | null) {
@@ -59,6 +79,7 @@ export function Habitaciones() {
   const isMobile = useIsMobile();
   const [habitaciones, setHabitaciones] = useState<Habitacion[]>([]);
   const [tiposHabitacion, setTiposHabitacion] = useState<TipoHabitacionPrecios[]>([]);
+  const [cocheras, setCocheras] = useState<Cochera[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [ahora, setAhora] = useState(new Date());
@@ -81,6 +102,10 @@ export function Habitaciones() {
     api
       .get<TipoHabitacionPrecios[]>(`/hoteles/${hotelActual.hotelId}/tipos-habitacion`)
       .then(setTiposHabitacion)
+      .catch(() => {});
+    api
+      .get<Cochera[]>(`/hoteles/${hotelActual.hotelId}/cocheras`)
+      .then(setCocheras)
       .catch(() => {});
   }
 
@@ -295,6 +320,67 @@ export function Habitaciones() {
 
       {habitaciones.length === 0 && (
         <p style={{ color: 'var(--text-muted)' }}>No hay habitaciones registradas.</p>
+      )}
+
+      {cocheras.length > 0 && (
+        <div style={{ marginTop: 28 }}>
+          <h2 style={{ fontSize: 16, marginBottom: 10 }}>Cocheras</h2>
+          <div style={{ overflow: 'auto', border: '1px solid var(--border)', borderRadius: 12 }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12.5, minWidth: 700 }}>
+              <thead>
+                <tr style={{ textAlign: 'left', color: 'var(--text-secondary)', fontSize: 11 }}>
+                  <th style={thStyle}>N°</th>
+                  <th style={thStyle}>Tamaño</th>
+                  <th style={thStyle}>Tipo permitido</th>
+                  <th style={thStyle}>Estado</th>
+                  <th style={thStyle}>Habitación</th>
+                  <th style={thStyle}>Huésped</th>
+                  <th style={{ ...thStyle, borderRight: 'none' }}>Vehículo</th>
+                </tr>
+              </thead>
+              <tbody>
+                {cocheras.map((c, i) => (
+                  <tr
+                    key={c.id}
+                    style={{
+                      borderTop: '1px solid var(--border-strong)',
+                      background: i % 2 === 1 ? 'var(--surface-1)' : 'transparent',
+                    }}
+                  >
+                    <td style={{ ...tdStyle, fontWeight: 500, color: 'var(--text-primary)' }}>{c.numero}</td>
+                    <td style={tdStyle}>
+                      {c.tamano}
+                      {c.es_externa ? ' · externa' : ''}
+                    </td>
+                    <td style={tdStyle}>{c.tipo_vehiculo_permitido ?? '—'}</td>
+                    <td style={tdStyle}>
+                      <span
+                        style={{
+                          background: `var(--${c.estado}-bg)`,
+                          color: `var(--${c.estado}-text)`,
+                          padding: '2px 8px',
+                          borderRadius: 999,
+                          fontSize: 11,
+                        }}
+                      >
+                        {ESTADO_COCHERA_LABEL[c.estado]}
+                      </span>
+                    </td>
+                    <td style={tdStyle}>{c.ocupante?.habNumero ?? ''}</td>
+                    <td style={tdStyle}>{c.ocupante?.huesped ?? ''}</td>
+                    <td style={{ ...tdStyle, borderRight: 'none' }}>
+                      {c.ocupante?.vehiculo
+                        ? [c.ocupante.vehiculo.marca, c.ocupante.vehiculo.tipo, c.ocupante.vehiculo.placa]
+                            .filter(Boolean)
+                            .join(' · ')
+                        : ''}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
       )}
 
       {checkinHab && (

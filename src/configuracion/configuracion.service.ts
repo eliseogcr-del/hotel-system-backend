@@ -304,11 +304,51 @@ export class ConfiguracionService {
   async listarCocheras(client: SupabaseClient, hotelId: string) {
     const { data, error } = await client
       .from('cocheras')
-      .select('*')
+      .select(
+        `
+        *,
+        reserva_habitacion(
+          id,
+          habitaciones(hab_numero),
+          reservas(huespedes(nombres, apellidos)),
+          estadias(estado_actual),
+          vehiculos(marca, tipo, placa)
+        )
+      `,
+      )
       .eq('hotel_id', hotelId)
       .order('numero', { ascending: true });
     if (error) throw error;
-    return data;
+
+    // reserva_habitacion viene como arreglo (relación inversa por FK): nos
+    // quedamos con la ocupación vigente, si la hay, para mostrar quién está
+    // usando la cochera ahora mismo (no todo su historial).
+    return (data ?? []).map((cochera) => {
+      const { reserva_habitacion, ...resto } = cochera as unknown as {
+        reserva_habitacion: Array<{
+          habitaciones: { hab_numero: number } | null;
+          reservas: { huespedes: { nombres: string; apellidos: string } | null } | null;
+          estadias: { estado_actual: string } | null;
+          vehiculos: { marca: string | null; tipo: string | null; placa: string | null } | null;
+        }>;
+        [key: string]: unknown;
+      };
+      const ocupacionVigente = (reserva_habitacion ?? []).find(
+        (rh) => rh.estadias?.estado_actual === 'en_curso',
+      );
+      return {
+        ...resto,
+        ocupante: ocupacionVigente
+          ? {
+              habNumero: ocupacionVigente.habitaciones?.hab_numero ?? null,
+              huesped: ocupacionVigente.reservas?.huespedes
+                ? `${ocupacionVigente.reservas.huespedes.nombres} ${ocupacionVigente.reservas.huespedes.apellidos}`
+                : null,
+              vehiculo: ocupacionVigente.vehiculos ?? null,
+            }
+          : null,
+      };
+    });
   }
 
   async actualizarCochera(
