@@ -276,14 +276,26 @@ create table productos_bazar (
     activo boolean not null default true
 );
 
+-- Tipos de desayuno vendibles (ej. Continental, Americano), cada uno con su
+-- propio precio -- para venta suelta a huéspedes que no lo tienen incluido
+-- de cortesía en la tarifa (ver reserva_habitacion.incluye_desayuno).
+create table tipos_desayuno (
+    id uuid primary key default gen_random_uuid(),
+    hotel_id uuid not null references hoteles(id) on delete cascade,
+    nombre text not null,
+    precio numeric(10,2) not null,
+    activo boolean not null default true
+);
+
 -- Libro único de cargos y abonos por estadía (reemplaza Pagos + Consumos + CuentasCobrar)
 create table movimientos_cuenta (
     id uuid primary key default gen_random_uuid(),
     estadia_id uuid not null references estadias(id) on delete cascade,
-    tipo text not null check (tipo in ('alquiler','consumo_bazar','pago','early','late','ajuste','cochera')),
+    tipo text not null check (tipo in ('alquiler','consumo_bazar','pago','early','late','ajuste','cochera','desayuno')),
     monto numeric(10,2) not null,       -- positivo = cargo, negativo = abono/pago
     metodo_pago text check (metodo_pago in ('efectivo','transferencia','yape','tarjeta')),
     producto_id uuid references productos_bazar(id),
+    tipo_desayuno_id uuid references tipos_desayuno(id),
     pagado_al_momento boolean default true,
     sesion_turno_id uuid references sesiones_turno(id),
     fecha timestamptz not null default now(),
@@ -436,6 +448,7 @@ alter table vehiculos enable row level security;
 alter table estadias enable row level security;
 alter table tareas_hk enable row level security;
 alter table productos_bazar enable row level security;
+alter table tipos_desayuno enable row level security;
 alter table movimientos_cuenta enable row level security;
 alter table comprobantes enable row level security;
 alter table cotizaciones enable row level security;
@@ -510,6 +523,9 @@ create policy p_tareas_hk on tareas_hk for all
     using (is_super_admin() or hotel_id in (select my_hotel_ids()));
 
 create policy p_productos_bazar on productos_bazar for all
+    using (is_super_admin() or hotel_id in (select my_hotel_ids()));
+
+create policy p_tipos_desayuno on tipos_desayuno for all
     using (is_super_admin() or hotel_id in (select my_hotel_ids()));
 
 create policy p_movimientos_cuenta on movimientos_cuenta for all

@@ -91,6 +91,14 @@ export class CrearReservaHabitacionDto {
 
   @IsOptional()
   @IsString()
+  vehiculoMarca?: string;
+
+  @IsOptional()
+  @IsString()
+  vehiculoTipo?: string;
+
+  @IsOptional()
+  @IsString()
   vehiculoPlaca?: string;
 
   @IsOptional()

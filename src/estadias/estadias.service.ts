@@ -299,6 +299,11 @@ export class EstadiasService {
           tarifaDiaManual: dto.tarifaDia,
           diasManual: dto.dias,
           cobroEarly,
+          incluyeDesayuno: dto.incluyeDesayuno,
+          cocheraId: dto.cocheraId,
+          vehiculoMarca: dto.vehiculoMarca,
+          vehiculoTipo: dto.vehiculoTipo,
+          vehiculoPlaca: dto.vehiculoPlaca,
         },
       ],
     };
@@ -336,16 +341,19 @@ export class EstadiasService {
     if (dto.tipo === 'consumo_bazar' && !dto.productoId) {
       throw new BadRequestException('consumo_bazar requiere productoId');
     }
+    if (dto.tipo === 'desayuno' && !dto.tipoDesayunoId) {
+      throw new BadRequestException('desayuno requiere tipoDesayunoId');
+    }
     if (dto.tipo !== 'ajuste' && dto.monto < 0) {
       throw new BadRequestException(
         'El monto debe ser un valor positivo; el signo se calcula según el tipo de movimiento',
       );
     }
 
+    const esVentaConCatalogo = dto.tipo === 'consumo_bazar' || dto.tipo === 'desayuno';
     const montoFinal = dto.tipo === 'pago' ? -Math.abs(dto.monto) : dto.monto;
-    const pagadoAlMomento =
-      dto.tipo === 'consumo_bazar' ? (dto.pagadoAlMomento ?? true) : false;
-    const generaCaja = dto.tipo === 'pago' || (dto.tipo === 'consumo_bazar' && pagadoAlMomento);
+    const pagadoAlMomento = esVentaConCatalogo ? (dto.pagadoAlMomento ?? true) : false;
+    const generaCaja = dto.tipo === 'pago' || (esVentaConCatalogo && pagadoAlMomento);
 
     let sesionTurnoId: string | undefined;
     if (generaCaja) {
@@ -357,21 +365,27 @@ export class EstadiasService {
       sesionTurnoId = await this.obtenerSesionAbierta(client, hotelId, personalId);
     }
 
-    // Para consumo_bazar, las notas se arman con el nombre del producto (y la
-    // cantidad si es más de 1) en vez de depender de que el personal lo tipee,
-    // así queda visible en el libro qué compró el huésped.
+    // Para consumo_bazar y desayuno, las notas se arman con el nombre del
+    // producto/tipo (y la cantidad si es más de 1) en vez de depender de que
+    // el personal lo tipee, así queda visible en el libro qué se vendió.
     let notasCargo = dto.notas;
-    if (dto.tipo === 'consumo_bazar') {
-      const { data: producto, error: prodError } = await client
-        .from('productos_bazar')
+    if (esVentaConCatalogo) {
+      const tabla = dto.tipo === 'consumo_bazar' ? 'productos_bazar' : 'tipos_desayuno';
+      const id = dto.tipo === 'consumo_bazar' ? dto.productoId : dto.tipoDesayunoId;
+      const { data: item, error: itemError } = await client
+        .from(tabla)
         .select('nombre')
-        .eq('id', dto.productoId)
+        .eq('id', id)
         .maybeSingle();
-      if (prodError) throw prodError;
-      if (!producto) throw new NotFoundException('Producto de bazar no encontrado');
+      if (itemError) throw itemError;
+      if (!item) {
+        throw new NotFoundException(
+          dto.tipo === 'consumo_bazar' ? 'Producto de bazar no encontrado' : 'Tipo de desayuno no encontrado',
+        );
+      }
 
       const cantidad = dto.cantidad ?? 1;
-      const descripcion = `${producto.nombre}${cantidad > 1 ? ` x${cantidad}` : ''}`;
+      const descripcion = `${item.nombre}${cantidad > 1 ? ` x${cantidad}` : ''}`;
       notasCargo = dto.notas ? `${descripcion} — ${dto.notas}` : descripcion;
     }
 
@@ -380,16 +394,17 @@ export class EstadiasService {
       monto: montoFinal,
       metodoPago: dto.metodoPago,
       productoId: dto.productoId,
+      tipoDesayunoId: dto.tipoDesayunoId,
       pagadoAlMomento,
       sesionTurnoId,
       notas: notasCargo,
       registradoPor: personalId,
     });
 
-    // El consumo_bazar pagado al momento genera además el pago que compensa
-    // esa deuda en el libro de la estadía (antes solo se registraba el
-    // ingreso en caja y el cargo quedaba como saldo pendiente).
-    if (dto.tipo === 'consumo_bazar' && pagadoAlMomento) {
+    // La venta con catálogo (bazar/desayuno) pagada al momento genera además
+    // el pago que compensa esa deuda en el libro de la estadía (antes solo
+    // se registraba el ingreso en caja y el cargo quedaba como pendiente).
+    if (esVentaConCatalogo && pagadoAlMomento) {
       await this.insertarMovimiento(client, estadiaId, {
         tipo: 'pago',
         monto: -Math.abs(dto.monto),
@@ -400,11 +415,17 @@ export class EstadiasService {
     }
 
     if (generaCaja && sesionTurnoId) {
+      const conceptoCaja =
+        dto.tipo === 'pago'
+          ? 'Pago de huésped'
+          : dto.tipo === 'desayuno'
+            ? 'Desayuno pagado al momento'
+            : 'Consumo de bazar pagado al momento';
       const { error: cajaError } = await client.from('movimientos_caja').insert({
         sesion_turno_id: sesionTurnoId,
         tipo: 'ingreso',
         monto: Math.abs(dto.monto),
-        concepto: dto.tipo === 'pago' ? 'Pago de huésped' : 'Consumo de bazar pagado al momento',
+        concepto: conceptoCaja,
         metodo_pago: dto.metodoPago,
         notas: notasCargo ?? null,
       });
@@ -678,6 +699,7 @@ export class EstadiasService {
       monto: number;
       metodoPago?: MetodoPago;
       productoId?: string;
+      tipoDesayunoId?: string;
       pagadoAlMomento?: boolean;
       sesionTurnoId?: string;
       notas?: string;
@@ -690,6 +712,7 @@ export class EstadiasService {
       monto: input.monto,
       metodo_pago: input.metodoPago ?? null,
       producto_id: input.productoId ?? null,
+      tipo_desayuno_id: input.tipoDesayunoId ?? null,
       pagado_al_momento: input.pagadoAlMomento ?? true,
       sesion_turno_id: input.sesionTurnoId ?? null,
       notas: input.notas ?? null,

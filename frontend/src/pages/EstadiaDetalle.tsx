@@ -54,18 +54,26 @@ interface Cochera {
   es_externa: boolean;
 }
 
-const TIPOS_MOVIMIENTO = ['pago', 'consumo_bazar', 'ajuste', 'early', 'late', 'cochera'];
+const TIPOS_MOVIMIENTO = ['pago', 'consumo_bazar', 'desayuno', 'ajuste', 'early', 'late', 'cochera'];
 const METODOS = ['efectivo', 'transferencia', 'yape', 'tarjeta'];
 
 const TIPO_LABEL: Record<string, string> = {
   alquiler: 'Alquiler',
   pago: 'Pago',
   consumo_bazar: 'Consumo de bazar',
+  desayuno: 'Desayuno',
   ajuste: 'Ajuste',
   early: 'Early (entrada temprana)',
   late: 'Late (salida tardía)',
   cochera: 'Cochera',
 };
+
+interface TipoDesayuno {
+  id: string;
+  nombre: string;
+  precio: number;
+  activo: boolean;
+}
 
 interface ProductoBazar {
   id: string;
@@ -560,6 +568,8 @@ function RegistrarMovimientoForm({
   const [notas, setNotas] = useState('');
   const [productos, setProductos] = useState<ProductoBazar[]>([]);
   const [productoId, setProductoId] = useState('');
+  const [tiposDesayuno, setTiposDesayuno] = useState<TipoDesayuno[]>([]);
+  const [tipoDesayunoId, setTipoDesayunoId] = useState('');
   const [cantidad, setCantidad] = useState('1');
   const [pagadoAlMomento, setPagadoAlMomento] = useState(true);
   const [enviando, setEnviando] = useState(false);
@@ -567,21 +577,27 @@ function RegistrarMovimientoForm({
 
   useEffect(() => {
     api.get<ProductoBazar[]>(`/hoteles/${hotelId}/productos-bazar`).then(setProductos).catch(() => {});
+    api.get<TipoDesayuno[]>(`/hoteles/${hotelId}/tipos-desayuno`).then(setTiposDesayuno).catch(() => {});
   }, [hotelId]);
 
+  const esVentaConCatalogo = tipo === 'consumo_bazar' || tipo === 'desayuno';
   const productosActivos = productos.filter((p) => p.activo);
-  const requiereMetodo = tipo === 'pago' || (tipo === 'consumo_bazar' && pagadoAlMomento);
+  const tiposDesayunoActivos = tiposDesayuno.filter((t) => t.activo);
+  const catalogo = tipo === 'consumo_bazar' ? productosActivos : tiposDesayunoActivos;
+  const itemId = tipo === 'consumo_bazar' ? productoId : tipoDesayunoId;
+  const requiereMetodo = tipo === 'pago' || (esVentaConCatalogo && pagadoAlMomento);
 
-  function elegirProducto(id: string) {
-    setProductoId(id);
-    const producto = productos.find((p) => p.id === id);
-    if (producto) setMonto(String(producto.precio * (Number(cantidad) || 1)));
+  function elegirItem(id: string) {
+    if (tipo === 'consumo_bazar') setProductoId(id);
+    else setTipoDesayunoId(id);
+    const item = catalogo.find((p) => p.id === id);
+    if (item) setMonto(String(item.precio * (Number(cantidad) || 1)));
   }
 
   function cambiarCantidad(valor: string) {
     setCantidad(valor);
-    const producto = productos.find((p) => p.id === productoId);
-    if (producto) setMonto(String(producto.precio * (Number(valor) || 1)));
+    const item = catalogo.find((p) => p.id === itemId);
+    if (item) setMonto(String(item.precio * (Number(valor) || 1)));
   }
 
   async function handleSubmit(e: FormEvent) {
@@ -594,13 +610,15 @@ function RegistrarMovimientoForm({
         monto: Number(monto),
         metodoPago: requiereMetodo ? metodoPago : undefined,
         productoId: tipo === 'consumo_bazar' ? productoId : undefined,
-        pagadoAlMomento: tipo === 'consumo_bazar' ? pagadoAlMomento : undefined,
-        cantidad: tipo === 'consumo_bazar' ? Number(cantidad) || 1 : undefined,
+        tipoDesayunoId: tipo === 'desayuno' ? tipoDesayunoId : undefined,
+        pagadoAlMomento: esVentaConCatalogo ? pagadoAlMomento : undefined,
+        cantidad: esVentaConCatalogo ? Number(cantidad) || 1 : undefined,
         notas: notas || undefined,
       });
       setMonto('');
       setNotas('');
       setProductoId('');
+      setTipoDesayunoId('');
       setCantidad('1');
       onRegistrado();
     } catch (err) {
@@ -634,25 +652,27 @@ function RegistrarMovimientoForm({
           ))}
         </select>
       </div>
-      {tipo === 'consumo_bazar' && (
+      {esVentaConCatalogo && (
         <div style={{ minWidth: 160 }}>
-          <label style={labelStyle}>Producto</label>
-          <select value={productoId} onChange={(e) => elegirProducto(e.target.value)} style={inputStyle} required>
+          <label style={labelStyle}>{tipo === 'consumo_bazar' ? 'Producto' : 'Tipo de desayuno'}</label>
+          <select value={itemId} onChange={(e) => elegirItem(e.target.value)} style={inputStyle} required>
             <option value="">Selecciona...</option>
-            {productosActivos.map((p) => (
+            {catalogo.map((p) => (
               <option key={p.id} value={p.id}>
                 {p.nombre} (S/. {p.precio})
               </option>
             ))}
           </select>
-          {productosActivos.length === 0 && (
+          {catalogo.length === 0 && (
             <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: '4px 0 0' }}>
-              No hay productos de bazar configurados (Configuración → Bazar).
+              {tipo === 'consumo_bazar'
+                ? 'No hay productos de bazar configurados (Configuración → Bazar).'
+                : 'No hay tipos de desayuno configurados (Configuración → Tipos de desayuno).'}
             </p>
           )}
         </div>
       )}
-      {tipo === 'consumo_bazar' && (
+      {esVentaConCatalogo && (
         <div style={{ width: 80 }}>
           <label style={labelStyle}>Cantidad</label>
           <input
@@ -670,7 +690,7 @@ function RegistrarMovimientoForm({
         <label style={labelStyle}>Monto</label>
         <input type="number" min={0.01} step={0.01} value={monto} onChange={(e) => setMonto(e.target.value)} style={inputStyle} required />
       </div>
-      {tipo === 'consumo_bazar' && (
+      {esVentaConCatalogo && (
         <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, paddingBottom: 8 }}>
           <input type="checkbox" checked={pagadoAlMomento} onChange={(e) => setPagadoAlMomento(e.target.checked)} />
           Pagó al momento
@@ -694,13 +714,13 @@ function RegistrarMovimientoForm({
           value={notas}
           onChange={(e) => setNotas(e.target.value)}
           style={inputStyle}
-          placeholder={tipo === 'consumo_bazar' ? 'Opcional, se agrega al nombre del producto' : undefined}
+          placeholder={esVentaConCatalogo ? 'Opcional, se agrega a la descripción' : undefined}
         />
       </div>
       <button type="submit" disabled={enviando} style={btnPrimary}>
         {enviando ? 'Guardando...' : 'Registrar'}
       </button>
-      {tipo === 'consumo_bazar' && !pagadoAlMomento && (
+      {esVentaConCatalogo && !pagadoAlMomento && (
         <p style={{ fontSize: 11, color: 'var(--text-muted)', width: '100%', margin: 0 }}>
           No pagó al momento: solo se suma a lo que debe, no genera ingreso de caja ahora.
         </p>

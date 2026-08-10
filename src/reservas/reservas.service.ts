@@ -50,7 +50,8 @@ export class ReservasService {
 
     // 1. Validar disponibilidad de TODAS las líneas antes de tocar la base:
     // si una habitación de la reserva grupal choca, se rechaza la reserva
-    // completa en vez de crearla a medias.
+    // completa en vez de crearla a medias. Mismo criterio para las cocheras
+    // que traiga cada línea: deben estar 'disponible' en este momento.
     for (const linea of dto.habitaciones) {
       const resultado = await this.disponibilidad.validar(client, {
         hotelId,
@@ -60,6 +61,21 @@ export class ReservasService {
       });
       if (!resultado.disponible) {
         throw new ConflictException(resultado.conflicto);
+      }
+
+      if (linea.cocheraId) {
+        const { data: cochera, error: cocheraError } = await client
+          .from('cocheras')
+          .select('id, estado, hotel_id')
+          .eq('id', linea.cocheraId)
+          .maybeSingle();
+        if (cocheraError) throw cocheraError;
+        if (!cochera || cochera.hotel_id !== hotelId) {
+          throw new NotFoundException('Cochera no encontrada en este hotel');
+        }
+        if (cochera.estado !== 'disponible') {
+          throw new BadRequestException('Esa cochera ya está ocupada');
+        }
       }
     }
 
@@ -143,18 +159,22 @@ export class ReservasService {
       throw rhError;
     }
 
-    // 4. Vehículos, solo para las líneas que trajeron cochera + datos de placa.
+    // 4. Vehículos, solo para las líneas que trajeron cochera + algún dato del vehículo.
     const vehiculosAInsertar = lineasConCosto
       .map((l, i) => ({ l, rh: reservaHabitaciones[i] }))
       .filter(
         ({ l }) =>
           l.linea.cocheraId &&
           (l.linea.vehiculoPlaca ||
+            l.linea.vehiculoMarca ||
+            l.linea.vehiculoTipo ||
             l.linea.vehiculoColor ||
             l.linea.vehiculoCaracteristicas),
       )
       .map(({ l, rh }) => ({
         reserva_habitacion_id: rh.id,
+        marca: l.linea.vehiculoMarca ?? null,
+        tipo: l.linea.vehiculoTipo ?? null,
         placa: l.linea.vehiculoPlaca ?? null,
         color: l.linea.vehiculoColor ?? null,
         caracteristicas: l.linea.vehiculoCaracteristicas ?? null,
@@ -165,6 +185,19 @@ export class ReservasService {
         .from('vehiculos')
         .insert(vehiculosAInsertar);
       if (vehError) throw vehError;
+    }
+
+    // 5. Marcar como 'ocupada' cada cochera asignada (ya se validó que
+    // estaban 'disponible' en el paso 1, antes de tocar la base).
+    const cocheraIds = lineasConCosto
+      .map((l) => l.linea.cocheraId)
+      .filter((id): id is string => !!id);
+    if (cocheraIds.length > 0) {
+      const { error: cocheraOcuparError } = await client
+        .from('cocheras')
+        .update({ estado: 'ocupada' })
+        .in('id', cocheraIds);
+      if (cocheraOcuparError) throw cocheraOcuparError;
     }
 
     return this.obtenerDetalle(client, hotelId, reserva.id);

@@ -1,4 +1,4 @@
-import { useState, type CSSProperties, type FormEvent } from 'react';
+import { useEffect, useState, type CSSProperties, type FormEvent } from 'react';
 import { api, ApiError } from '../lib/api';
 import { buscarHuespedPorDni } from '../lib/huespedes';
 
@@ -26,6 +26,15 @@ interface TipoHabitacionPrecios {
   precio_web: number;
   precio_por_hora: number | null;
   precio_costo: number;
+}
+
+interface Cochera {
+  id: string;
+  numero: string;
+  tamano: string;
+  tipo_vehiculo_permitido: string | null;
+  estado: string;
+  es_externa: boolean;
 }
 
 interface Props {
@@ -73,10 +82,23 @@ export function CheckinRapidoModal({
   const [dias, setDias] = useState(1);
   const [checkinPrevisto, setCheckinPrevisto] = useState(ahoraLocal());
   const [cobroEarly, setCobroEarly] = useState('');
+  const [incluyeDesayuno, setIncluyeDesayuno] = useState(false);
+
+  const [tieneVehiculo, setTieneVehiculo] = useState(false);
+  const [vehiculoMarca, setVehiculoMarca] = useState('');
+  const [vehiculoTipo, setVehiculoTipo] = useState('');
+  const [vehiculoPlaca, setVehiculoPlaca] = useState('');
+  const [cocheras, setCocheras] = useState<Cochera[]>([]);
+  const [cocheraId, setCocheraId] = useState('');
 
   const [enviando, setEnviando] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  useEffect(() => {
+    api.get<Cochera[]>(`/hoteles/${hotelId}/cocheras`).then(setCocheras).catch(() => {});
+  }, [hotelId]);
+
+  const cocherasDisponibles = cocheras.filter((c) => c.estado === 'disponible');
   const precioCosto = precios ? Number(precios.precio_costo) : 0;
   const tarifaBajoCosto = precioCosto > 0 && tarifaDia < precioCosto;
 
@@ -145,6 +167,11 @@ export function CheckinRapidoModal({
         dias,
         checkinPrevisto: new Date(checkinPrevisto).toISOString(),
         cobroEarlyManual: cobroEarly === '' ? undefined : Number(cobroEarly),
+        incluyeDesayuno,
+        cocheraId: tieneVehiculo && cocheraId ? cocheraId : undefined,
+        vehiculoMarca: tieneVehiculo ? vehiculoMarca.trim() || undefined : undefined,
+        vehiculoTipo: tieneVehiculo ? vehiculoTipo.trim() || undefined : undefined,
+        vehiculoPlaca: tieneVehiculo ? vehiculoPlaca.trim() || undefined : undefined,
       });
       onCreado();
       onClose();
@@ -300,6 +327,11 @@ export function CheckinRapidoModal({
             </div>
           </div>
 
+          <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13 }}>
+            <input type="checkbox" checked={incluyeDesayuno} onChange={(e) => setIncluyeDesayuno(e.target.checked)} />
+            Incluye desayuno (cortesía, no se cobra)
+          </label>
+
           <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end' }}>
             <div style={{ width: 150 }}>
               <label style={labelStyle}>Tarifa/día (S/.)</label>
@@ -352,6 +384,54 @@ export function CheckinRapidoModal({
             El cargo early: vacío = se calcula solo (50% de la tarifa si ingresa antes de la hora de
             check-in); pon 0 para no cobrarlo.
           </p>
+
+          <hr style={{ border: 'none', borderTop: '1px solid var(--border)' }} />
+
+          <div>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, marginBottom: 8 }}>
+              <input type="checkbox" checked={tieneVehiculo} onChange={(e) => setTieneVehiculo(e.target.checked)} />
+              El huésped tiene vehículo
+            </label>
+            {tieneVehiculo && (
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                <div style={{ width: 160 }}>
+                  <label style={labelStyle}>Marca</label>
+                  <input value={vehiculoMarca} onChange={(e) => setVehiculoMarca(e.target.value)} style={inputStyle} />
+                </div>
+                <div style={{ width: 140 }}>
+                  <label style={labelStyle}>Tipo</label>
+                  <input
+                    value={vehiculoTipo}
+                    onChange={(e) => setVehiculoTipo(e.target.value)}
+                    placeholder="Auto, camioneta..."
+                    style={inputStyle}
+                  />
+                </div>
+                <div style={{ width: 140 }}>
+                  <label style={labelStyle}>Placa</label>
+                  <input value={vehiculoPlaca} onChange={(e) => setVehiculoPlaca(e.target.value)} style={inputStyle} />
+                </div>
+                <div style={{ flex: 1, minWidth: 180 }}>
+                  <label style={labelStyle}>Cochera</label>
+                  <select value={cocheraId} onChange={(e) => setCocheraId(e.target.value)} style={inputStyle}>
+                    <option value="">Sin asignar</option>
+                    {cocherasDisponibles.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.numero} ({c.tamano}
+                        {c.tipo_vehiculo_permitido ? ` · ${c.tipo_vehiculo_permitido}` : ''}
+                        {c.es_externa ? ' · externa' : ''})
+                      </option>
+                    ))}
+                  </select>
+                  {cocherasDisponibles.length === 0 && (
+                    <p style={{ fontSize: 11, color: 'var(--danger)', margin: '4px 0 0' }}>
+                      No se puede asignar cochera: todas están ocupadas ahora mismo.
+                    </p>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
 
           <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 8 }}>
             <button type="button" onClick={onClose} style={btnSecondary}>

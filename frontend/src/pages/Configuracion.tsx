@@ -39,6 +39,13 @@ interface ProductoBazar {
   activo: boolean;
 }
 
+interface TipoDesayuno {
+  id: string;
+  nombre: string;
+  precio: number;
+  activo: boolean;
+}
+
 interface HotelConfig {
   id: string;
   nombre: string;
@@ -68,6 +75,7 @@ export function Configuracion() {
   const [habitaciones, setHabitaciones] = useState<Habitacion[]>([]);
   const [cocheras, setCocheras] = useState<Cochera[]>([]);
   const [productosBazar, setProductosBazar] = useState<ProductoBazar[]>([]);
+  const [tiposDesayuno, setTiposDesayuno] = useState<TipoDesayuno[]>([]);
   const [personal, setPersonal] = useState<PersonalHotel[]>([]);
   const [hotel, setHotel] = useState<HotelConfig | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -82,6 +90,7 @@ export function Configuracion() {
     api.get<Habitacion[]>(`/hoteles/${h}/habitaciones`).then(setHabitaciones).catch(reportarError);
     api.get<Cochera[]>(`/hoteles/${h}/cocheras`).then(setCocheras).catch(reportarError);
     api.get<ProductoBazar[]>(`/hoteles/${h}/productos-bazar`).then(setProductosBazar).catch(reportarError);
+    api.get<TipoDesayuno[]>(`/hoteles/${h}/tipos-desayuno`).then(setTiposDesayuno).catch(reportarError);
     api.get<PersonalHotel[]>(`/hoteles/${h}/personal`).then(setPersonal).catch(reportarError);
     api.get<HotelConfig>(`/hoteles/${h}`).then(setHotel).catch(reportarError);
   }
@@ -111,6 +120,7 @@ export function Configuracion() {
       />
       <SeccionCocheras hotelId={hotelActual.hotelId} cocheras={cocheras} onCambio={cargarTodo} setError={setError} />
       <SeccionBazar hotelId={hotelActual.hotelId} productos={productosBazar} onCambio={cargarTodo} setError={setError} />
+      <SeccionTiposDesayuno hotelId={hotelActual.hotelId} tipos={tiposDesayuno} onCambio={cargarTodo} setError={setError} />
     </div>
   );
 }
@@ -1123,6 +1133,172 @@ function EditarProductoBazarForm({
     setError(null);
     try {
       await api.patch(`/hoteles/${hotelId}/productos-bazar/${producto.id}`, {
+        nombre,
+        precio: Number(precio),
+      });
+      onGuardado();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'No se pudo guardar');
+    } finally {
+      setGuardando(false);
+    }
+  }
+
+  return (
+    <form onSubmit={guardar} style={{ ...filaStyle, justifyContent: 'flex-start', gap: 8 }}>
+      <input value={nombre} onChange={(e) => setNombre(e.target.value)} style={{ ...inputStyle, flex: 1 }} required />
+      <input
+        type="number"
+        min={0}
+        step={0.01}
+        value={precio}
+        onChange={(e) => setPrecio(e.target.value)}
+        style={{ ...inputStyle, width: 100 }}
+        required
+      />
+      <button type="submit" disabled={guardando} style={btnPrimary}>
+        Guardar
+      </button>
+      <button type="button" onClick={onCancelar} style={btnSecondary}>
+        Cancelar
+      </button>
+    </form>
+  );
+}
+
+function SeccionTiposDesayuno({
+  hotelId,
+  tipos,
+  onCambio,
+  setError,
+}: {
+  hotelId: string;
+  tipos: TipoDesayuno[];
+  onCambio: () => void;
+  setError: (e: string | null) => void;
+}) {
+  const [nombre, setNombre] = useState('');
+  const [precio, setPrecio] = useState('');
+  const [enviando, setEnviando] = useState(false);
+  const [editandoId, setEditandoId] = useState<string | null>(null);
+
+  async function crear(e: FormEvent) {
+    e.preventDefault();
+    setEnviando(true);
+    setError(null);
+    try {
+      await api.post(`/hoteles/${hotelId}/tipos-desayuno`, { nombre, precio: Number(precio) });
+      setNombre('');
+      setPrecio('');
+      onCambio();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'No se pudo crear el tipo de desayuno');
+    } finally {
+      setEnviando(false);
+    }
+  }
+
+  async function alternarActivo(tipo: TipoDesayuno) {
+    setError(null);
+    try {
+      await api.patch(`/hoteles/${hotelId}/tipos-desayuno/${tipo.id}`, { activo: !tipo.activo });
+      onCambio();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'No se pudo actualizar');
+    }
+  }
+
+  return (
+    <section>
+      <h2 style={{ fontSize: 15, marginBottom: 10 }}>Tipos de desayuno</h2>
+      <p style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 8 }}>
+        Tipos de desayuno que se le pueden vender al huésped (ej. Continental, Americano), cada uno
+        con su propio precio. Se registran desde el detalle de cada estadía. Si la tarifa del
+        huésped ya incluye desayuno de cortesía, eso se marca al hacer el check-in, no aquí.
+      </p>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 12 }}>
+        {tipos.map((t) =>
+          editandoId === t.id ? (
+            <EditarTipoDesayunoForm
+              key={t.id}
+              hotelId={hotelId}
+              tipo={t}
+              onGuardado={() => {
+                setEditandoId(null);
+                onCambio();
+              }}
+              onCancelar={() => setEditandoId(null)}
+              setError={setError}
+            />
+          ) : (
+            <div key={t.id} style={filaStyle}>
+              <span>{t.nombre}</span>
+              <span style={{ color: 'var(--text-secondary)' }}>S/. {t.precio}</span>
+              <span style={{ fontSize: 11, color: t.activo ? 'var(--disponible)' : 'var(--text-muted)' }}>
+                {t.activo ? 'Activo' : 'Inactivo'}
+              </span>
+              <span style={{ display: 'flex', gap: 6 }}>
+                <button onClick={() => setEditandoId(t.id)} style={btnSecondary}>
+                  Editar
+                </button>
+                <button onClick={() => alternarActivo(t)} style={btnSecondary}>
+                  {t.activo ? 'Desactivar' : 'Activar'}
+                </button>
+              </span>
+            </div>
+          ),
+        )}
+        {tipos.length === 0 && <p style={{ color: 'var(--text-muted)', fontSize: 13 }}>No hay tipos de desayuno creados.</p>}
+      </div>
+      <form onSubmit={crear} style={formInlineStyle}>
+        <input
+          placeholder="Nombre (ej. Continental)"
+          value={nombre}
+          onChange={(e) => setNombre(e.target.value)}
+          style={inputStyle}
+          required
+        />
+        <input
+          type="number"
+          min={0}
+          step={0.01}
+          placeholder="Precio"
+          value={precio}
+          onChange={(e) => setPrecio(e.target.value)}
+          style={{ ...inputStyle, width: 100 }}
+          required
+        />
+        <button type="submit" disabled={enviando} style={btnPrimary}>
+          + Agregar tipo de desayuno
+        </button>
+      </form>
+    </section>
+  );
+}
+
+function EditarTipoDesayunoForm({
+  hotelId,
+  tipo,
+  onGuardado,
+  onCancelar,
+  setError,
+}: {
+  hotelId: string;
+  tipo: TipoDesayuno;
+  onGuardado: () => void;
+  onCancelar: () => void;
+  setError: (e: string | null) => void;
+}) {
+  const [nombre, setNombre] = useState(tipo.nombre);
+  const [precio, setPrecio] = useState(String(tipo.precio));
+  const [guardando, setGuardando] = useState(false);
+
+  async function guardar(e: FormEvent) {
+    e.preventDefault();
+    setGuardando(true);
+    setError(null);
+    try {
+      await api.patch(`/hoteles/${hotelId}/tipos-desayuno/${tipo.id}`, {
         nombre,
         precio: Number(precio),
       });

@@ -1,4 +1,5 @@
 import {
+  IsBoolean,
   IsEmail,
   IsEnum,
   IsISO8601,
@@ -97,4 +98,25 @@ export class CheckinRapidoDto {
   @IsNumber()
   @Min(0)
   cobroEarlyManual?: number;
+
+  // Desayuno de cortesía incluido en la tarifa (no genera ningún cargo).
+  @IsOptional()
+  @IsBoolean()
+  incluyeDesayuno?: boolean;
+
+  @IsOptional()
+  @IsUUID()
+  cocheraId?: string;
+
+  @IsOptional()
+  @IsString()
+  vehiculoMarca?: string;
+
+  @IsOptional()
+  @IsString()
+  vehiculoTipo?: string;
+
+  @IsOptional()
+  @IsString()
+  vehiculoPlaca?: string;
 }

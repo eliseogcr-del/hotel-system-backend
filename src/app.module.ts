@@ -12,6 +12,7 @@ import { ImportacionesCanalModule } from './importaciones-canal/importaciones-ca
 import { ConfiguracionModule } from './configuracion/configuracion.module';
 import { HuespedesModule } from './huespedes/huespedes.module';
 import { ProductosBazarModule } from './productos-bazar/productos-bazar.module';
+import { TiposDesayunoModule } from './tipos-desayuno/tipos-desayuno.module';
 
 @Module({
   imports: [
@@ -28,6 +29,7 @@ import { ProductosBazarModule } from './productos-bazar/productos-bazar.module';
     ConfiguracionModule,
     HuespedesModule,
     ProductosBazarModule,
+    TiposDesayunoModule,
   ],
 })
 export class AppModule {}

@@ -16,7 +16,8 @@ export type TipoMovimientoCuenta =
   | 'early'
   | 'late'
   | 'ajuste'
-  | 'cochera';
+  | 'cochera'
+  | 'desayuno';
 
 export type MetodoPago = 'efectivo' | 'transferencia' | 'yape' | 'tarjeta';
 
@@ -29,6 +30,7 @@ export class RegistrarMovimientoDto {
     'late',
     'ajuste',
     'cochera',
+    'desayuno',
   ])
   tipo: TipoMovimientoCuenta;
 
@@ -45,6 +47,10 @@ export class RegistrarMovimientoDto {
   @IsOptional()
   @IsUUID()
   productoId?: string;
+
+  @IsOptional()
+  @IsUUID()
+  tipoDesayunoId?: string;
 
   @IsOptional()
   @IsBoolean()
