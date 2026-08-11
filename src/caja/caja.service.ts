@@ -122,8 +122,12 @@ export class CajaService {
       throw new BadRequestException('Esta sesión ya está cerrada');
     }
 
-    const { totalIngresos, totalEgresos } = await this.sumarMovimientos(client, sesionId);
-    const saldoFinal = Number(sesion.saldo_inicial) + totalIngresos - totalEgresos;
+    // El saldo que se traspasa entre turnos es SOLO el efectivo físico que
+    // el recepcionista tiene y entrega en mano: Yape/transferencia/tarjeta
+    // van directo a la cuenta de la empresa, a la que el recepcionista no
+    // tiene acceso, así que ese dinero nunca pasa por su caja.
+    const { totalIngresosEfectivo, totalEgresosEfectivo } = await this.sumarMovimientos(client, sesionId);
+    const saldoFinal = Number(sesion.saldo_inicial) + totalIngresosEfectivo - totalEgresosEfectivo;
 
     const { error: updError } = await client
       .from('sesiones_turno')
@@ -218,8 +222,12 @@ export class CajaService {
       .order('created_at', { ascending: true });
     if (error) throw error;
 
-    const { totalIngresos, totalEgresos } = await this.sumarMovimientos(client, sesionId, movimientos);
-    const saldoActual = Number(sesion.saldo_inicial) + totalIngresos - totalEgresos;
+    const { totalIngresos, totalEgresos, totalIngresosEfectivo, totalEgresosEfectivo } =
+      await this.sumarMovimientos(client, sesionId, movimientos);
+    // saldoActual (como saldo_final al cerrar) es solo efectivo: ver nota en
+    // cerrarTurno(). totalIngresos/totalEgresos siguen sumando todos los
+    // métodos, para mostrar el movimiento completo de la sesión.
+    const saldoActual = Number(sesion.saldo_inicial) + totalIngresosEfectivo - totalEgresosEfectivo;
 
     return { ...sesion, movimientos: movimientos ?? [], totalIngresos, totalEgresos, saldoActual };
   }
@@ -227,7 +235,7 @@ export class CajaService {
   private async sumarMovimientos(
     client: SupabaseClient,
     sesionId: string,
-    movimientosPrecargados?: { tipo: string; monto: number }[] | null,
+    movimientosPrecargados?: { tipo: string; monto: number; metodo_pago: string }[] | null,
   ) {
     const movimientos =
       movimientosPrecargados ??
@@ -235,7 +243,7 @@ export class CajaService {
         await (async () => {
           const { data, error } = await client
             .from('movimientos_caja')
-            .select('tipo, monto')
+            .select('tipo, monto, metodo_pago')
             .eq('sesion_turno_id', sesionId);
           if (error) throw error;
           return data;
@@ -248,8 +256,14 @@ export class CajaService {
     const totalEgresos = (movimientos ?? [])
       .filter((m) => m.tipo === 'egreso')
       .reduce((acc, m) => acc + Number(m.monto), 0);
+    const totalIngresosEfectivo = (movimientos ?? [])
+      .filter((m) => m.tipo === 'ingreso' && m.metodo_pago === 'efectivo')
+      .reduce((acc, m) => acc + Number(m.monto), 0);
+    const totalEgresosEfectivo = (movimientos ?? [])
+      .filter((m) => m.tipo === 'egreso' && m.metodo_pago === 'efectivo')
+      .reduce((acc, m) => acc + Number(m.monto), 0);
 
-    return { totalIngresos, totalEgresos };
+    return { totalIngresos, totalEgresos, totalIngresosEfectivo, totalEgresosEfectivo };
   }
 
   private async cargarPersonalHotel(client: SupabaseClient, hotelId: string, personalId: string) {
