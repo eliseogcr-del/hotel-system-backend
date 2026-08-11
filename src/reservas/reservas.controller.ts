@@ -18,6 +18,7 @@ import { ReservasService } from './reservas.service';
 import { CrearReservaDto } from './dto/crear-reserva.dto';
 import { CrearReservaHabitacionDto } from './dto/crear-reserva-habitacion.dto';
 import { ListarReservasQueryDto } from './dto/listar-reservas-query.dto';
+import { CalendarioQueryDto } from './dto/calendario-query.dto';
 
 @Controller('hoteles/:hotelId/reservas')
 @UseGuards(AuthGuard, RolesGuard)
@@ -47,6 +48,22 @@ export class ReservasController {
   ) {
     const client = this.supabase.getClientForRequest(user.accessToken);
     return this.reservasService.listar(client, hotelId, filtros);
+  }
+
+  @Get('calendario')
+  @Roles('admin', 'recepcion')
+  async calendario(
+    @Param('hotelId') hotelId: string,
+    @Query() dto: CalendarioQueryDto,
+    @CurrentUser() user: RequestUser,
+  ) {
+    const client = this.supabase.getClientForRequest(user.accessToken);
+    return this.reservasService.obtenerCalendario(
+      client,
+      hotelId,
+      dto.desde,
+      dto.hasta,
+    );
   }
 
   @Get(':id')

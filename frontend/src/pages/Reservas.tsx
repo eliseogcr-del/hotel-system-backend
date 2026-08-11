@@ -1,4 +1,4 @@
-import { useEffect, useState, type CSSProperties, type FormEvent } from 'react';
+import { useEffect, useMemo, useState, type CSSProperties, type FormEvent } from 'react';
 import { Link } from 'react-router-dom';
 import { api, ApiError } from '../lib/api';
 import { useHotel } from '../contexts/HotelContext';
@@ -48,6 +48,48 @@ interface Reserva {
 const ESTADOS = ['pendiente_revision', 'confirmada', 'cancelada'];
 const ORIGENES = ['telefono', 'whatsapp', 'booking', 'airbnb', 'directo', 'walkin'];
 
+interface ReservaCalendario {
+  id: string;
+  habitacionId: string;
+  checkinPrevisto: string;
+  checkoutPrevisto: string;
+  reservaId: string;
+  estadoReserva: string;
+  huesped: string;
+}
+
+function fechaYMD(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
+function hoyYMD(): string {
+  return fechaYMD(new Date());
+}
+
+function sumarDias(ymd: string, n: number): string {
+  const d = new Date(`${ymd}T00:00:00`);
+  d.setDate(d.getDate() + n);
+  return fechaYMD(d);
+}
+
+function rangoFechas(desde: string, hasta: string): Date[] {
+  const dias: Date[] = [];
+  let cur = new Date(`${desde}T00:00:00`);
+  const fin = new Date(`${hasta}T00:00:00`);
+  while (cur <= fin) {
+    dias.push(new Date(cur));
+    cur = new Date(cur.getTime() + 24 * 60 * 60 * 1000);
+  }
+  return dias;
+}
+
+function capitalizar(texto: string): string {
+  return texto.charAt(0).toUpperCase() + texto.slice(1);
+}
+
 export function Reservas() {
   const { hotelActual } = useHotel();
   const [reservas, setReservas] = useState<Reserva[]>([]);
@@ -57,6 +99,13 @@ export function Reservas() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [mostrarForm, setMostrarForm] = useState(false);
+
+  const [vista, setVista] = useState<'calendario' | 'lista'>('calendario');
+  const [desde, setDesde] = useState(() => hoyYMD());
+  const [hasta, setHasta] = useState(() => sumarDias(hoyYMD(), 10));
+  const [calendario, setCalendario] = useState<ReservaCalendario[]>([]);
+  const [calendarioLoading, setCalendarioLoading] = useState(false);
+  const [calendarioError, setCalendarioError] = useState<string | null>(null);
 
   function cargarReservas() {
     if (!hotelActual) return;
@@ -83,6 +132,17 @@ export function Reservas() {
       .catch(() => {});
   }, [hotelActual]);
 
+  useEffect(() => {
+    if (!hotelActual || !desde || !hasta) return;
+    setCalendarioLoading(true);
+    setCalendarioError(null);
+    api
+      .get<ReservaCalendario[]>(`/hoteles/${hotelActual.hotelId}/reservas/calendario?desde=${desde}&hasta=${hasta}`)
+      .then(setCalendario)
+      .catch((err) => setCalendarioError(err instanceof ApiError ? err.message : 'Error al cargar el calendario'))
+      .finally(() => setCalendarioLoading(false));
+  }, [hotelActual, desde, hasta]);
+
   if (!hotelActual) return null;
 
   return (
@@ -102,60 +162,254 @@ export function Reservas() {
           onCreada={() => {
             setMostrarForm(false);
             cargarReservas();
+            if (hotelActual) {
+              api
+                .get<ReservaCalendario[]>(`/hoteles/${hotelActual.hotelId}/reservas/calendario?desde=${desde}&hasta=${hasta}`)
+                .then(setCalendario)
+                .catch(() => {});
+            }
           }}
         />
       )}
 
-      <div style={{ margin: '16px 0' }}>
-        <select value={filtroEstado} onChange={(e) => setFiltroEstado(e.target.value)} style={selectStyle}>
-          <option value="">Todos los estados</option>
-          {ESTADOS.map((e) => (
-            <option key={e} value={e}>
-              {e}
-            </option>
-          ))}
-        </select>
+      <div style={{ display: 'flex', gap: 6, marginBottom: 16 }}>
+        <button
+          onClick={() => setVista('calendario')}
+          style={vista === 'calendario' ? btnToggleActivo : btnToggle}
+        >
+          Calendario
+        </button>
+        <button onClick={() => setVista('lista')} style={vista === 'lista' ? btnToggleActivo : btnToggle}>
+          Lista
+        </button>
+      </div>
+
+      {vista === 'calendario' && (
+        <CalendarioReservas
+          habitaciones={habitaciones}
+          calendario={calendario}
+          loading={calendarioLoading}
+          error={calendarioError}
+          desde={desde}
+          hasta={hasta}
+          onDesdeChange={setDesde}
+          onHastaChange={setHasta}
+        />
+      )}
+
+      {vista === 'lista' && (
+        <>
+          <div style={{ margin: '16px 0' }}>
+            <select value={filtroEstado} onChange={(e) => setFiltroEstado(e.target.value)} style={selectStyle}>
+              <option value="">Todos los estados</option>
+              {ESTADOS.map((e) => (
+                <option key={e} value={e}>
+                  {e}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {loading && <p style={{ color: 'var(--text-muted)' }}>Cargando...</p>}
+          {error && <p style={{ color: 'var(--danger)' }}>{error}</p>}
+
+          {!loading && !error && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {reservas.map((r) => (
+                <Link
+                  key={r.id}
+                  to={`/reservas/${r.id}`}
+                  style={{
+                    display: 'flex',
+                    flexWrap: 'wrap',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    gap: '4px 12px',
+                    padding: '10px 14px',
+                    background: 'var(--surface-1)',
+                    border: '1px solid var(--border)',
+                    borderRadius: 'var(--radius)',
+                    textDecoration: 'none',
+                    color: 'var(--text-primary)',
+                    fontSize: 13,
+                  }}
+                >
+                  <span>
+                    {r.huespedes ? `${r.huespedes.nombres} ${r.huespedes.apellidos}` : r.empresas?.razon_social ?? '—'}
+                    {' · '}
+                    <span style={{ color: 'var(--text-muted)' }}>{r.origen}</span>
+                  </span>
+                  <span style={{ color: 'var(--text-secondary)' }}>
+                    {new Date(r.fecha_ingreso).toLocaleDateString()} · {r.dias_hospedaje}d
+                  </span>
+                  <span style={{ fontWeight: 500 }}>
+                    {r.importe_final != null ? `${r.moneda} ${r.importe_final}` : '—'}
+                  </span>
+                  <EstadoBadge estado={r.estado} />
+                </Link>
+              ))}
+              {reservas.length === 0 && <p style={{ color: 'var(--text-muted)' }}>No hay reservas.</p>}
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
+function CalendarioReservas({
+  habitaciones,
+  calendario,
+  loading,
+  error,
+  desde,
+  hasta,
+  onDesdeChange,
+  onHastaChange,
+}: {
+  habitaciones: Habitacion[];
+  calendario: ReservaCalendario[];
+  loading: boolean;
+  error: string | null;
+  desde: string;
+  hasta: string;
+  onDesdeChange: (v: string) => void;
+  onHastaChange: (v: string) => void;
+}) {
+  const dias = useMemo(() => rangoFechas(desde, hasta), [desde, hasta]);
+
+  const gruposMes = useMemo(() => {
+    const grupos: { etiqueta: string; span: number }[] = [];
+    for (const d of dias) {
+      const etiqueta = capitalizar(d.toLocaleDateString('es-PE', { month: 'long', year: 'numeric' }));
+      const ultimo = grupos[grupos.length - 1];
+      if (ultimo && ultimo.etiqueta === etiqueta) ultimo.span += 1;
+      else grupos.push({ etiqueta, span: 1 });
+    }
+    return grupos;
+  }, [dias]);
+
+  const habitacionesOrdenadas = useMemo(
+    () => [...habitaciones].sort((a, b) => a.hab_numero - b.hab_numero),
+    [habitaciones],
+  );
+
+  function segmentosHabitacion(habId: string) {
+    const items = calendario.filter((c) => c.habitacionId === habId);
+    const estadoDias = dias.map((d) => {
+      const ymd = fechaYMD(d);
+      const match = items.find(
+        (it) => ymd >= fechaYMD(new Date(it.checkinPrevisto)) && ymd <= fechaYMD(new Date(it.checkoutPrevisto)),
+      );
+      return match
+        ? { ocupado: true as const, key: match.id, huesped: match.huesped }
+        : { ocupado: false as const, key: null as string | null, huesped: '' };
+    });
+
+    const segmentos: { span: number; ocupado: boolean; huesped: string; key: string | null }[] = [];
+    for (const e of estadoDias) {
+      const ultimo = segmentos[segmentos.length - 1];
+      if (ultimo && ultimo.ocupado === e.ocupado && ultimo.key === e.key) {
+        ultimo.span += 1;
+      } else {
+        segmentos.push({ span: 1, ocupado: e.ocupado, huesped: e.huesped, key: e.key });
+      }
+    }
+    return segmentos;
+  }
+
+  return (
+    <div>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'flex-end', marginBottom: 12 }}>
+        <div>
+          <label style={labelStyle}>Desde</label>
+          <input type="date" value={desde} onChange={(e) => onDesdeChange(e.target.value)} style={inputStyle} />
+        </div>
+        <div>
+          <label style={labelStyle}>Hasta</label>
+          <input type="date" value={hasta} onChange={(e) => onHastaChange(e.target.value)} style={inputStyle} />
+        </div>
       </div>
 
       {loading && <p style={{ color: 'var(--text-muted)' }}>Cargando...</p>}
       {error && <p style={{ color: 'var(--danger)' }}>{error}</p>}
 
       {!loading && !error && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-          {reservas.map((r) => (
-            <Link
-              key={r.id}
-              to={`/reservas/${r.id}`}
-              style={{
-                display: 'flex',
-                flexWrap: 'wrap',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-                gap: '4px 12px',
-                padding: '10px 14px',
-                background: 'var(--surface-1)',
-                border: '1px solid var(--border)',
-                borderRadius: 'var(--radius)',
-                textDecoration: 'none',
-                color: 'var(--text-primary)',
-                fontSize: 13,
-              }}
-            >
-              <span>
-                {r.huespedes ? `${r.huespedes.nombres} ${r.huespedes.apellidos}` : r.empresas?.razon_social ?? '—'}
-                {' · '}
-                <span style={{ color: 'var(--text-muted)' }}>{r.origen}</span>
-              </span>
-              <span style={{ color: 'var(--text-secondary)' }}>
-                {new Date(r.fecha_ingreso).toLocaleDateString()} · {r.dias_hospedaje}d
-              </span>
-              <span style={{ fontWeight: 500 }}>
-                {r.importe_final != null ? `${r.moneda} ${r.importe_final}` : '—'}
-              </span>
-              <EstadoBadge estado={r.estado} />
-            </Link>
-          ))}
-          {reservas.length === 0 && <p style={{ color: 'var(--text-muted)' }}>No hay reservas.</p>}
+        <div style={{ overflowX: 'auto', border: '1px solid var(--border)', borderRadius: 'var(--radius)' }}>
+          <table style={{ borderCollapse: 'collapse', fontSize: 12, width: '100%' }}>
+            <thead>
+              <tr>
+                <th
+                  rowSpan={2}
+                  style={{
+                    ...thCalStyle,
+                    position: 'sticky',
+                    left: 0,
+                    zIndex: 2,
+                    background: 'var(--surface-2)',
+                    minWidth: 130,
+                    textAlign: 'left',
+                  }}
+                >
+                  Habitación
+                </th>
+                {gruposMes.map((g, i) => (
+                  <th key={i} colSpan={g.span} style={thCalStyle}>
+                    {g.etiqueta}
+                  </th>
+                ))}
+              </tr>
+              <tr>
+                {dias.map((d, i) => (
+                  <th key={i} style={{ ...thCalStyle, minWidth: 34 }}>
+                    {d.getDate()}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {habitacionesOrdenadas.map((h) => (
+                <tr key={h.id}>
+                  <td
+                    style={{
+                      ...tdCalStyle,
+                      position: 'sticky',
+                      left: 0,
+                      background: 'var(--surface-1)',
+                      textAlign: 'left',
+                      fontWeight: 500,
+                    }}
+                  >
+                    {h.hab_numero} · {h.tipos_habitacion?.nombre ?? ''}
+                  </td>
+                  {segmentosHabitacion(h.id).map((s, i) => (
+                    <td
+                      key={i}
+                      colSpan={s.span}
+                      title={s.ocupado ? s.huesped : undefined}
+                      style={{
+                        ...tdCalStyle,
+                        background: s.ocupado ? 'var(--brand)' : 'transparent',
+                        color: s.ocupado ? '#fff' : 'var(--text-muted)',
+                        fontWeight: s.ocupado ? 500 : 400,
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap',
+                        maxWidth: 0,
+                      }}
+                    >
+                      {s.ocupado ? s.huesped : ''}
+                    </td>
+                  ))}
+                </tr>
+              ))}
+              {habitacionesOrdenadas.length === 0 && (
+                <tr>
+                  <td style={tdCalStyle}>No hay habitaciones.</td>
+                </tr>
+              )}
+            </tbody>
+          </table>
         </div>
       )}
     </div>
@@ -470,4 +724,38 @@ const btnSecondary: CSSProperties = {
   border: '1px solid var(--border)',
   borderRadius: 'var(--radius)',
   fontSize: 13,
+};
+
+const btnToggle: CSSProperties = {
+  padding: '6px 14px',
+  background: 'transparent',
+  border: '1px solid var(--border)',
+  borderRadius: 'var(--radius)',
+  fontSize: 13,
+  color: 'var(--text-secondary)',
+};
+
+const btnToggleActivo: CSSProperties = {
+  ...btnToggle,
+  background: 'var(--brand)',
+  color: '#fff',
+  borderColor: 'var(--brand)',
+};
+
+const thCalStyle: CSSProperties = {
+  padding: '6px 8px',
+  borderBottom: '1px solid var(--border)',
+  borderRight: '1px solid var(--border)',
+  textAlign: 'center',
+  fontWeight: 600,
+  color: 'var(--text-secondary)',
+  whiteSpace: 'nowrap',
+};
+
+const tdCalStyle: CSSProperties = {
+  padding: '6px 8px',
+  borderBottom: '1px solid var(--border)',
+  borderRight: '1px solid var(--border)',
+  textAlign: 'center',
+  fontSize: 11,
 };

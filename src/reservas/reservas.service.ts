@@ -13,6 +13,7 @@ import {
   TipoCliente,
 } from './dto/crear-reserva-habitacion.dto';
 import { ListarReservasQueryDto } from './dto/listar-reservas-query.dto';
+import { CalendarioQueryDto } from './dto/calendario-query.dto';
 
 interface PreciosTipoHabitacion {
   precio_normal: number;
@@ -233,6 +234,42 @@ export class ReservasService {
     const { data, error } = await query;
     if (error) throw error;
     return data;
+  }
+
+  async obtenerCalendario(
+    client: SupabaseClient,
+    hotelId: string,
+    desde: string,
+    hasta: string,
+  ) {
+    const { data, error } = await client
+      .from('reserva_habitacion')
+      .select(
+        `
+        id, habitacion_id, fecha_hora_checkin_prevista, fecha_hora_checkout_prevista,
+        reservas!inner(id, estado, hotel_id, huespedes(nombres, apellidos), empresas(razon_social)),
+        estadias(estado_actual)
+      `,
+      )
+      .eq('reservas.hotel_id', hotelId)
+      .neq('reservas.estado', 'cancelada')
+      .lte('fecha_hora_checkin_prevista', `${hasta}T23:59:59`)
+      .gte('fecha_hora_checkout_prevista', `${desde}T00:00:00`);
+    if (error) throw error;
+
+    return (data ?? [])
+      .filter((r: any) => r.estadias?.estado_actual !== 'finalizada')
+      .map((r: any) => ({
+        id: r.id,
+        habitacionId: r.habitacion_id,
+        checkinPrevisto: r.fecha_hora_checkin_prevista,
+        checkoutPrevisto: r.fecha_hora_checkout_prevista,
+        reservaId: r.reservas.id,
+        estadoReserva: r.reservas.estado,
+        huesped: r.reservas.huespedes
+          ? `${r.reservas.huespedes.nombres} ${r.reservas.huespedes.apellidos}`
+          : (r.reservas.empresas?.razon_social ?? '—'),
+      }));
   }
 
   async obtenerDetalle(
