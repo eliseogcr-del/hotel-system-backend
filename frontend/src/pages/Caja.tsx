@@ -394,14 +394,16 @@ function exportarLiquidacionPDF(sesion: SesionCaja, hotelNombre: string, persona
     ? egresos.map(filaDetalle).join('')
     : '<tr><td colspan="5" class="vacio">Sin egresos registrados</td></tr>';
 
-  const filasIngresosPorMetodoResumenGeneral = ingresosPorMetodo
-    .map(([metodo, monto]) => `
-      <div class="fila-sub">
-        <span>${escapeHtml(METODO_LABEL[metodo] ?? metodo)}</span>
-        <span>S/ ${fmt(monto)}</span>
-      </div>
-    `)
-    .join('');
+  // El resumen general es la liquidación real de caja: solo efectivo (lo
+  // único que el recepcionista recibe/entrega en mano). Yape/tarjeta/
+  // transferencia van directo a la cuenta de la empresa y ya se ven
+  // desglosados arriba, en "Ingresos - Resumen por método".
+  const totalIngresosEfectivo = ingresos
+    .filter((m) => m.metodo_pago === 'efectivo')
+    .reduce((acc, m) => acc + Number(m.monto), 0);
+  const totalEgresosEfectivo = egresos
+    .filter((m) => m.metodo_pago === 'efectivo')
+    .reduce((acc, m) => acc + Number(m.monto), 0);
 
   const html = `<!doctype html>
 <html lang="es">
@@ -428,7 +430,6 @@ function exportarLiquidacionPDF(sesion: SesionCaja, hotelNombre: string, persona
   .resumen-general { margin-top: 26px; border: 1.5px solid #1a1a1a; border-radius: 6px; padding: 16px 20px; page-break-inside: avoid; }
   .resumen-general h2 { margin-top: 0; border: none; text-align: center; }
   .fila { display: flex; justify-content: space-between; padding: 4px 0; font-size: 13px; }
-  .fila-sub { display: flex; justify-content: space-between; padding: 2px 0 2px 16px; font-size: 11.5px; color: #5f6068; }
   .fila.destacada { border-top: 1.5px solid #1a1a1a; margin-top: 8px; padding-top: 10px; font-size: 16px; font-weight: 700; }
   .ingreso { color: #173404; }
   .egreso { color: #7a1414; }
@@ -479,11 +480,10 @@ function exportarLiquidacionPDF(sesion: SesionCaja, hotelNombre: string, persona
   </table>
 
   <div class="resumen-general">
-    <h2>Resumen general</h2>
+    <h2>Resumen general (solo efectivo)</h2>
     <div class="fila"><span>Saldo inicial</span><span>S/ ${fmt(sesion.saldo_inicial)}</span></div>
-    <div class="fila ingreso"><span>Total ingresos</span><span>S/ ${fmt(sesion.totalIngresos)}</span></div>
-    ${filasIngresosPorMetodoResumenGeneral}
-    <div class="fila egreso"><span>Total egresos</span><span>S/ ${fmt(sesion.totalEgresos)}</span></div>
+    <div class="fila ingreso"><span>Total ingresos</span><span>S/ ${fmt(totalIngresosEfectivo)}</span></div>
+    <div class="fila egreso"><span>Total egresos</span><span>S/ ${fmt(totalEgresosEfectivo)}</span></div>
     <div class="fila destacada"><span>${sesion.estado === 'cerrada' ? 'Saldo final' : 'Saldo actual'}</span><span>S/ ${fmt(saldoFinal)}</span></div>
   </div>
 
