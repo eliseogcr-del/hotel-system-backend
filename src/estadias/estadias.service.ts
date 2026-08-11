@@ -659,6 +659,66 @@ export class EstadiasService {
     return this.obtenerDetalle(client, hotelId, estadiaId);
   }
 
+  /**
+   * Huéspedes que no avisan que se quedan más días: si ya pasó más de 1 hora
+   * desde la salida programada de una estadía 'en_curso' (solo pernocte; una
+   * reserva por horas no tiene sentido "extenderla un día"), se asume que
+   * sigue ocupada y el sistema mismo extiende la salida un día más y cobra
+   * la tarifa de ese día -- mismo mecanismo que "días adicionales" en
+   * actualizar(), pero sin personal detrás (registrado_por queda null) y con
+   * una nota que deja claro que fue automático, no que lo pidió recepción.
+   *
+   * No hay un cron real corriendo en el backend (Render free tier se
+   * duerme); esto se dispara desde el frontend cada vez que se carga/
+   * recarga el panel de Habitaciones, así que en la práctica corre cada vez
+   * que alguien mira esa pantalla -- que es el uso normal de recepción.
+   */
+  async procesarSalidasVencidas(client: SupabaseClient, hotelId: string) {
+    const haceUnaHora = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+
+    const { data: vencidas, error } = await client
+      .from('reserva_habitacion')
+      .select(
+        `
+        id, tarifa_dia, dias, fecha_hora_checkout_prevista, tipo_alquiler,
+        reservas!inner(hotel_id),
+        estadias!inner(id, estado_actual)
+      `,
+      )
+      .eq('reservas.hotel_id', hotelId)
+      .eq('estadias.estado_actual', 'en_curso')
+      .eq('tipo_alquiler', 'pernocte')
+      .lt('fecha_hora_checkout_prevista', haceUnaHora);
+    if (error) throw error;
+
+    const extendidas: string[] = [];
+    for (const linea of (vencidas ?? []) as any[]) {
+      const nuevoCheckout = new Date(
+        new Date(linea.fecha_hora_checkout_prevista).getTime() + 24 * 60 * 60 * 1000,
+      );
+
+      const { error: updError } = await client
+        .from('reserva_habitacion')
+        .update({
+          dias: Number(linea.dias) + 1,
+          fecha_hora_checkout_prevista: nuevoCheckout.toISOString(),
+        })
+        .eq('id', linea.id);
+      if (updError) throw updError;
+
+      const estadiaId = linea.estadias.id;
+      await this.insertarMovimiento(client, estadiaId, {
+        tipo: 'alquiler',
+        monto: Number(linea.tarifa_dia),
+        notas: 'Extensión automática: no se registró checkout ni ampliación a la hora de salida programada (+1 día)',
+      });
+
+      extendidas.push(estadiaId);
+    }
+
+    return { extendidas: extendidas.length };
+  }
+
   private async obtenerPrecioCosto(client: SupabaseClient, habitacionId: string): Promise<number> {
     const { data, error } = await client
       .from('habitaciones')

@@ -83,6 +83,20 @@ export class EstadiasController {
     );
   }
 
+  // Sin cron real en el backend (Render free tier se duerme): esto lo
+  // dispara el frontend cada vez que se carga/recarga Habitaciones, para
+  // extender automáticamente las estadías cuya salida programada ya venció
+  // hace más de 1 hora sin que nadie hiciera checkout ni la ampliara.
+  @Post('procesar-salidas-vencidas')
+  @Roles('admin', 'recepcion')
+  async procesarSalidasVencidas(
+    @Param('hotelId') hotelId: string,
+    @CurrentUser() user: RequestUser,
+  ) {
+    const client = this.supabase.getClientForRequest(user.accessToken);
+    return this.estadiasService.procesarSalidasVencidas(client, hotelId);
+  }
+
   @Get()
   @Roles('admin', 'recepcion')
   async listar(

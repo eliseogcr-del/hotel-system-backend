@@ -101,10 +101,17 @@ export function Habitaciones() {
     return () => clearInterval(t);
   }, []);
 
-  function cargar() {
+  async function cargar() {
     if (!hotelActual) return;
     setLoading(true);
     setError(null);
+    // Sin cron real en el backend: cada vez que se abre/recarga este panel
+    // se le pide al backend que primero extienda automáticamente las
+    // estadías cuya salida programada ya venció hace más de 1 hora sin
+    // checkout ni ampliación, para que la lista que sigue ya salga al día.
+    // Si falla, no se bloquea la carga normal del panel por esto.
+    await api.post(`/hoteles/${hotelActual.hotelId}/estadias/procesar-salidas-vencidas`).catch(() => {});
+
     api
       .get<Habitacion[]>(`/hoteles/${hotelActual.hotelId}/habitaciones`)
       .then(setHabitaciones)
@@ -120,7 +127,9 @@ export function Habitaciones() {
       .catch(() => {});
   }
 
-  useEffect(cargar, [hotelActual]);
+  useEffect(() => {
+    cargar();
+  }, [hotelActual]);
 
   async function guardarNotas(hab: Habitacion, notas: string) {
     if (!hotelActual || !hab.estadiaId) return;
