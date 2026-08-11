@@ -451,6 +451,7 @@ export function Habitaciones() {
             const hab = habitaciones.find((h) => h.hab_numero === c.ocupante!.habNumero);
             if (hab?.estadiaId) navigate(`/estadias/${hab.estadiaId}`);
           }}
+          onGuardarNotas={guardarNotas}
         />
       )}
 
@@ -473,18 +474,20 @@ function VistaTarjetas({
   cocheras,
   onClickHabitacion,
   onClickCochera,
+  onGuardarNotas,
 }: {
   habitaciones: Habitacion[];
   cocheras: Cochera[];
   onClickHabitacion: (h: Habitacion) => void;
   onClickCochera: (c: Cochera) => void;
+  onGuardarNotas: (h: Habitacion, notas: string) => void;
 }) {
   return (
     <div>
       <div style={tarjetasGridStyle}>
         {habitaciones.map((h) => {
           const clickable = h.estado === 'disponible' || (h.estado === 'ocupada' && !!h.estadiaId);
-          const notas = h.huesped ? h.notas : h.tareaHkEnProceso?.notas ?? null;
+          const notasHk = h.huesped ? null : h.tareaHkEnProceso?.notas ?? null;
           return (
             <div
               key={h.id}
@@ -529,7 +532,12 @@ function VistaTarjetas({
                   Saldo: {h.saldo != null ? `S/. ${h.saldo.toFixed(2)}` : '—'}
                 </span>
               )}
-              {notas && (
+              {h.huesped && (
+                <div onClick={(e) => e.stopPropagation()}>
+                  <NotasCelda notas={h.notas ?? ''} onGuardar={(n) => onGuardarNotas(h, n)} tarjeta />
+                </div>
+              )}
+              {notasHk && (
                 <span
                   style={{
                     fontSize: 11,
@@ -539,9 +547,9 @@ function VistaTarjetas({
                     textOverflow: 'ellipsis',
                     whiteSpace: 'nowrap',
                   }}
-                  title={notas}
+                  title={notasHk}
                 >
-                  {notas}
+                  {notasHk}
                 </span>
               )}
             </div>
@@ -613,7 +621,15 @@ const tarjetaStyle: CSSProperties = {
   minHeight: 100,
 };
 
-function NotasCelda({ notas, onGuardar }: { notas: string; onGuardar: (valor: string) => void }) {
+function NotasCelda({
+  notas,
+  onGuardar,
+  tarjeta,
+}: {
+  notas: string;
+  onGuardar: (valor: string) => void;
+  tarjeta?: boolean;
+}) {
   const [editando, setEditando] = useState(false);
   const [valor, setValor] = useState(notas);
 
@@ -628,10 +644,12 @@ function NotasCelda({ notas, onGuardar }: { notas: string; onGuardar: (valor: st
           border: 'none',
           padding: 0,
           textAlign: 'left',
-          fontSize: 12.5,
-          color: notas ? 'var(--text-primary)' : 'var(--text-muted)',
+          fontSize: tarjeta ? 11 : 12.5,
+          fontStyle: tarjeta && notas ? 'italic' : undefined,
+          color: notas ? (tarjeta ? 'var(--text-muted)' : 'var(--text-primary)') : 'var(--text-muted)',
           cursor: 'pointer',
-          maxWidth: 180,
+          width: tarjeta ? '100%' : undefined,
+          maxWidth: tarjeta ? undefined : 180,
           whiteSpace: 'nowrap',
           overflow: 'hidden',
           textOverflow: 'ellipsis',
@@ -661,7 +679,8 @@ function NotasCelda({ notas, onGuardar }: { notas: string; onGuardar: (valor: st
         }
       }}
       style={{
-        width: 160,
+        width: tarjeta ? '100%' : 160,
+        boxSizing: 'border-box',
         padding: '3px 6px',
         border: '1px solid var(--border-strong)',
         borderRadius: 4,
