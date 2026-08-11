@@ -1,4 +1,4 @@
-import { IsBoolean, IsMilitaryTime, IsOptional } from 'class-validator';
+import { IsBoolean, IsMilitaryTime, IsNumber, IsOptional, Min } from 'class-validator';
 
 export class ActualizarHotelDto {
   @IsOptional()
@@ -12,4 +12,10 @@ export class ActualizarHotelDto {
   @IsOptional()
   @IsBoolean()
   modo24h?: boolean;
+
+  // Cobro por mascota, por día. 0 = sin cobro configurado todavía.
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  precioMascota?: number;
 }

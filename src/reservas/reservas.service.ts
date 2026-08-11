@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   ConflictException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
@@ -14,6 +15,9 @@ import {
 } from './dto/crear-reserva-habitacion.dto';
 import { ListarReservasQueryDto } from './dto/listar-reservas-query.dto';
 import { CalendarioQueryDto } from './dto/calendario-query.dto';
+import { ActualizarReservaLineaDto } from './dto/actualizar-reserva-linea.dto';
+
+type MetodoPagoAnticipo = 'efectivo' | 'transferencia' | 'yape' | 'tarjeta';
 
 interface PreciosTipoHabitacion {
   precio_normal: number;
@@ -30,6 +34,7 @@ interface LineaConCosto {
   cargoAforoExtra: number;
   cobroEarly: number;
   cobroLate: number;
+  cobroMascota: number;
   subtotal: number;
 }
 
@@ -142,6 +147,8 @@ export class ReservasService {
       cargo_aforo_extra: l.cargoAforoExtra,
       cobro_early: l.cobroEarly,
       cobro_late: l.cobroLate,
+      con_mascota: l.linea.conMascota ?? false,
+      cobro_mascota: l.cobroMascota,
       subtotal: l.subtotal,
       tipo_alquiler: l.linea.tipoAlquiler,
       fecha_hora_checkin_prevista: l.linea.checkinPrevisto,
@@ -201,6 +208,18 @@ export class ReservasService {
       if (cocheraOcuparError) throw cocheraOcuparError;
     }
 
+    // 6. Anticipo opcional (pago adelantado de la reserva).
+    if (dto.anticipoMonto) {
+      await this.procesarAnticipo(
+        client,
+        hotelId,
+        reserva.id,
+        dto.anticipoMonto,
+        dto.anticipoMetodoPago,
+        personalId,
+      );
+    }
+
     return this.obtenerDetalle(client, hotelId, reserva.id);
   }
 
@@ -248,7 +267,7 @@ export class ReservasService {
         `
         id, habitacion_id, fecha_hora_checkin_prevista, fecha_hora_checkout_prevista,
         reservas!inner(id, estado, hotel_id, huespedes(nombres, apellidos), empresas(razon_social)),
-        estadias(estado_actual)
+        estadias(id, estado_actual)
       `,
       )
       .eq('reservas.hotel_id', hotelId)
@@ -266,6 +285,11 @@ export class ReservasService {
         checkoutPrevisto: r.fecha_hora_checkout_prevista,
         reservaId: r.reservas.id,
         estadoReserva: r.reservas.estado,
+        // Si ya hay una estadía 'en_curso', el huésped ya está físicamente
+        // alojado -- el frontend debe llevar a EstadiaDetalle.tsx (el
+        // libro real) en vez de abrir el formulario de edición de reserva.
+        estadiaId: r.estadias?.id ?? null,
+        estadoEstadia: r.estadias?.estado_actual ?? null,
         huesped: r.reservas.huespedes
           ? `${r.reservas.huespedes.nombres} ${r.reservas.huespedes.apellidos}`
           : (r.reservas.empresas?.razon_social ?? '—'),
@@ -368,6 +392,8 @@ export class ReservasService {
         cargo_aforo_extra: costo.cargoAforoExtra,
         cobro_early: costo.cobroEarly,
         cobro_late: costo.cobroLate,
+        con_mascota: linea.conMascota ?? false,
+        cobro_mascota: costo.cobroMascota,
         subtotal: costo.subtotal,
         tipo_alquiler: linea.tipoAlquiler,
         fecha_hora_checkin_prevista: linea.checkinPrevisto,
@@ -393,6 +419,165 @@ export class ReservasService {
     }
 
     await this.recalcularTotales(client, reservaId, Number(reserva.descuento_total));
+
+    return this.obtenerDetalle(client, hotelId, reservaId);
+  }
+
+  /**
+   * Editar una reserva que todavía no tiene check-in, desde el formulario
+   * del calendario (click en una celda ya ocupada por una reserva
+   * 'pendiente'). No cambia la habitación -- eso implicaría mover la
+   * celda, fuera de alcance de este formulario. Si cambia checkin/días,
+   * revalida disponibilidad excluyéndose a sí misma (mismo motor que
+   * crear()/agregarHabitacion()).
+   */
+  async actualizarLinea(
+    client: SupabaseClient,
+    hotelId: string,
+    reservaId: string,
+    lineaId: string,
+    dto: ActualizarReservaLineaDto,
+    personalId: string,
+  ) {
+    const { data: rh, error: rhError } = await client
+      .from('reserva_habitacion')
+      .select(
+        `
+        id, habitacion_id, nro_personas, incluye_desayuno, con_mascota, tarifa_dia, dias,
+        tipo_alquiler, fecha_hora_checkin_prevista, fecha_hora_checkout_prevista,
+        reservas!inner(id, hotel_id, estado, origen, moneda, descuento_total, anticipo_monto),
+        vehiculos(id, marca, tipo, placa),
+        estadias(estado_actual)
+      `,
+      )
+      .eq('id', lineaId)
+      .eq('reserva_id', reservaId)
+      .maybeSingle();
+    if (rhError) throw rhError;
+
+    const rhData = rh as any;
+    const reserva = rhData?.reservas;
+    if (!rh || reserva.hotel_id !== hotelId) {
+      throw new NotFoundException('La línea de reserva no existe en este hotel');
+    }
+    if (reserva.estado === 'cancelada') {
+      throw new BadRequestException('No se puede editar una reserva cancelada');
+    }
+    if (rhData.estadias && rhData.estadias.estado_actual !== 'pendiente') {
+      throw new BadRequestException(
+        'Esta reserva ya tiene un check-in en curso; edítala desde el detalle de la estadía.',
+      );
+    }
+    if (dto.anticipoMonto !== undefined && dto.anticipoMonto > 0) {
+      if (Number(reserva.anticipo_monto) > 0) {
+        throw new BadRequestException(
+          'Esta reserva ya tiene un anticipo registrado; no se puede modificar (el libro de movimientos nunca se edita retroactivamente).',
+        );
+      }
+      if (!dto.anticipoMetodoPago) {
+        throw new BadRequestException('anticipoMetodoPago es requerido para registrar un anticipo');
+      }
+    }
+
+    const checkinNuevo = dto.checkinPrevisto ?? rhData.fecha_hora_checkin_prevista;
+    const diasNuevo = dto.diasManual ?? rhData.dias;
+    const checkoutNuevo = new Date(
+      new Date(checkinNuevo).getTime() + diasNuevo * 24 * 60 * 60 * 1000,
+    ).toISOString();
+
+    if (dto.checkinPrevisto !== undefined || dto.diasManual !== undefined) {
+      const resultado = await this.disponibilidad.validar(client, {
+        hotelId,
+        habitacionId: rhData.habitacion_id,
+        checkinPrevisto: checkinNuevo,
+        checkoutPrevisto: checkoutNuevo,
+        excluirReservaHabitacionId: lineaId,
+      });
+      if (!resultado.disponible) {
+        throw new ConflictException(resultado.conflicto);
+      }
+    }
+
+    const lineaParaCosto: CrearReservaHabitacionDto = {
+      habitacionId: rhData.habitacion_id,
+      nroPersonas: dto.nroPersonas ?? rhData.nro_personas,
+      incluyeDesayuno: dto.incluyeDesayuno ?? rhData.incluye_desayuno,
+      conMascota: dto.conMascota ?? rhData.con_mascota,
+      tipoAlquiler: rhData.tipo_alquiler,
+      checkinPrevisto: checkinNuevo,
+      checkoutPrevisto: checkoutNuevo,
+      tarifaDiaManual: dto.tarifaDiaManual ?? Number(rhData.tarifa_dia),
+      diasManual: diasNuevo,
+    };
+
+    const costo = await this.resolverCostoLinea(
+      client,
+      hotelId,
+      (dto.origen ?? reserva.origen) as OrigenReserva,
+      lineaParaCosto,
+    );
+
+    const { error: updError } = await client
+      .from('reserva_habitacion')
+      .update({
+        nro_personas: costo.linea.nroPersonas,
+        incluye_desayuno: costo.linea.incluyeDesayuno ?? false,
+        con_mascota: costo.linea.conMascota ?? false,
+        cobro_mascota: costo.cobroMascota,
+        tarifa_dia: costo.tarifaDia,
+        dias: costo.dias,
+        subtotal: costo.subtotal,
+        fecha_hora_checkin_prevista: checkinNuevo,
+        fecha_hora_checkout_prevista: checkoutNuevo,
+      })
+      .eq('id', lineaId);
+    if (updError) throw updError;
+
+    if (
+      dto.vehiculoMarca !== undefined ||
+      dto.vehiculoTipo !== undefined ||
+      dto.vehiculoPlaca !== undefined
+    ) {
+      const vehiculoExistente = rhData.vehiculos;
+      const datosVehiculo = {
+        marca: dto.vehiculoMarca ?? vehiculoExistente?.marca ?? null,
+        tipo: dto.vehiculoTipo ?? vehiculoExistente?.tipo ?? null,
+        placa: dto.vehiculoPlaca ?? vehiculoExistente?.placa ?? null,
+      };
+      if (vehiculoExistente) {
+        const { error } = await client
+          .from('vehiculos')
+          .update(datosVehiculo)
+          .eq('id', vehiculoExistente.id);
+        if (error) throw error;
+      } else {
+        const { error } = await client
+          .from('vehiculos')
+          .insert({ reserva_habitacion_id: lineaId, ...datosVehiculo });
+        if (error) throw error;
+      }
+    }
+
+    const cambiosReserva: Record<string, unknown> = {};
+    if (dto.origen !== undefined) cambiosReserva.origen = dto.origen;
+    if (dto.moneda !== undefined) cambiosReserva.moneda = dto.moneda;
+    if (Object.keys(cambiosReserva).length > 0) {
+      const { error } = await client.from('reservas').update(cambiosReserva).eq('id', reservaId);
+      if (error) throw error;
+    }
+
+    await this.recalcularTotales(client, reservaId, Number(reserva.descuento_total ?? 0));
+
+    if (dto.anticipoMonto) {
+      await this.procesarAnticipo(
+        client,
+        hotelId,
+        reservaId,
+        dto.anticipoMonto,
+        dto.anticipoMetodoPago,
+        personalId,
+      );
+    }
 
     return this.obtenerDetalle(client, hotelId, reservaId);
   }
@@ -514,9 +699,109 @@ export class ReservasService {
     const cargoAforoExtra = linea.cargoAforoExtra ?? 0;
     const cobroEarly = linea.cobroEarly ?? 0;
     const cobroLate = linea.cobroLate ?? 0;
-    const subtotal = tarifaDia * dias + cargoAforoExtra + cobroEarly + cobroLate;
 
-    return { linea, tarifaDia, dias, cargoAforoExtra, cobroEarly, cobroLate, subtotal };
+    let cobroMascota = 0;
+    if (linea.conMascota) {
+      const precioMascotaDia = await this.obtenerPrecioMascota(client, hotelId);
+      cobroMascota = precioMascotaDia * dias;
+    }
+
+    const subtotal =
+      tarifaDia * dias + cargoAforoExtra + cobroEarly + cobroLate + cobroMascota;
+
+    return { linea, tarifaDia, dias, cargoAforoExtra, cobroEarly, cobroLate, cobroMascota, subtotal };
+  }
+
+  private async obtenerPrecioMascota(client: SupabaseClient, hotelId: string): Promise<number> {
+    const { data, error } = await client
+      .from('hoteles')
+      .select('precio_mascota')
+      .eq('id', hotelId)
+      .maybeSingle();
+    if (error) throw error;
+    return Number((data as any)?.precio_mascota ?? 0);
+  }
+
+  /**
+   * Anticipo (pago adelantado) de una reserva. El método de pago lo decide
+   * quien reserva: solo si es 'efectivo' genera un ingreso en la caja de
+   * la sesión de turno abierta de quien lo registra (yape/tarjeta/
+   * transferencia van directo a la cuenta de la empresa, mismo criterio
+   * que el resto del sistema -- ver CajaService). Se enlaza a la estadía
+   * real recién al hacer check-in (EstadiasService.checkin()).
+   */
+  private async procesarAnticipo(
+    client: SupabaseClient,
+    hotelId: string,
+    reservaId: string,
+    monto: number,
+    metodoPago: MetodoPagoAnticipo | undefined,
+    personalId: string,
+  ) {
+    if (!metodoPago) {
+      throw new BadRequestException(
+        'anticipoMetodoPago es requerido para registrar un anticipo',
+      );
+    }
+
+    let sesionTurnoId: string | null = null;
+    if (metodoPago === 'efectivo') {
+      sesionTurnoId = await this.obtenerSesionAbierta(client, hotelId, personalId);
+      const { error: cajaError } = await client.from('movimientos_caja').insert({
+        sesion_turno_id: sesionTurnoId,
+        tipo: 'ingreso',
+        monto,
+        concepto: 'Anticipo de reserva',
+        metodo_pago: metodoPago,
+      });
+      if (cajaError) throw cajaError;
+    }
+
+    const { error } = await client
+      .from('reservas')
+      .update({
+        anticipo_monto: monto,
+        anticipo_metodo_pago: metodoPago,
+        anticipo_registrado_por: personalId,
+        anticipo_sesion_turno_id: sesionTurnoId,
+        anticipo_fecha: new Date().toISOString(),
+      })
+      .eq('id', reservaId);
+    if (error) throw error;
+  }
+
+  private async obtenerSesionAbierta(
+    client: SupabaseClient,
+    hotelId: string,
+    personalId: string,
+  ): Promise<string> {
+    const { data: personalHotel, error: phError } = await client
+      .from('personal_hotel')
+      .select('id')
+      .eq('personal_id', personalId)
+      .eq('hotel_id', hotelId)
+      .eq('activo', true)
+      .maybeSingle();
+    if (phError) throw phError;
+    if (!personalHotel) {
+      throw new ForbiddenException('No tienes una asignación activa en este hotel');
+    }
+
+    const { data: sesion, error: sesError } = await client
+      .from('sesiones_turno')
+      .select('id')
+      .eq('personal_hotel_id', personalHotel.id)
+      .eq('estado', 'abierta')
+      .order('abierta_en', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (sesError) throw sesError;
+    if (!sesion) {
+      throw new BadRequestException(
+        'No tienes una sesión de turno abierta en este hotel; ábrela antes de registrar un anticipo en efectivo.',
+      );
+    }
+    return sesion.id;
   }
 
   // Sin selección explícita del recepcionista: empresa asociada -> cliente

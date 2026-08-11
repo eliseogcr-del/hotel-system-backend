@@ -1,13 +1,14 @@
 import { useEffect, useMemo, useState, type CSSProperties, type FormEvent } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { api, ApiError } from '../lib/api';
 import { useHotel } from '../contexts/HotelContext';
 import { buscarHuespedPorDni, crearHuesped } from '../lib/huespedes';
+import { ReservaFormModal } from '../components/ReservaFormModal';
 
 interface Habitacion {
   id: string;
   hab_numero: number;
-  tipos_habitacion: { id: string; nombre: string } | null;
+  tipos_habitacion: { id: string; nombre: string; aforo_max?: number } | null;
 }
 
 interface TipoHabitacionPrecios {
@@ -55,6 +56,8 @@ interface ReservaCalendario {
   checkoutPrevisto: string;
   reservaId: string;
   estadoReserva: string;
+  estadiaId: string | null;
+  estadoEstadia: string | null;
   huesped: string;
 }
 
@@ -92,6 +95,7 @@ function capitalizar(texto: string): string {
 
 export function Reservas() {
   const { hotelActual } = useHotel();
+  const navigate = useNavigate();
   const [reservas, setReservas] = useState<Reserva[]>([]);
   const [habitaciones, setHabitaciones] = useState<Habitacion[]>([]);
   const [tiposHabitacion, setTiposHabitacion] = useState<TipoHabitacionPrecios[]>([]);
@@ -106,6 +110,25 @@ export function Reservas() {
   const [calendario, setCalendario] = useState<ReservaCalendario[]>([]);
   const [calendarioLoading, setCalendarioLoading] = useState(false);
   const [calendarioError, setCalendarioError] = useState<string | null>(null);
+  const [precioMascotaDia, setPrecioMascotaDia] = useState(0);
+
+  const [formulario, setFormulario] = useState<{
+    modo: 'crear' | 'editar';
+    habitacionId: string;
+    habNumero: number;
+    aforoMax: number;
+    fechaInicial?: string;
+    reservaId?: string;
+    lineaId?: string;
+  } | null>(null);
+
+  function recargarCalendario() {
+    if (!hotelActual || !desde || !hasta) return;
+    api
+      .get<ReservaCalendario[]>(`/hoteles/${hotelActual.hotelId}/reservas/calendario?desde=${desde}&hasta=${hasta}`)
+      .then(setCalendario)
+      .catch(() => {});
+  }
 
   function cargarReservas() {
     if (!hotelActual) return;
@@ -130,6 +153,10 @@ export function Reservas() {
       .get<TipoHabitacionPrecios[]>(`/hoteles/${hotelActual.hotelId}/tipos-habitacion`)
       .then(setTiposHabitacion)
       .catch(() => {});
+    api
+      .get<{ precio_mascota: number }>(`/hoteles/${hotelActual.hotelId}`)
+      .then((h) => setPrecioMascotaDia(Number(h.precio_mascota ?? 0)))
+      .catch(() => {});
   }, [hotelActual]);
 
   useEffect(() => {
@@ -142,6 +169,32 @@ export function Reservas() {
       .catch((err) => setCalendarioError(err instanceof ApiError ? err.message : 'Error al cargar el calendario'))
       .finally(() => setCalendarioLoading(false));
   }, [hotelActual, desde, hasta]);
+
+  function abrirFormularioCelda(hab: Habitacion, segmento: SegmentoCelda) {
+    if (segmento.ocupado) {
+      if (segmento.estadoEstadia === 'en_curso' && segmento.estadiaId) {
+        navigate(`/estadias/${segmento.estadiaId}`);
+        return;
+      }
+      if (!segmento.reservaId || !segmento.lineaId) return;
+      setFormulario({
+        modo: 'editar',
+        habitacionId: hab.id,
+        habNumero: hab.hab_numero,
+        aforoMax: hab.tipos_habitacion?.aforo_max ?? 0,
+        reservaId: segmento.reservaId,
+        lineaId: segmento.lineaId,
+      });
+    } else {
+      setFormulario({
+        modo: 'crear',
+        habitacionId: hab.id,
+        habNumero: hab.hab_numero,
+        aforoMax: hab.tipos_habitacion?.aforo_max ?? 0,
+        fechaInicial: segmento.fechaInicio,
+      });
+    }
+  }
 
   if (!hotelActual) return null;
 
@@ -162,12 +215,7 @@ export function Reservas() {
           onCreada={() => {
             setMostrarForm(false);
             cargarReservas();
-            if (hotelActual) {
-              api
-                .get<ReservaCalendario[]>(`/hoteles/${hotelActual.hotelId}/reservas/calendario?desde=${desde}&hasta=${hasta}`)
-                .then(setCalendario)
-                .catch(() => {});
-            }
+            recargarCalendario();
           }}
         />
       )}
@@ -194,6 +242,28 @@ export function Reservas() {
           hasta={hasta}
           onDesdeChange={setDesde}
           onHastaChange={setHasta}
+          onCellClick={abrirFormularioCelda}
+        />
+      )}
+
+      {formulario && hotelActual && (
+        <ReservaFormModal
+          hotelId={hotelActual.hotelId}
+          habitacionId={formulario.habitacionId}
+          habNumero={formulario.habNumero}
+          aforoMax={formulario.aforoMax}
+          tarifaSugerida={
+            tiposHabitacion.find(
+              (t) => t.id === habitaciones.find((h) => h.id === formulario.habitacionId)?.tipos_habitacion?.id,
+            )?.precio_normal ?? 0
+          }
+          precioMascotaDia={precioMascotaDia}
+          modo={formulario.modo}
+          fechaInicial={formulario.fechaInicial}
+          reservaId={formulario.reservaId}
+          lineaId={formulario.lineaId}
+          onClose={() => setFormulario(null)}
+          onGuardado={recargarCalendario}
         />
       )}
 
@@ -257,6 +327,18 @@ export function Reservas() {
   );
 }
 
+interface SegmentoCelda {
+  span: number;
+  ocupado: boolean;
+  huesped: string;
+  key: string | null;
+  reservaId: string | null;
+  lineaId: string | null;
+  estadiaId: string | null;
+  estadoEstadia: string | null;
+  fechaInicio: string;
+}
+
 function CalendarioReservas({
   habitaciones,
   calendario,
@@ -266,6 +348,7 @@ function CalendarioReservas({
   hasta,
   onDesdeChange,
   onHastaChange,
+  onCellClick,
 }: {
   habitaciones: Habitacion[];
   calendario: ReservaCalendario[];
@@ -275,6 +358,7 @@ function CalendarioReservas({
   hasta: string;
   onDesdeChange: (v: string) => void;
   onHastaChange: (v: string) => void;
+  onCellClick: (hab: Habitacion, segmento: SegmentoCelda) => void;
 }) {
   const dias = useMemo(() => rangoFechas(desde, hasta), [desde, hasta]);
 
@@ -294,7 +378,7 @@ function CalendarioReservas({
     [habitaciones],
   );
 
-  function segmentosHabitacion(habId: string) {
+  function segmentosHabitacion(habId: string): SegmentoCelda[] {
     const items = calendario.filter((c) => c.habitacionId === habId);
     const estadoDias = dias.map((d) => {
       const ymd = fechaYMD(d);
@@ -302,17 +386,35 @@ function CalendarioReservas({
         (it) => ymd >= fechaYMD(new Date(it.checkinPrevisto)) && ymd <= fechaYMD(new Date(it.checkoutPrevisto)),
       );
       return match
-        ? { ocupado: true as const, key: match.id, huesped: match.huesped }
-        : { ocupado: false as const, key: null as string | null, huesped: '' };
+        ? {
+            ocupado: true as const,
+            key: match.id,
+            huesped: match.huesped,
+            reservaId: match.reservaId,
+            lineaId: match.id,
+            estadiaId: match.estadiaId,
+            estadoEstadia: match.estadoEstadia,
+            fechaInicio: ymd,
+          }
+        : {
+            ocupado: false as const,
+            key: null as string | null,
+            huesped: '',
+            reservaId: null,
+            lineaId: null,
+            estadiaId: null,
+            estadoEstadia: null,
+            fechaInicio: ymd,
+          };
     });
 
-    const segmentos: { span: number; ocupado: boolean; huesped: string; key: string | null }[] = [];
+    const segmentos: SegmentoCelda[] = [];
     for (const e of estadoDias) {
       const ultimo = segmentos[segmentos.length - 1];
       if (ultimo && ultimo.ocupado === e.ocupado && ultimo.key === e.key) {
         ultimo.span += 1;
       } else {
-        segmentos.push({ span: 1, ocupado: e.ocupado, huesped: e.huesped, key: e.key });
+        segmentos.push({ span: 1, ...e });
       }
     }
     return segmentos;
@@ -347,11 +449,13 @@ function CalendarioReservas({
                     left: 0,
                     zIndex: 2,
                     background: 'var(--surface-2)',
-                    minWidth: 130,
+                    width: 62,
+                    maxWidth: 62,
+                    padding: '6px 4px',
                     textAlign: 'left',
                   }}
                 >
-                  Habitación
+                  Hab.
                 </th>
                 {gruposMes.map((g, i) => (
                   <th key={i} colSpan={g.span} style={thCalStyle}>
@@ -371,6 +475,7 @@ function CalendarioReservas({
               {habitacionesOrdenadas.map((h) => (
                 <tr key={h.id}>
                   <td
+                    title={h.tipos_habitacion?.nombre ?? ''}
                     style={{
                       ...tdCalStyle,
                       position: 'sticky',
@@ -378,15 +483,19 @@ function CalendarioReservas({
                       background: 'var(--surface-1)',
                       textAlign: 'left',
                       fontWeight: 500,
+                      width: 62,
+                      maxWidth: 62,
+                      padding: '6px 4px',
                     }}
                   >
-                    {h.hab_numero} · {h.tipos_habitacion?.nombre ?? ''}
+                    {h.hab_numero}
                   </td>
                   {segmentosHabitacion(h.id).map((s, i) => (
                     <td
                       key={i}
                       colSpan={s.span}
-                      title={s.ocupado ? s.huesped : undefined}
+                      title={s.ocupado ? s.huesped : 'Crear reserva'}
+                      onClick={() => onCellClick(h, s)}
                       style={{
                         ...tdCalStyle,
                         background: s.ocupado ? 'var(--brand)' : 'transparent',
@@ -396,6 +505,7 @@ function CalendarioReservas({
                         textOverflow: 'ellipsis',
                         whiteSpace: 'nowrap',
                         maxWidth: 0,
+                        cursor: 'pointer',
                       }}
                     >
                       {s.ocupado ? s.huesped : ''}

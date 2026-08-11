@@ -93,7 +93,8 @@ export class EstadiasService {
       .select(
         `
         id, habitacion_id, subtotal, tarifa_dia, dias, cargo_aforo_extra,
-        cobro_early, cobro_late, reservas!inner(id, hotel_id, estado)
+        cobro_early, cobro_late, cobro_mascota,
+        reservas!inner(id, hotel_id, estado, anticipo_monto, anticipo_vinculado_estadia_id)
       `,
       )
       .eq('id', dto.reservaHabitacionId)
@@ -172,6 +173,39 @@ export class EstadiasService {
         notas: 'Ingreso antes de la hora de check-in',
         registradoPor: personalId,
       });
+    }
+
+    const cobroMascota = Number(rhData.cobro_mascota ?? 0);
+    if (cobroMascota > 0) {
+      await this.insertarMovimiento(client, estadiaId, {
+        tipo: 'mascota',
+        monto: cobroMascota,
+        notas: 'Cargo por mascota',
+        registradoPor: personalId,
+      });
+    }
+
+    // Si la reserva traía un anticipo (pago adelantado, ver
+    // ReservasService.procesarAnticipo()), se enlaza recién ahora como un
+    // 'pago' que reduce el saldo de la estadía real. No genera un segundo
+    // ingreso de caja: si el anticipo fue en efectivo, ya se contó en la
+    // caja de quien lo tomó en su momento; si fue yape/tarjeta/
+    // transferencia, nunca tocó ninguna caja (va directo a la cuenta de
+    // la empresa), igual que cualquier otro pago con esos métodos.
+    const reservaData = rhData.reservas;
+    const anticipoMonto = Number(reservaData?.anticipo_monto ?? 0);
+    if (anticipoMonto > 0 && !reservaData.anticipo_vinculado_estadia_id) {
+      await this.insertarMovimiento(client, estadiaId, {
+        tipo: 'pago',
+        monto: -anticipoMonto,
+        notas: 'Anticipo de la reserva',
+        registradoPor: personalId,
+      });
+      const { error: anticipoError } = await client
+        .from('reservas')
+        .update({ anticipo_vinculado_estadia_id: estadiaId })
+        .eq('id', reservaData.id);
+      if (anticipoError) throw anticipoError;
     }
 
     const { error: habError } = await client

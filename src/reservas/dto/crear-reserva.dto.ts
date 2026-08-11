@@ -55,4 +55,17 @@ export class CrearReservaDto {
   @ValidateNested({ each: true })
   @Type(() => CrearReservaHabitacionDto)
   habitaciones: CrearReservaHabitacionDto[];
+
+  // Anticipo (pago adelantado) de la reserva, opcional. El método de pago
+  // decide si toca la caja: solo 'efectivo' genera un ingreso en la sesión
+  // de turno abierta de quien registra la reserva (ver
+  // ReservasService.procesarAnticipo()).
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  anticipoMonto?: number;
+
+  @IsOptional()
+  @IsEnum(['efectivo', 'transferencia', 'yape', 'tarjeta'])
+  anticipoMetodoPago?: 'efectivo' | 'transferencia' | 'yape' | 'tarjeta';
 }

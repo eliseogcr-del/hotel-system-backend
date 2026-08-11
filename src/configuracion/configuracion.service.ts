@@ -18,7 +18,7 @@ export class ConfiguracionService {
   async obtenerHotel(client: SupabaseClient, hotelId: string) {
     const { data, error } = await client
       .from('hoteles')
-      .select('id, nombre, hora_checkin, hora_checkout, modo_24h')
+      .select('id, nombre, hora_checkin, hora_checkout, modo_24h, precio_mascota')
       .eq('id', hotelId)
       .maybeSingle();
     if (error) throw error;
@@ -31,12 +31,13 @@ export class ConfiguracionService {
     if (dto.horaCheckin !== undefined) cambios.hora_checkin = dto.horaCheckin;
     if (dto.horaCheckout !== undefined) cambios.hora_checkout = dto.horaCheckout;
     if (dto.modo24h !== undefined) cambios.modo_24h = dto.modo24h;
+    if (dto.precioMascota !== undefined) cambios.precio_mascota = dto.precioMascota;
 
     const { data, error } = await client
       .from('hoteles')
       .update(cambios)
       .eq('id', hotelId)
-      .select('id, nombre, hora_checkin, hora_checkout, modo_24h')
+      .select('id, nombre, hora_checkin, hora_checkout, modo_24h, precio_mascota')
       .maybeSingle();
     if (error) throw error;
     if (!data) throw new NotFoundException('Hotel no encontrado');

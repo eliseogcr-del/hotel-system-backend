@@ -19,6 +19,7 @@ import { CrearReservaDto } from './dto/crear-reserva.dto';
 import { CrearReservaHabitacionDto } from './dto/crear-reserva-habitacion.dto';
 import { ListarReservasQueryDto } from './dto/listar-reservas-query.dto';
 import { CalendarioQueryDto } from './dto/calendario-query.dto';
+import { ActualizarReservaLineaDto } from './dto/actualizar-reserva-linea.dto';
 
 @Controller('hoteles/:hotelId/reservas')
 @UseGuards(AuthGuard, RolesGuard)
@@ -98,6 +99,26 @@ export class ReservasController {
   ) {
     const client = this.supabase.getClientForRequest(user.accessToken);
     return this.reservasService.agregarHabitacion(client, hotelId, id, dto);
+  }
+
+  @Patch(':id/habitaciones/:lineaId')
+  @Roles('admin', 'recepcion')
+  async actualizarLinea(
+    @Param('hotelId') hotelId: string,
+    @Param('id') id: string,
+    @Param('lineaId') lineaId: string,
+    @Body() dto: ActualizarReservaLineaDto,
+    @CurrentUser() user: RequestUser,
+  ) {
+    const client = this.supabase.getClientForRequest(user.accessToken);
+    return this.reservasService.actualizarLinea(
+      client,
+      hotelId,
+      id,
+      lineaId,
+      dto,
+      user.personalId,
+    );
   }
 
   @Patch(':id/confirmar')

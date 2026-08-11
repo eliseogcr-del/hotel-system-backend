@@ -25,7 +25,10 @@ create table hoteles (
     -- (esos dos campos se ignoran en ese modo).
     hora_checkin time not null default '13:00',
     hora_checkout time not null default '12:00',
-    modo_24h boolean not null default false
+    modo_24h boolean not null default false,
+    -- Cobro por mascota, por día (igual criterio que la tarifa de
+    -- habitación); 0 = sin cobro configurado todavía.
+    precio_mascota numeric(10,2) not null default 0
 );
 
 -- ============================================================================
@@ -204,7 +207,19 @@ create table reservas (
     importe_final numeric(10,2),
     estado text not null default 'confirmada' check (estado in ('pendiente_revision','confirmada','cancelada')),
     creado_por uuid references personal(id),
-    created_at timestamptz not null default now()
+    created_at timestamptz not null default now(),
+    -- Anticipo (pago adelantado): el método lo decide quien reserva: solo
+    -- si es 'efectivo' genera ingreso en la caja de la sesión de turno de
+    -- quien lo registra (yape/tarjeta/transferencia van directo a la
+    -- cuenta de la empresa). Se enlaza a la estadía real recién al hacer
+    -- check-in, como un 'pago' que reduce el saldo -- ver
+    -- EstadiasService.checkin().
+    anticipo_monto numeric(10,2) not null default 0,
+    anticipo_metodo_pago text check (anticipo_metodo_pago in ('efectivo','transferencia','yape','tarjeta')),
+    anticipo_registrado_por uuid references personal(id),
+    anticipo_sesion_turno_id uuid references sesiones_turno(id),
+    anticipo_fecha timestamptz,
+    anticipo_vinculado_estadia_id uuid references estadias(id)
 );
 
 create table reserva_habitacion (
@@ -218,6 +233,11 @@ create table reserva_habitacion (
     cargo_aforo_extra numeric(10,2) not null default 0,
     cobro_early numeric(10,2) not null default 0,
     cobro_late numeric(10,2) not null default 0,
+    -- Mascota: igual patrón que cobro_early/cobro_late -- se calcula al
+    -- reservar (precio_mascota del hotel * dias) pero recién se postea
+    -- como movimiento del libro de cuentas al hacer el check-in real.
+    con_mascota boolean not null default false,
+    cobro_mascota numeric(10,2) not null default 0,
     subtotal numeric(10,2) not null default 0,
     tipo_alquiler text not null default 'pernocte' check (tipo_alquiler in ('pernocte','por_horas')),
     fecha_hora_checkin_prevista timestamptz not null,
@@ -291,7 +311,7 @@ create table tipos_desayuno (
 create table movimientos_cuenta (
     id uuid primary key default gen_random_uuid(),
     estadia_id uuid not null references estadias(id) on delete cascade,
-    tipo text not null check (tipo in ('alquiler','consumo_bazar','pago','early','late','ajuste','cochera','desayuno')),
+    tipo text not null check (tipo in ('alquiler','consumo_bazar','pago','early','late','ajuste','cochera','desayuno','mascota')),
     monto numeric(10,2) not null,       -- positivo = cargo, negativo = abono/pago
     metodo_pago text check (metodo_pago in ('efectivo','transferencia','yape','tarjeta')),
     producto_id uuid references productos_bazar(id),

@@ -17,7 +17,8 @@ export type TipoMovimientoCuenta =
   | 'late'
   | 'ajuste'
   | 'cochera'
-  | 'desayuno';
+  | 'desayuno'
+  | 'mascota';
 
 export type MetodoPago = 'efectivo' | 'transferencia' | 'yape' | 'tarjeta';
 
@@ -31,6 +32,7 @@ export class RegistrarMovimientoDto {
     'ajuste',
     'cochera',
     'desayuno',
+    'mascota',
   ])
   tipo: TipoMovimientoCuenta;
 

@@ -52,6 +52,7 @@ interface HotelConfig {
   hora_checkin: string;
   hora_checkout: string;
   modo_24h: boolean;
+  precio_mascota: number;
 }
 
 type RolHotel = 'admin' | 'recepcion' | 'hk';
@@ -139,6 +140,7 @@ function SeccionHotel({
   const [horaCheckin, setHoraCheckin] = useState(hotel.hora_checkin.slice(0, 5));
   const [horaCheckout, setHoraCheckout] = useState(hotel.hora_checkout.slice(0, 5));
   const [modo24h, setModo24h] = useState(hotel.modo_24h);
+  const [precioMascota, setPrecioMascota] = useState(hotel.precio_mascota);
   const [guardando, setGuardando] = useState(false);
 
   async function guardar(e: FormEvent) {
@@ -150,6 +152,7 @@ function SeccionHotel({
         horaCheckin,
         horaCheckout,
         modo24h,
+        precioMascota,
       });
       onCambio();
     } catch (err) {
@@ -194,6 +197,17 @@ function SeccionHotel({
         <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13 }}>
           <input type="checkbox" checked={modo24h} onChange={(e) => setModo24h(e.target.checked)} />
           Modo 24h (sin hora fija)
+        </label>
+        <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13 }}>
+          Cobro por mascota (S/./día)
+          <input
+            type="number"
+            min={0}
+            step={0.01}
+            value={precioMascota}
+            onChange={(e) => setPrecioMascota(Number(e.target.value))}
+            style={{ ...inputStyle, width: 100 }}
+          />
         </label>
         <button type="submit" disabled={guardando} style={btnPrimary}>
           Guardar

@@ -29,6 +29,13 @@ export class CrearReservaHabitacionDto {
   @IsBoolean()
   incluyeDesayuno?: boolean;
 
+  // Cobro por mascota (precio_mascota del hotel * dias), calculado en
+  // ReservasService.resolverCostoLinea() -- el recepcionista solo marca el
+  // checkbox, no ingresa el monto a mano.
+  @IsOptional()
+  @IsBoolean()
+  conMascota?: boolean;
+
   @IsEnum(['pernocte', 'por_horas'])
   tipoAlquiler: TipoAlquiler;
 
