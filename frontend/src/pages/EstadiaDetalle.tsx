@@ -263,6 +263,7 @@ export function EstadiaDetalle() {
         <RegistrarMovimientoForm
           hotelId={hotelActual.hotelId}
           estadiaId={estadia.id}
+          saldoActual={Number(estadia.saldo)}
           onRegistrado={cargar}
         />
       )}
@@ -556,10 +557,12 @@ function EditarEstadiaForm({
 function RegistrarMovimientoForm({
   hotelId,
   estadiaId,
+  saldoActual,
   onRegistrado,
 }: {
   hotelId: string;
   estadiaId: string;
+  saldoActual: number;
   onRegistrado: () => void;
 }) {
   const [tipo, setTipo] = useState('pago');
@@ -602,8 +605,12 @@ function RegistrarMovimientoForm({
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
-    setEnviando(true);
     setError(null);
+    if (tipo === 'pago' && Number(monto) > saldoActual + 0.01) {
+      setError(`El pago no puede ser mayor que la deuda actual (S/. ${saldoActual.toFixed(2)})`);
+      return;
+    }
+    setEnviando(true);
     try {
       await api.post(`/hoteles/${hotelId}/estadias/${estadiaId}/movimientos`, {
         tipo,
@@ -686,9 +693,23 @@ function RegistrarMovimientoForm({
           />
         </div>
       )}
-      <div style={{ width: 100 }}>
+      <div style={{ width: 110 }}>
         <label style={labelStyle}>Monto</label>
-        <input type="number" min={0.01} step={0.01} value={monto} onChange={(e) => setMonto(e.target.value)} style={inputStyle} required />
+        <input
+          type="number"
+          min={0.01}
+          step={0.01}
+          max={tipo === 'pago' ? saldoActual : undefined}
+          value={monto}
+          onChange={(e) => setMonto(e.target.value)}
+          style={inputStyle}
+          required
+        />
+        {tipo === 'pago' && (
+          <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: '4px 0 0' }}>
+            Máximo: S/. {saldoActual.toFixed(2)}
+          </p>
+        )}
       </div>
       {esVentaConCatalogo && (
         <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, paddingBottom: 8 }}>

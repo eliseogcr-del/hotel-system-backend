@@ -359,6 +359,15 @@ export class EstadiasService {
         'El monto debe ser un valor positivo; el signo se calcula según el tipo de movimiento',
       );
     }
+    // Un pago no puede dejar el saldo en negativo (el huésped pagando de más
+    // sin que exista esa deuda). Si de verdad pagó de más y hay que
+    // devolverle algo, eso se resuelve con un 'ajuste', no fingiendo que
+    // debía más de lo que realmente debía.
+    if (dto.tipo === 'pago' && dto.monto > Number(estadia.saldo) + 0.01) {
+      throw new BadRequestException(
+        `El pago (S/. ${dto.monto.toFixed(2)}) no puede ser mayor que la deuda actual (S/. ${Number(estadia.saldo).toFixed(2)})`,
+      );
+    }
 
     const esVentaConCatalogo = dto.tipo === 'consumo_bazar' || dto.tipo === 'desayuno';
     const montoFinal = dto.tipo === 'pago' ? -Math.abs(dto.monto) : dto.monto;
