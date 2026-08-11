@@ -35,8 +35,9 @@ interface SesionCaja {
 const METODOS = ['efectivo', 'transferencia', 'yape', 'tarjeta'];
 
 export function Caja() {
-  const { hotelActual } = useHotel();
+  const { hotelActual, personalNombre } = useHotel();
   const [sesion, setSesion] = useState<SesionCaja | null>(null);
+  const [sesionCerrada, setSesionCerrada] = useState<SesionCaja | null>(null);
   const [turnos, setTurnos] = useState<Turno[]>([]);
   const [turnoId, setTurnoId] = useState('');
   const [loading, setLoading] = useState(true);
@@ -76,6 +77,7 @@ export function Caja() {
     setError(null);
     try {
       await api.post(`/hoteles/${hotelActual.hotelId}/caja/abrir`, { turnoId });
+      setSesionCerrada(null);
       cargarSesionActual();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'No se pudo abrir el turno');
@@ -90,8 +92,13 @@ export function Caja() {
     setAccionando(true);
     setError(null);
     try {
-      await api.post(`/hoteles/${hotelActual.hotelId}/caja/sesiones/${sesion.id}/cerrar`);
-      cargarSesionActual();
+      // Se guarda la respuesta del cierre (trae los totales finales) para
+      // mostrar un resumen antes de que la pantalla vuelva al formulario de
+      // abrir turno -- si no, se perdía de vista justo el momento en que
+      // más se necesitan esos números (para cuadrar caja o exportarlos).
+      const cerrada = await api.post<SesionCaja>(`/hoteles/${hotelActual.hotelId}/caja/sesiones/${sesion.id}/cerrar`);
+      setSesionCerrada(cerrada);
+      setSesion(null);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'No se pudo cerrar el turno');
     } finally {
@@ -101,6 +108,35 @@ export function Caja() {
 
   if (!hotelActual) return null;
   if (loading) return <p style={{ color: 'var(--text-muted)' }}>Cargando...</p>;
+
+  if (sesionCerrada) {
+    return (
+      <div>
+        <h1 style={{ fontSize: 20, marginBottom: 16 }}>Caja</h1>
+        <p style={{ fontSize: 13, color: 'var(--disponible)', marginBottom: 12 }}>
+          Turno cerrado correctamente. Este es el resumen final:
+        </p>
+        <ResumenSesion sesion={sesionCerrada} />
+        <div style={{ display: 'flex', gap: 8, marginTop: 16 }}>
+          <button
+            onClick={() => exportarLiquidacionPDF(sesionCerrada, hotelActual.nombre, personalNombre)}
+            style={btnSecondary}
+          >
+            Exportar PDF
+          </button>
+          <button
+            onClick={() => {
+              setSesionCerrada(null);
+              cargarSesionActual();
+            }}
+            style={btnPrimary}
+          >
+            Entendido, abrir un nuevo turno
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div>
@@ -137,59 +173,30 @@ export function Caja() {
         </form>
       ) : (
         <div>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, marginBottom: 20 }}>
-            <MetricCard label="Saldo inicial" value={`PEN ${sesion.saldo_inicial}`} />
-            <MetricCard label="Ingresos" value={`PEN ${sesion.totalIngresos}`} />
-            <MetricCard label="Egresos" value={`PEN ${sesion.totalEgresos}`} />
-            <MetricCard label="Saldo actual" value={`PEN ${sesion.saldoActual}`} destacado />
-          </div>
-
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
             <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
               Abierta {new Date(sesion.abierta_en).toLocaleString()}
             </span>
-            <button onClick={cerrarTurno} disabled={accionando} style={btnDanger}>
-              Cerrar turno
-            </button>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button
+                onClick={() => exportarLiquidacionPDF(sesion, hotelActual.nombre, personalNombre)}
+                style={btnSecondary}
+              >
+                Exportar PDF
+              </button>
+              <button onClick={cerrarTurno} disabled={accionando} style={btnDanger}>
+                Cerrar turno
+              </button>
+            </div>
           </div>
+
+          <ResumenSesion sesion={sesion} />
 
           <RegistrarMovimientoForm
             hotelId={hotelActual.hotelId}
             sesionId={sesion.id}
             onRegistrado={cargarSesionActual}
           />
-
-          <div style={{ overflowX: 'auto' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, marginTop: 16, minWidth: 560 }}>
-              <thead>
-                <tr style={{ textAlign: 'left', color: 'var(--text-secondary)', fontSize: 11 }}>
-                  <th style={thStyle}>Tipo</th>
-                  <th style={thStyle}>Concepto</th>
-                  <th style={thStyle}>Método</th>
-                  <th style={thStyle}>Monto</th>
-                  <th style={thStyle}>Hora</th>
-                </tr>
-              </thead>
-              <tbody>
-                {sesion.movimientos.map((m) => (
-                  <tr key={m.id} style={{ borderTop: '1px solid var(--border)' }}>
-                    <td style={tdStyle}>
-                      <span style={{ color: m.tipo === 'ingreso' ? 'var(--disponible)' : 'var(--danger)' }}>
-                        {m.tipo}
-                      </span>
-                    </td>
-                    <td style={tdStyle}>{m.concepto}</td>
-                    <td style={tdStyle}>{m.metodo_pago}</td>
-                    <td style={tdStyle}>{m.monto}</td>
-                    <td style={tdStyle}>{new Date(m.created_at).toLocaleTimeString()}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-          {sesion.movimientos.length === 0 && (
-            <p style={{ color: 'var(--text-muted)', fontSize: 13 }}>Todavía no hay movimientos en este turno.</p>
-          )}
         </div>
       )}
     </div>
@@ -280,6 +287,128 @@ function RegistrarMovimientoForm({
   );
 }
 
+function ResumenSesion({ sesion }: { sesion: SesionCaja }) {
+  const saldoFinal = sesion.estado === 'cerrada' && sesion.saldo_final != null ? sesion.saldo_final : sesion.saldoActual;
+  return (
+    <div>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, marginBottom: 20 }}>
+        <MetricCard label="Saldo inicial" value={`PEN ${sesion.saldo_inicial}`} />
+        <MetricCard label="Ingresos" value={`PEN ${sesion.totalIngresos}`} />
+        <MetricCard label="Egresos" value={`PEN ${sesion.totalEgresos}`} />
+        <MetricCard label={sesion.estado === 'cerrada' ? 'Saldo final' : 'Saldo actual'} value={`PEN ${saldoFinal}`} destacado />
+      </div>
+
+      <div style={{ overflowX: 'auto' }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, minWidth: 560 }}>
+          <thead>
+            <tr style={{ textAlign: 'left', color: 'var(--text-secondary)', fontSize: 11 }}>
+              <th style={thStyle}>Tipo</th>
+              <th style={thStyle}>Concepto</th>
+              <th style={thStyle}>Método</th>
+              <th style={thStyle}>Monto</th>
+              <th style={thStyle}>Hora</th>
+            </tr>
+          </thead>
+          <tbody>
+            {sesion.movimientos.map((m) => (
+              <tr key={m.id} style={{ borderTop: '1px solid var(--border)' }}>
+                <td style={tdStyle}>
+                  <span style={{ color: m.tipo === 'ingreso' ? 'var(--disponible)' : 'var(--danger)' }}>{m.tipo}</span>
+                </td>
+                <td style={tdStyle}>{m.concepto}</td>
+                <td style={tdStyle}>{m.metodo_pago}</td>
+                <td style={tdStyle}>{m.monto}</td>
+                <td style={tdStyle}>{new Date(m.created_at).toLocaleTimeString()}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      {sesion.movimientos.length === 0 && (
+        <p style={{ color: 'var(--text-muted)', fontSize: 13 }}>Todavía no hay movimientos en este turno.</p>
+      )}
+    </div>
+  );
+}
+
+function exportarLiquidacionPDF(sesion: SesionCaja, hotelNombre: string, personalNombre: string | null) {
+  const saldoFinal = sesion.estado === 'cerrada' && sesion.saldo_final != null ? sesion.saldo_final : sesion.saldoActual;
+  const fmt = (n: number) => Number(n).toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+  const filas = sesion.movimientos
+    .map(
+      (m) => `
+        <tr>
+          <td>${new Date(m.created_at).toLocaleString('es-PE')}</td>
+          <td style="text-transform:capitalize">${m.tipo}</td>
+          <td>${escapeHtml(m.concepto)}</td>
+          <td>${escapeHtml(m.metodo_pago)}</td>
+          <td style="text-align:right; color:${m.tipo === 'egreso' ? '#e24b4a' : '#173404'}">
+            ${m.tipo === 'egreso' ? '-' : ''}${fmt(m.monto)}
+          </td>
+        </tr>
+      `,
+    )
+    .join('');
+
+  const html = `<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8" />
+<title>Liquidación de caja</title>
+<style>
+  body { font-family: system-ui, -apple-system, 'Segoe UI', sans-serif; padding: 24px; color: #17181c; }
+  h1 { font-size: 18px; margin: 0 0 4px; }
+  .sub { color: #5f6068; font-size: 12px; margin-bottom: 20px; line-height: 1.6; }
+  .resumen { display: flex; gap: 20px; margin-bottom: 20px; }
+  .resumen > div { flex: 1; border: 1px solid #e6e5e1; border-radius: 8px; padding: 10px 14px; }
+  .label { font-size: 11px; color: #5f6068; margin: 0; }
+  .valor { font-size: 17px; font-weight: 700; margin: 4px 0 0; }
+  table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  th, td { padding: 6px 8px; border-bottom: 1px solid #e6e5e1; text-align: left; }
+  th { color: #5f6068; font-weight: 600; }
+  @media print { body { padding: 10mm; } }
+</style>
+</head>
+<body>
+  <h1>Liquidación de caja — ${escapeHtml(hotelNombre)}</h1>
+  <p class="sub">
+    ${personalNombre ? `Recepcionista: ${escapeHtml(personalNombre)}<br/>` : ''}
+    Turno abierto: ${new Date(sesion.abierta_en).toLocaleString('es-PE')}<br/>
+    ${sesion.cerrada_en ? `Turno cerrado: ${new Date(sesion.cerrada_en).toLocaleString('es-PE')}<br/>` : 'Estado: turno todavía abierto<br/>'}
+    Generado: ${new Date().toLocaleString('es-PE')}
+  </p>
+  <div class="resumen">
+    <div><p class="label">Saldo inicial</p><p class="valor">PEN ${fmt(sesion.saldo_inicial)}</p></div>
+    <div><p class="label">Ingresos</p><p class="valor" style="color:#173404">PEN ${fmt(sesion.totalIngresos)}</p></div>
+    <div><p class="label">Egresos</p><p class="valor" style="color:#e24b4a">PEN ${fmt(sesion.totalEgresos)}</p></div>
+    <div><p class="label">${sesion.estado === 'cerrada' ? 'Saldo final' : 'Saldo actual'}</p><p class="valor">PEN ${fmt(saldoFinal)}</p></div>
+  </div>
+  <table>
+    <thead>
+      <tr><th>Fecha y hora</th><th>Tipo</th><th>Concepto</th><th>Método</th><th style="text-align:right">Monto</th></tr>
+    </thead>
+    <tbody>${filas || '<tr><td colspan="5" style="color:#8a8b91">Sin movimientos</td></tr>'}</tbody>
+  </table>
+</body>
+</html>`;
+
+  const ventana = window.open('', '_blank');
+  if (!ventana) return;
+  ventana.document.write(html);
+  ventana.document.close();
+  ventana.focus();
+  setTimeout(() => ventana.print(), 250);
+}
+
+function escapeHtml(texto: string): string {
+  return texto
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
 function MetricCard({ label, value, destacado }: { label: string; value: string; destacado?: boolean }) {
   return (
     <div
@@ -332,6 +461,14 @@ const btnDanger: CSSProperties = {
   background: 'transparent',
   color: 'var(--danger)',
   border: '1px solid var(--ocupada)',
+  borderRadius: 'var(--radius)',
+  fontSize: 13,
+};
+
+const btnSecondary: CSSProperties = {
+  padding: '8px 14px',
+  background: 'transparent',
+  border: '1px solid var(--border)',
   borderRadius: 'var(--radius)',
   fontSize: 13,
 };
