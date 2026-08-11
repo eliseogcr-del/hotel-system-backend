@@ -13,6 +13,7 @@ interface HotelContextValue {
   hotelActual: AsignacionHotel | null;
   cambiarHotel: (hotelId: string) => void;
   loading: boolean;
+  personalNombre: string | null;
 }
 
 const HotelContext = createContext<HotelContextValue | null>(null);
@@ -20,6 +21,7 @@ const HotelContext = createContext<HotelContextValue | null>(null);
 export function HotelProvider({ children }: { children: ReactNode }) {
   const { session } = useAuth();
   const [asignaciones, setAsignaciones] = useState<AsignacionHotel[]>([]);
+  const [personalNombre, setPersonalNombre] = useState<string | null>(null);
   const [hotelActualId, setHotelActualId] = useState<string | null>(
     localStorage.getItem('hotelActualId'),
   );
@@ -28,6 +30,7 @@ export function HotelProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!session) {
       setAsignaciones([]);
+      setPersonalNombre(null);
       setLoading(false);
       return;
     }
@@ -38,15 +41,17 @@ export function HotelProvider({ children }: { children: ReactNode }) {
       // quien lee su propia fila de personal + sus propias asignaciones.
       const { data: personal } = await supabase
         .from('personal')
-        .select('id')
+        .select('id, nombre')
         .eq('auth_user_id', session.user.id)
         .maybeSingle();
 
       if (!personal) {
         setAsignaciones([]);
+        setPersonalNombre(null);
         setLoading(false);
         return;
       }
+      setPersonalNombre(personal.nombre);
 
       const { data: ph } = await supabase
         .from('personal_hotel')
@@ -76,7 +81,7 @@ export function HotelProvider({ children }: { children: ReactNode }) {
   const hotelActual = asignaciones.find((a) => a.hotelId === hotelActualId) ?? null;
 
   return (
-    <HotelContext.Provider value={{ asignaciones, hotelActual, cambiarHotel, loading }}>
+    <HotelContext.Provider value={{ asignaciones, hotelActual, cambiarHotel, loading, personalNombre }}>
       {children}
     </HotelContext.Provider>
   );

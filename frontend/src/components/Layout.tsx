@@ -13,9 +13,15 @@ const NAV_ITEMS = [
   { to: '/cotizaciones', label: 'Cotizaciones', icon: '📄' },
 ];
 
+const ROL_LABEL: Record<string, string> = {
+  admin: 'Administrador',
+  recepcion: 'Recepcionista',
+  hk: 'Housekeeping',
+};
+
 export function Layout() {
   const { signOut } = useAuth();
-  const { asignaciones, hotelActual, cambiarHotel } = useHotel();
+  const { asignaciones, hotelActual, cambiarHotel, personalNombre } = useHotel();
   const isMobile = useIsMobile();
   const [navAbierto, setNavAbierto] = useState(false);
 
@@ -163,20 +169,44 @@ export function Layout() {
             </select>
           </div>
 
-          <button
-            onClick={() => signOut()}
-            style={{
-              border: '1px solid var(--border)',
-              borderRadius: 'var(--radius)',
-              background: 'transparent',
-              padding: '6px 12px',
-              fontSize: 13,
-              color: 'var(--text-secondary)',
-              flexShrink: 0,
-            }}
-          >
-            {isMobile ? 'Salir' : 'Cerrar sesión'}
-          </button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
+            {personalNombre && (
+              <div style={{ textAlign: 'right', minWidth: 0 }}>
+                <div
+                  style={{
+                    fontSize: 13,
+                    fontWeight: 500,
+                    color: 'var(--text-primary)',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap',
+                    maxWidth: isMobile ? 110 : 220,
+                  }}
+                >
+                  {personalNombre}
+                </div>
+                {hotelActual && (
+                  <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+                    {ROL_LABEL[hotelActual.rol] ?? hotelActual.rol}
+                  </div>
+                )}
+              </div>
+            )}
+            <button
+              onClick={() => signOut()}
+              style={{
+                border: '1px solid var(--border)',
+                borderRadius: 'var(--radius)',
+                background: 'transparent',
+                padding: '6px 12px',
+                fontSize: 13,
+                color: 'var(--text-secondary)',
+                flexShrink: 0,
+              }}
+            >
+              {isMobile ? 'Salir' : 'Cerrar sesión'}
+            </button>
+          </div>
         </header>
 
         <main style={{ flex: 1, padding: isMobile ? 12 : 20, minWidth: 0 }}>
