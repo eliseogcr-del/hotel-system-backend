@@ -15,8 +15,16 @@ interface MovimientoCaja {
   monto: number;
   concepto: string;
   metodo_pago: string;
+  notas: string | null;
   created_at: string;
 }
+
+const METODO_LABEL: Record<string, string> = {
+  efectivo: 'Efectivo',
+  yape: 'Yape',
+  transferencia: 'Transferencia',
+  tarjeta: 'Tarjeta',
+};
 
 interface SesionCaja {
   id: string;
@@ -30,6 +38,7 @@ interface SesionCaja {
   totalIngresos: number;
   totalEgresos: number;
   saldoActual: number;
+  turnos: { nombre: string } | null;
 }
 
 const METODOS = ['efectivo', 'transferencia', 'yape', 'tarjeta'];
@@ -331,24 +340,67 @@ function ResumenSesion({ sesion }: { sesion: SesionCaja }) {
   );
 }
 
-function exportarLiquidacionPDF(sesion: SesionCaja, hotelNombre: string, personalNombre: string | null) {
-  const saldoFinal = sesion.estado === 'cerrada' && sesion.saldo_final != null ? sesion.saldo_final : sesion.saldoActual;
-  const fmt = (n: number) => Number(n).toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+function agruparYSumar<T>(items: T[], clave: (item: T) => string): Array<[string, number]> {
+  const mapa = new Map<string, number>();
+  for (const item of items as unknown as { monto: number }[]) {
+    const k = clave(item as unknown as T);
+    mapa.set(k, (mapa.get(k) ?? 0) + Number(item.monto));
+  }
+  return [...mapa.entries()];
+}
 
-  const filas = sesion.movimientos
-    .map(
-      (m) => `
-        <tr>
-          <td>${new Date(m.created_at).toLocaleString('es-PE')}</td>
-          <td style="text-transform:capitalize">${m.tipo}</td>
-          <td>${escapeHtml(m.concepto)}</td>
-          <td>${escapeHtml(m.metodo_pago)}</td>
-          <td style="text-align:right; color:${m.tipo === 'egreso' ? '#e24b4a' : '#173404'}">
-            ${m.tipo === 'egreso' ? '-' : ''}${fmt(m.monto)}
-          </td>
-        </tr>
-      `,
-    )
+function exportarLiquidacionPDF(sesion: SesionCaja, hotelNombre: string, personalNombre: string | null) {
+  const fmt = (n: number) => Number(n).toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const saldoFinal = sesion.estado === 'cerrada' && sesion.saldo_final != null ? sesion.saldo_final : sesion.saldoActual;
+
+  const ingresos = sesion.movimientos.filter((m) => m.tipo === 'ingreso');
+  const egresos = sesion.movimientos.filter((m) => m.tipo === 'egreso');
+
+  const ingresosPorMetodo = agruparYSumar(ingresos, (m) => m.metodo_pago);
+  const egresosPorConcepto = agruparYSumar(egresos, (m) => m.concepto);
+
+  const filaMetodo = (nombre: string, monto: number) => `
+    <tr><td>${escapeHtml(nombre)}</td><td style="text-align:right">${fmt(monto)}</td></tr>
+  `;
+
+  const filasIngresosResumen = [
+    filaMetodo('Saldo inicial', Number(sesion.saldo_inicial)),
+    ...ingresosPorMetodo.map(([metodo, monto]) => filaMetodo(METODO_LABEL[metodo] ?? metodo, monto)),
+    `<tr class="total"><td>Total ingresos</td><td style="text-align:right">${fmt(sesion.totalIngresos)}</td></tr>`,
+  ].join('');
+
+  const filasEgresosResumen =
+    egresosPorConcepto.length > 0
+      ? [
+          ...egresosPorConcepto.map(([concepto, monto]) => filaMetodo(concepto, monto)),
+          `<tr class="total"><td>Total egresos</td><td style="text-align:right">${fmt(sesion.totalEgresos)}</td></tr>`,
+        ].join('')
+      : '<tr><td colspan="2" class="vacio">Sin egresos registrados</td></tr>';
+
+  const filaDetalle = (m: MovimientoCaja) => `
+    <tr>
+      <td>${new Date(m.created_at).toLocaleString('es-PE')}</td>
+      <td>${escapeHtml(m.concepto)}</td>
+      <td>${METODO_LABEL[m.metodo_pago] ?? escapeHtml(m.metodo_pago)}</td>
+      <td style="text-align:right">${fmt(m.monto)}</td>
+      <td>${m.notas ? escapeHtml(m.notas) : ''}</td>
+    </tr>
+  `;
+
+  const filasIngresosDetalle = ingresos.length > 0
+    ? ingresos.map(filaDetalle).join('')
+    : '<tr><td colspan="5" class="vacio">Sin ingresos registrados</td></tr>';
+  const filasEgresosDetalle = egresos.length > 0
+    ? egresos.map(filaDetalle).join('')
+    : '<tr><td colspan="5" class="vacio">Sin egresos registrados</td></tr>';
+
+  const filasIngresosPorMetodoResumenGeneral = ingresosPorMetodo
+    .map(([metodo, monto]) => `
+      <div class="fila-sub">
+        <span>${escapeHtml(METODO_LABEL[metodo] ?? metodo)}</span>
+        <span>S/ ${fmt(monto)}</span>
+      </div>
+    `)
     .join('');
 
   const html = `<!doctype html>
@@ -357,39 +409,88 @@ function exportarLiquidacionPDF(sesion: SesionCaja, hotelNombre: string, persona
 <meta charset="utf-8" />
 <title>Liquidación de caja</title>
 <style>
-  body { font-family: system-ui, -apple-system, 'Segoe UI', sans-serif; padding: 24px; color: #17181c; }
-  h1 { font-size: 18px; margin: 0 0 4px; }
-  .sub { color: #5f6068; font-size: 12px; margin-bottom: 20px; line-height: 1.6; }
-  .resumen { display: flex; gap: 20px; margin-bottom: 20px; }
-  .resumen > div { flex: 1; border: 1px solid #e6e5e1; border-radius: 8px; padding: 10px 14px; }
-  .label { font-size: 11px; color: #5f6068; margin: 0; }
-  .valor { font-size: 17px; font-weight: 700; margin: 4px 0 0; }
-  table { width: 100%; border-collapse: collapse; font-size: 12px; }
-  th, td { padding: 6px 8px; border-bottom: 1px solid #e6e5e1; text-align: left; }
-  th { color: #5f6068; font-weight: 600; }
-  @media print { body { padding: 10mm; } }
+  * { box-sizing: border-box; }
+  body { font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; padding: 28px; color: #1a1a1a; font-size: 13px; }
+  h1 { font-size: 17px; text-align: center; text-transform: uppercase; letter-spacing: 0.5px; margin: 0 0 4px; }
+  .hotel { text-align: center; font-size: 12px; color: #5f6068; margin: 0 0 14px; }
+  .meta { text-align: center; font-size: 12px; color: #333; margin: 0 0 22px; padding-bottom: 12px; border-bottom: 2px solid #1a1a1a; }
+  .meta b { color: #000; }
+  h2 { font-size: 12.5px; text-transform: uppercase; letter-spacing: 0.3px; margin: 22px 0 8px; padding-bottom: 4px; border-bottom: 1px solid #1a1a1a; }
+  table { width: 100%; border-collapse: collapse; font-size: 12px; margin-bottom: 4px; }
+  th { text-align: left; font-size: 10.5px; text-transform: uppercase; color: #5f6068; padding: 5px 8px; border-bottom: 1px solid #1a1a1a; }
+  td { padding: 5px 8px; border-bottom: 1px solid #e2e2e2; }
+  th:last-child, td:last-child { text-align: left; }
+  table.resumen-tabla th:nth-child(2), table.resumen-tabla td:nth-child(2) { text-align: right; }
+  tr.total td { font-weight: 700; border-top: 1.5px solid #1a1a1a; border-bottom: none; }
+  td.vacio { color: #8a8b91; font-style: italic; }
+  .caja-total { display: inline-block; float: right; margin-top: -6px; background: #f0efe9; border: 1px solid #1a1a1a; border-radius: 4px; padding: 6px 14px; font-weight: 700; font-size: 13px; }
+  .clear { clear: both; }
+  .resumen-general { margin-top: 26px; border: 1.5px solid #1a1a1a; border-radius: 6px; padding: 16px 20px; page-break-inside: avoid; }
+  .resumen-general h2 { margin-top: 0; border: none; text-align: center; }
+  .fila { display: flex; justify-content: space-between; padding: 4px 0; font-size: 13px; }
+  .fila-sub { display: flex; justify-content: space-between; padding: 2px 0 2px 16px; font-size: 11.5px; color: #5f6068; }
+  .fila.destacada { border-top: 1.5px solid #1a1a1a; margin-top: 8px; padding-top: 10px; font-size: 16px; font-weight: 700; }
+  .ingreso { color: #173404; }
+  .egreso { color: #7a1414; }
+  .firma { display: flex; justify-content: space-between; margin-top: 60px; }
+  .firma div { width: 45%; border-top: 1px solid #1a1a1a; padding-top: 6px; text-align: center; font-size: 11px; color: #5f6068; }
+  @media print {
+    body { padding: 10mm; }
+    .resumen-general { page-break-inside: avoid; }
+  }
 </style>
 </head>
 <body>
-  <h1>Liquidación de caja — ${escapeHtml(hotelNombre)}</h1>
-  <p class="sub">
-    ${personalNombre ? `Recepcionista: ${escapeHtml(personalNombre)}<br/>` : ''}
-    Turno abierto: ${new Date(sesion.abierta_en).toLocaleString('es-PE')}<br/>
-    ${sesion.cerrada_en ? `Turno cerrado: ${new Date(sesion.cerrada_en).toLocaleString('es-PE')}<br/>` : 'Estado: turno todavía abierto<br/>'}
-    Generado: ${new Date().toLocaleString('es-PE')}
+  <h1>Liquidación de caja — Recepción</h1>
+  <p class="hotel">${escapeHtml(hotelNombre)}</p>
+  <p class="meta">
+    <b>Fecha:</b> ${new Date(sesion.abierta_en).toLocaleDateString('es-PE')}
+    &nbsp;|&nbsp; <b>Turno:</b> ${escapeHtml(sesion.turnos?.nombre ?? '—')}
+    &nbsp;|&nbsp; <b>Responsable:</b> ${escapeHtml(personalNombre ?? '—')}
+    &nbsp;|&nbsp; <b>Estado:</b> ${sesion.estado === 'cerrada' ? 'Turno cerrado' : 'Turno abierto'}
   </p>
-  <div class="resumen">
-    <div><p class="label">Saldo inicial</p><p class="valor">PEN ${fmt(sesion.saldo_inicial)}</p></div>
-    <div><p class="label">Ingresos</p><p class="valor" style="color:#173404">PEN ${fmt(sesion.totalIngresos)}</p></div>
-    <div><p class="label">Egresos</p><p class="valor" style="color:#e24b4a">PEN ${fmt(sesion.totalEgresos)}</p></div>
-    <div><p class="label">${sesion.estado === 'cerrada' ? 'Saldo final' : 'Saldo actual'}</p><p class="valor">PEN ${fmt(saldoFinal)}</p></div>
-  </div>
-  <table>
-    <thead>
-      <tr><th>Fecha y hora</th><th>Tipo</th><th>Concepto</th><th>Método</th><th style="text-align:right">Monto</th></tr>
-    </thead>
-    <tbody>${filas || '<tr><td colspan="5" style="color:#8a8b91">Sin movimientos</td></tr>'}</tbody>
+
+  <h2>Ingresos — Resumen por método</h2>
+  <table class="resumen-tabla">
+    <thead><tr><th>Método</th><th>Monto (S/)</th></tr></thead>
+    <tbody>${filasIngresosResumen}</tbody>
   </table>
+  <span class="caja-total">S/ ${fmt(Number(sesion.saldo_inicial) + sesion.totalIngresos)}</span>
+  <div class="clear"></div>
+
+  <h2>Ingresos — Detalle</h2>
+  <table>
+    <thead><tr><th>Fecha y hora</th><th>Concepto</th><th>Método</th><th style="text-align:right">Monto (S/)</th><th>Notas</th></tr></thead>
+    <tbody>${filasIngresosDetalle}</tbody>
+  </table>
+
+  <h2>Egresos — Resumen por motivo</h2>
+  <table class="resumen-tabla">
+    <thead><tr><th>Motivo</th><th>Monto (S/)</th></tr></thead>
+    <tbody>${filasEgresosResumen}</tbody>
+  </table>
+  <span class="caja-total">S/ ${fmt(sesion.totalEgresos)}</span>
+  <div class="clear"></div>
+
+  <h2>Egresos — Detalle</h2>
+  <table>
+    <thead><tr><th>Fecha y hora</th><th>Motivo</th><th>Método</th><th style="text-align:right">Monto (S/)</th><th>Notas</th></tr></thead>
+    <tbody>${filasEgresosDetalle}</tbody>
+  </table>
+
+  <div class="resumen-general">
+    <h2>Resumen general</h2>
+    <div class="fila"><span>Saldo inicial</span><span>S/ ${fmt(sesion.saldo_inicial)}</span></div>
+    <div class="fila ingreso"><span>Total ingresos</span><span>S/ ${fmt(sesion.totalIngresos)}</span></div>
+    ${filasIngresosPorMetodoResumenGeneral}
+    <div class="fila egreso"><span>Total egresos</span><span>S/ ${fmt(sesion.totalEgresos)}</span></div>
+    <div class="fila destacada"><span>${sesion.estado === 'cerrada' ? 'Saldo final' : 'Saldo actual'}</span><span>S/ ${fmt(saldoFinal)}</span></div>
+  </div>
+
+  <div class="firma">
+    <div>Entrega (${escapeHtml(personalNombre ?? 'Responsable')})</div>
+    <div>Recibe</div>
+  </div>
 </body>
 </html>`;
 

@@ -21,6 +21,7 @@ interface SesionConHotel {
   abierta_en: string;
   cerrada_en: string | null;
   personal_hotel: { hotel_id: string };
+  turnos: { nombre: string } | null;
 }
 
 @Injectable()
@@ -277,7 +278,8 @@ export class CajaService {
         `
         id, personal_hotel_id, turno_id, fecha, saldo_inicial, saldo_final,
         estado, abierta_en, cerrada_en,
-        personal_hotel!inner(hotel_id)
+        personal_hotel!inner(hotel_id),
+        turnos(nombre)
       `,
       )
       .eq('id', sesionId)
