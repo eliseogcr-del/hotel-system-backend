@@ -1,6 +1,13 @@
 import { useEffect, useState, type CSSProperties, type FormEvent } from 'react';
 import { api, ApiError } from '../lib/api';
-import { buscarHuespedPorDni, crearHuesped } from '../lib/huespedes';
+import {
+  buscarHuespedPorDni,
+  buscarHuespedesPorNombre,
+  buscarEmpresaPorRuc,
+  crearHuesped,
+  type Huesped,
+  type Empresa,
+} from '../lib/huespedes';
 
 const ORIGENES = ['telefono', 'whatsapp', 'booking', 'airbnb', 'directo', 'walkin'];
 const METODOS_PAGO = ['efectivo', 'yape', 'transferencia', 'tarjeta'];
@@ -15,6 +22,7 @@ interface ReservaHabitacionDetalle {
   dias: number;
   fecha_hora_checkin_prevista: string;
   fecha_hora_checkout_prevista: string;
+  observaciones: string | null;
   vehiculos: { marca: string | null; tipo: string | null; placa: string | null } | null;
 }
 
@@ -90,12 +98,20 @@ export function ReservaFormModal({
   const [cargando, setCargando] = useState(modo === 'editar');
   const [huespedNombre, setHuespedNombre] = useState<string | null>(null);
 
-  // Huésped (solo modo 'crear')
-  const [dni, setDni] = useState('');
+  // Cliente (solo modo 'crear'): DNI/RUC exacto o nombre parcial. Puede
+  // resolver a un huésped, a una empresa, a varias coincidencias por
+  // nombre (para elegir) o a "no existe, completa los datos".
+  const [busqueda, setBusqueda] = useState('');
   const [huespedId, setHuespedId] = useState<string | null>(null);
+  const [empresaId, setEmpresaId] = useState<string | null>(null);
   const [nombres, setNombres] = useState('');
   const [apellidos, setApellidos] = useState('');
+  const [razonSocial, setRazonSocial] = useState('');
+  const [resultadosNombre, setResultadosNombre] = useState<Huesped[]>([]);
+  const [buscado, setBuscado] = useState(false);
   const [buscando, setBuscando] = useState(false);
+
+  const [observaciones, setObservaciones] = useState('');
 
   const [origen, setOrigen] = useState('directo');
   const [moneda, setMoneda] = useState<'PEN' | 'USD'>('PEN');
@@ -148,6 +164,7 @@ export function ReservaFormModal({
           setIncluyeDesayuno(linea.incluye_desayuno);
           setConMascota(linea.con_mascota);
           setTarifaDia(Number(linea.tarifa_dia));
+          setObservaciones(linea.observaciones ?? '');
           if (linea.vehiculos && (linea.vehiculos.marca || linea.vehiculos.tipo || linea.vehiculos.placa)) {
             setTieneVehiculo(true);
             setVehiculoMarca(linea.vehiculos.marca ?? '');
@@ -160,25 +177,70 @@ export function ReservaFormModal({
       .finally(() => setCargando(false));
   }, [modo, reservaId, lineaId, hotelId]);
 
-  async function buscarHuesped() {
-    if (!dni.trim()) return;
+  function limpiarSeleccionCliente() {
+    setHuespedId(null);
+    setEmpresaId(null);
+    setResultadosNombre([]);
+    setBuscado(false);
+  }
+
+  function seleccionarHuesped(h: Huesped) {
+    setHuespedId(h.id);
+    setEmpresaId(null);
+    setNombres(h.nombres);
+    setApellidos(h.apellidos);
+    setResultadosNombre([]);
+  }
+
+  function seleccionarEmpresa(e: Empresa) {
+    setEmpresaId(e.id);
+    setHuespedId(null);
+    setRazonSocial(e.razon_social);
+    setResultadosNombre([]);
+  }
+
+  // Busca en este orden: RUC exacto de empresa (11 dígitos) -> documento
+  // exacto de huésped -> si no hubo match exacto, nombre parcial (LIKE)
+  // sobre huéspedes -- a veces el cliente solo da su nombre o apellido por
+  // teléfono, y puede haber varias coincidencias para elegir.
+  async function buscarCliente() {
+    const q = busqueda.trim();
+    if (!q) return;
     setBuscando(true);
     setError(null);
+    setHuespedId(null);
+    setEmpresaId(null);
+    setResultadosNombre([]);
     try {
-      const h = await buscarHuespedPorDni(hotelId, dni.trim());
-      if (h) {
-        setHuespedId(h.id);
-        setNombres(h.nombres);
-        setApellidos(h.apellidos);
-      } else {
-        setHuespedId(null);
+      if (/^\d{11}$/.test(q)) {
+        const empresa = await buscarEmpresaPorRuc(hotelId, q);
+        if (empresa) {
+          seleccionarEmpresa(empresa);
+          return;
+        }
+      }
+
+      const huesped = await buscarHuespedPorDni(hotelId, q);
+      if (huesped) {
+        seleccionarHuesped(huesped);
+        return;
+      }
+
+      const resultados = await buscarHuespedesPorNombre(hotelId, q);
+      if (resultados.length === 1) {
+        seleccionarHuesped(resultados[0]);
+      } else if (resultados.length > 1) {
+        setResultadosNombre(resultados);
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'No se pudo buscar el huésped');
+      setError(err instanceof Error ? err.message : 'No se pudo buscar el cliente');
     } finally {
       setBuscando(false);
+      setBuscado(true);
     }
   }
+
+  const sinResultados = buscado && !huespedId && !empresaId && resultadosNombre.length === 0;
 
   const checkoutCalculado = calcularCheckout(fecha, hora, dias);
   const cobroMascotaTotal = conMascota ? precioMascotaDia * dias : 0;
@@ -198,21 +260,23 @@ export function ReservaFormModal({
 
       if (modo === 'crear') {
         let idHuesped = huespedId;
-        if (!idHuesped) {
-          if (!nombres.trim() || !apellidos.trim() || !dni.trim()) {
-            throw new Error('Completa DNI, nombres y apellidos para crear al huésped');
+        let idEmpresa = empresaId;
+        if (!idHuesped && !idEmpresa) {
+          if (!nombres.trim() || !apellidos.trim() || !busqueda.trim()) {
+            throw new Error('Busca o completa nombres y apellidos para registrar al huésped');
           }
           const creado = await crearHuesped(hotelId, {
             nombres: nombres.trim(),
             apellidos: apellidos.trim(),
             tipoDoc: 'dni',
-            nroDoc: dni.trim(),
+            nroDoc: busqueda.trim(),
           });
           idHuesped = creado.id;
         }
 
         await api.post(`/hoteles/${hotelId}/reservas`, {
-          huespedId: idHuesped,
+          huespedId: idEmpresa ? undefined : idHuesped,
+          empresaId: idEmpresa ?? undefined,
           origen,
           moneda,
           habitaciones: [
@@ -226,6 +290,7 @@ export function ReservaFormModal({
               diasManual: dias,
               incluyeDesayuno,
               conMascota,
+              observaciones: observaciones.trim() || undefined,
               vehiculoMarca: tieneVehiculo ? vehiculoMarca.trim() || undefined : undefined,
               vehiculoTipo: tieneVehiculo ? vehiculoTipo.trim() || undefined : undefined,
               vehiculoPlaca: tieneVehiculo ? vehiculoPlaca.trim() || undefined : undefined,
@@ -244,6 +309,7 @@ export function ReservaFormModal({
           checkinPrevisto: checkinISO,
           diasManual: dias,
           tarifaDiaManual: tarifaDia,
+          observaciones: observaciones.trim() || undefined,
           vehiculoMarca: tieneVehiculo ? vehiculoMarca.trim() || undefined : undefined,
           vehiculoTipo: tieneVehiculo ? vehiculoTipo.trim() || undefined : undefined,
           vehiculoPlaca: tieneVehiculo ? vehiculoPlaca.trim() || undefined : undefined,
@@ -275,38 +341,76 @@ export function ReservaFormModal({
 
             {modo === 'crear' ? (
               <div>
-                <label style={labelStyle}>DNI del huésped</label>
+                <label style={labelStyle}>DNI, RUC (empresa) o nombre del cliente</label>
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
                   <input
-                    value={dni}
+                    value={busqueda}
                     onChange={(e) => {
-                      setDni(e.target.value);
-                      setHuespedId(null);
+                      setBusqueda(e.target.value);
+                      limpiarSeleccionCliente();
                     }}
+                    placeholder="Ej. 45678912, 20601234567 o RIOS"
                     style={{ ...inputStyle, flex: 1, minWidth: 140 }}
-                    required
+                    required={!huespedId && !empresaId}
                   />
-                  <button type="button" onClick={buscarHuesped} disabled={buscando} style={btnSecondary}>
+                  <button type="button" onClick={buscarCliente} disabled={buscando || !busqueda.trim()} style={btnSecondary}>
                     {buscando ? 'Buscando...' : 'Buscar'}
                   </button>
                 </div>
-                {huespedId ? (
+
+                {huespedId && (
                   <p style={{ fontSize: 11, color: 'var(--disponible)', margin: '4px 0 0' }}>
                     Huésped encontrado: {nombres} {apellidos}
                   </p>
-                ) : (
-                  dni && (
-                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 8 }}>
-                      <div style={{ flex: 1, minWidth: 140 }}>
-                        <label style={labelStyle}>Nombres</label>
-                        <input value={nombres} onChange={(e) => setNombres(e.target.value)} style={inputStyle} />
-                      </div>
-                      <div style={{ flex: 1, minWidth: 140 }}>
-                        <label style={labelStyle}>Apellidos</label>
-                        <input value={apellidos} onChange={(e) => setApellidos(e.target.value)} style={inputStyle} />
-                      </div>
+                )}
+                {empresaId && (
+                  <p style={{ fontSize: 11, color: 'var(--disponible)', margin: '4px 0 0' }}>
+                    Empresa encontrada: {razonSocial}
+                  </p>
+                )}
+
+                {resultadosNombre.length > 0 && (
+                  <div style={{ marginTop: 8, border: '1px solid var(--border)', borderRadius: 'var(--radius)', overflow: 'hidden' }}>
+                    <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: 0, padding: '6px 10px', background: 'var(--surface-1)' }}>
+                      {resultadosNombre.length} coincidencia(s) — elige una:
+                    </p>
+                    {resultadosNombre.map((h) => (
+                      <button
+                        key={h.id}
+                        type="button"
+                        onClick={() => seleccionarHuesped(h)}
+                        style={{
+                          display: 'block',
+                          width: '100%',
+                          textAlign: 'left',
+                          padding: '8px 10px',
+                          background: 'transparent',
+                          border: 'none',
+                          borderTop: '1px solid var(--border)',
+                          fontSize: 12,
+                          cursor: 'pointer',
+                        }}
+                      >
+                        {h.nombres} {h.apellidos} <span style={{ color: 'var(--text-muted)' }}>· {h.nro_doc}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+
+                {sinResultados && (
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 8 }}>
+                    <p style={{ fontSize: 11, color: 'var(--text-muted)', width: '100%', margin: 0 }}>
+                      No se encontró: completa los datos para registrar un huésped nuevo (usará "{busqueda.trim()}" como documento).
+                    </p>
+                    <div style={{ flex: 1, minWidth: 140 }}>
+                      <label style={labelStyle}>Nombres</label>
+                      <input value={nombres} onChange={(e) => setNombres(e.target.value)} style={inputStyle} />
                     </div>
-                  )
+                    <div style={{ flex: 1, minWidth: 140 }}>
+                      <label style={labelStyle}>Apellidos</label>
+                      <input value={apellidos} onChange={(e) => setApellidos(e.target.value)} style={inputStyle} />
+                    </div>
+                  </div>
                 )}
               </div>
             ) : (
@@ -424,6 +528,17 @@ export function ReservaFormModal({
                   </div>
                 </div>
               )}
+            </div>
+
+            <div>
+              <label style={labelStyle}>Observaciones</label>
+              <textarea
+                value={observaciones}
+                onChange={(e) => setObservaciones(e.target.value)}
+                placeholder="Notas de esta reserva (pedidos especiales, referencias, etc.)"
+                rows={2}
+                style={{ ...inputStyle, resize: 'vertical' }}
+              />
             </div>
 
             <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end' }}>

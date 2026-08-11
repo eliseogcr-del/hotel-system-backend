@@ -56,3 +56,40 @@ export async function crearHuesped(
   if (error) throw error;
   return data;
 }
+
+// A veces el cliente solo da su nombre (o apellido) por teléfono -- búsqueda
+// parcial sobre nombres/apellidos, puede devolver varias coincidencias
+// (ej. "RIOS" matchea a cualquier huésped que tenga eso en cualquiera de
+// los dos campos) para que el recepcionista elija cuál es.
+export async function buscarHuespedesPorNombre(hotelId: string, texto: string): Promise<Huesped[]> {
+  const q = texto.trim();
+  if (!q) return [];
+  const { data, error } = await supabase
+    .from('huespedes')
+    .select(HUESPED_SELECT)
+    .eq('hotel_id', hotelId)
+    .or(`nombres.ilike.%${q}%,apellidos.ilike.%${q}%`)
+    .order('nombres', { ascending: true })
+    .limit(10);
+  if (error) throw error;
+  return data ?? [];
+}
+
+export interface Empresa {
+  id: string;
+  ruc: string;
+  razon_social: string;
+}
+
+// Reservas a nombre de una empresa (no de un huésped individual): se busca
+// por RUC exacto, igual criterio que buscarHuespedPorDni.
+export async function buscarEmpresaPorRuc(hotelId: string, ruc: string): Promise<Empresa | null> {
+  const { data, error } = await supabase
+    .from('empresas')
+    .select('id, ruc, razon_social')
+    .eq('hotel_id', hotelId)
+    .eq('ruc', ruc)
+    .maybeSingle();
+  if (error) throw error;
+  return data;
+}

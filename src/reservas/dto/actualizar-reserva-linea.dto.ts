@@ -39,6 +39,10 @@ export class ActualizarReservaLineaDto {
   conMascota?: boolean;
 
   @IsOptional()
+  @IsString()
+  observaciones?: string;
+
+  @IsOptional()
   @IsISO8601()
   checkinPrevisto?: string;
 

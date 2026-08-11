@@ -529,6 +529,7 @@ export class ReservasService {
         subtotal: costo.subtotal,
         fecha_hora_checkin_prevista: checkinNuevo,
         fecha_hora_checkout_prevista: checkoutNuevo,
+        ...(dto.observaciones !== undefined ? { observaciones: dto.observaciones } : {}),
       })
       .eq('id', lineaId);
     if (updError) throw updError;
