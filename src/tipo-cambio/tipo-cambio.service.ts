@@ -1,5 +1,6 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { SupabaseClient } from '@supabase/supabase-js';
+import * as https from 'https';
 import { UpsertTipoCambioDto } from './dto/upsert-tipo-cambio.dto';
 
 // Fuente oficial de SUNAT: un .txt simple (sin sesión, sin formulario) con
@@ -8,6 +9,34 @@ import { UpsertTipoCambioDto } from './dto/upsert-tipo-cambio.dto';
 // automatizar esto en Perú -- mucho más estable que scrapear el formulario
 // interactivo de e-consulta.sunat.gob.pe (que requiere sesión/viewstate).
 const URL_SUNAT_TXT = 'https://www.sunat.gob.pe/a/txt/tipoCambio.txt';
+
+// Se usa el módulo https nativo (no fetch) a propósito: fetch recién es
+// global sin flags desde Node 18, y este proyecto no fija una versión de
+// Node para el despliegue (sin engines en package.json, sin render.yaml).
+// https.get funciona en cualquier versión sin agregar dependencias nuevas.
+// El User-Agent explícito es porque algunos sitios .gob.pe rechazan el
+// User-Agent por defecto de Node.
+function obtenerTextoSunat(): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const req = https.get(
+      URL_SUNAT_TXT,
+      { headers: { 'User-Agent': 'Mozilla/5.0 (compatible; HotelSuiteBot/1.0)' }, timeout: 10000 },
+      (res) => {
+        if (res.statusCode !== 200) {
+          res.resume();
+          reject(new Error(`SUNAT respondió ${res.statusCode}`));
+          return;
+        }
+        let data = '';
+        res.setEncoding('utf8');
+        res.on('data', (chunk) => (data += chunk));
+        res.on('end', () => resolve(data));
+      },
+    );
+    req.on('timeout', () => req.destroy(new Error('Tiempo de espera agotado')));
+    req.on('error', reject);
+  });
+}
 
 @Injectable()
 export class TipoCambioService {
@@ -61,11 +90,7 @@ export class TipoCambioService {
   async sincronizarDesdeSunat(client: SupabaseClient) {
     let texto: string;
     try {
-      const res = await fetch(URL_SUNAT_TXT);
-      if (!res.ok) {
-        throw new Error(`SUNAT respondió ${res.status}`);
-      }
-      texto = (await res.text()).trim();
+      texto = (await obtenerTextoSunat()).trim();
     } catch (err) {
       throw new BadRequestException(
         `No se pudo obtener el tipo de cambio de SUNAT: ${err instanceof Error ? err.message : 'error de red'}`,

@@ -49,7 +49,7 @@ export function Layout() {
           api
             .post<TipoCambioVigente>(`/hoteles/${hotelActual.hotelId}/tipo-cambio/sincronizar`)
             .then(setTipoCambio)
-            .catch(() => {});
+            .catch((err) => console.error('No se pudo sincronizar el tipo de cambio con SUNAT:', err));
         }
       })
       .catch(() => {});
