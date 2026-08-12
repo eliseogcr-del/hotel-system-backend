@@ -460,13 +460,13 @@ function CalendarioReservas({
                     left: 0,
                     zIndex: 2,
                     background: 'var(--surface-2)',
-                    width: 62,
-                    maxWidth: 62,
-                    padding: '6px 4px',
+                    width: 108,
+                    maxWidth: 108,
+                    padding: '6px 6px',
                     textAlign: 'left',
                   }}
                 >
-                  Hab.
+                  Habitación
                 </th>
                 {gruposMes.map((g, i) => (
                   <th key={i} colSpan={g.span} style={thCalStyle}>
@@ -486,20 +486,35 @@ function CalendarioReservas({
               {habitacionesOrdenadas.map((h) => (
                 <tr key={h.id}>
                   <td
-                    title={h.tipos_habitacion?.nombre ?? ''}
+                    title={`${h.hab_numero} · ${h.tipos_habitacion?.nombre ?? ''}`}
                     style={{
                       ...tdCalStyle,
                       position: 'sticky',
                       left: 0,
                       background: 'var(--surface-1)',
                       textAlign: 'left',
-                      fontWeight: 500,
-                      width: 62,
-                      maxWidth: 62,
-                      padding: '6px 4px',
+                      width: 108,
+                      maxWidth: 108,
+                      padding: '6px 6px',
+                      overflow: 'hidden',
                     }}
                   >
-                    {h.hab_numero}
+                    <span style={{ fontWeight: 500 }}>{h.hab_numero}</span>
+                    {h.tipos_habitacion?.nombre && (
+                      <span
+                        style={{
+                          display: 'block',
+                          fontSize: 10,
+                          color: 'var(--text-muted)',
+                          fontWeight: 400,
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          whiteSpace: 'nowrap',
+                        }}
+                      >
+                        {h.tipos_habitacion.nombre}
+                      </span>
+                    )}
                   </td>
                   {segmentosHabitacion(h.id).map((s, i) => (
                     <td
