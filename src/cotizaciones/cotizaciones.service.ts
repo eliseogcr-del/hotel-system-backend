@@ -56,7 +56,7 @@ export class CotizacionesService {
         checkoutPrevisto: checkoutISO,
       });
       if (!resultado.disponible) {
-        throw new ConflictException(resultado.conflicto);
+        throw new ConflictException(resultado.conflicto?.mensaje ?? 'La habitación no está disponible en ese rango');
       }
     }
 

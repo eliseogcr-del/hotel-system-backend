@@ -66,7 +66,7 @@ export class ReservasService {
         checkoutPrevisto: linea.checkoutPrevisto,
       });
       if (!resultado.disponible) {
-        throw new ConflictException(resultado.conflicto);
+        throw new ConflictException(resultado.conflicto?.mensaje ?? 'La habitación no está disponible en ese rango');
       }
 
       if (linea.cocheraId) {
@@ -369,7 +369,7 @@ export class ReservasService {
       checkoutPrevisto: linea.checkoutPrevisto,
     });
     if (!resultado.disponible) {
-      throw new ConflictException(resultado.conflicto);
+      throw new ConflictException(resultado.conflicto?.mensaje ?? 'La habitación no está disponible en ese rango');
     }
 
     const costo = await this.resolverCostoLinea(
@@ -494,7 +494,7 @@ export class ReservasService {
         excluirReservaHabitacionId: lineaId,
       });
       if (!resultado.disponible) {
-        throw new ConflictException(resultado.conflicto);
+        throw new ConflictException(resultado.conflicto?.mensaje ?? 'La habitación no está disponible en ese rango');
       }
     }
 
