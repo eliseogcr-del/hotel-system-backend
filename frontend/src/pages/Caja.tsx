@@ -319,17 +319,19 @@ function ResumenSesion({ sesion }: { sesion: SesionCaja }) {
             </tr>
           </thead>
           <tbody>
-            {sesion.movimientos.map((m) => (
-              <tr key={m.id} style={{ borderTop: '1px solid var(--border)' }}>
-                <td style={tdStyle}>
-                  <span style={{ color: m.tipo === 'ingreso' ? 'var(--disponible)' : 'var(--danger)' }}>{m.tipo}</span>
-                </td>
-                <td style={tdStyle}>{m.concepto}</td>
-                <td style={tdStyle}>{m.metodo_pago}</td>
-                <td style={tdStyle}>{m.monto}</td>
-                <td style={tdStyle}>{new Date(m.created_at).toLocaleTimeString()}</td>
-              </tr>
-            ))}
+            {sesion.movimientos.map((m) => {
+              const color = m.tipo === 'ingreso' ? 'var(--ingreso)' : 'var(--egreso)';
+              const bg = m.tipo === 'ingreso' ? 'var(--ingreso-bg)' : 'var(--egreso-bg)';
+              return (
+                <tr key={m.id} style={{ borderTop: '1px solid var(--border)', background: bg }}>
+                  <td style={{ ...tdStyle, color, fontWeight: 500 }}>{m.tipo}</td>
+                  <td style={{ ...tdStyle, color }}>{m.concepto}</td>
+                  <td style={{ ...tdStyle, color }}>{m.metodo_pago}</td>
+                  <td style={{ ...tdStyle, color, fontWeight: 600 }}>{m.monto}</td>
+                  <td style={{ ...tdStyle, color }}>{new Date(m.created_at).toLocaleTimeString()}</td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>
