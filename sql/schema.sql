@@ -321,7 +321,13 @@ create table movimientos_cuenta (
     fecha timestamptz not null default now(),
     notas text,
     -- Quién generó el cargo/abono, para el detalle de cuentas x cobrar.
-    registrado_por uuid references personal(id)
+    registrado_por uuid references personal(id),
+    -- Pagos en dólares: el monto de arriba siempre queda en soles (para
+    -- que el saldo/caja se mantengan en una sola moneda); estas columnas
+    -- son solo trazabilidad de que ese monto vino de una conversión.
+    moneda_pago text check (moneda_pago in ('PEN','USD')),
+    monto_original numeric(10,2),
+    tipo_cambio_aplicado numeric(6,3)
 );
 
 create table comprobantes (
@@ -474,6 +480,7 @@ alter table comprobantes enable row level security;
 alter table cotizaciones enable row level security;
 alter table cotizacion_detalle enable row level security;
 alter table importaciones_canal enable row level security;
+alter table tipo_cambio enable row level security;
 
 -- Patrón general: super_admin ve todo; el resto solo ve datos de sus hoteles asignados.
 
@@ -594,6 +601,18 @@ create policy p_personal_hotel_update on personal_hotel for update
 
 create policy p_turnos on turnos for all
     using (is_super_admin() or hotel_id in (select my_hotel_ids()));
+
+-- Tipo de cambio: dato del país, no de un hotel en particular -- lectura
+-- abierta a cualquier autenticado (se muestra en la parte superior de
+-- toda la app), escritura solo para quien sea admin de al menos un hotel.
+create policy p_tipo_cambio_select on tipo_cambio for select
+    using (true);
+
+create policy p_tipo_cambio_insert on tipo_cambio for insert
+    with check (is_super_admin() or exists (select 1 from my_hotel_ids_by_rol('admin')));
+
+create policy p_tipo_cambio_update on tipo_cambio for update
+    using (is_super_admin() or exists (select 1 from my_hotel_ids_by_rol('admin')));
 
 -- CAJA: aislamiento estricto. Cada recepcionista ve solo sus propias sesiones;
 -- el admin del hotel ve el consolidado de todo su hotel; el super_admin ve todo.

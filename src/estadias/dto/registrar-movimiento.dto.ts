@@ -66,4 +66,12 @@ export class RegistrarMovimientoDto {
   @IsOptional()
   @IsString()
   notas?: string;
+
+  // Solo aplica a tipo='pago': si el huésped paga en dólares, el monto de
+  // arriba se interpreta en USD y se convierte a soles con el tipo de
+  // cambio (compra) vigente antes de guardarse -- el saldo y la caja
+  // siempre quedan en soles. Por defecto 'PEN' (sin conversión).
+  @IsOptional()
+  @IsEnum(['PEN', 'USD'])
+  moneda?: 'PEN' | 'USD';
 }

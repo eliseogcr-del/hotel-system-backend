@@ -75,6 +75,12 @@ interface TipoDesayuno {
   activo: boolean;
 }
 
+interface TipoCambioVigente {
+  fecha: string;
+  valor_compra: number;
+  valor_venta: number;
+}
+
 interface ProductoBazar {
   id: string;
   nombre: string;
@@ -98,6 +104,15 @@ export function EstadiaDetalle() {
   const [mostrarCheckout, setMostrarCheckout] = useState(false);
   const [cobroLate, setCobroLate] = useState('');
   const [checkoutReal, setCheckoutReal] = useState(ahoraLocal());
+  const [tipoCambio, setTipoCambio] = useState<TipoCambioVigente | null>(null);
+
+  useEffect(() => {
+    if (!hotelActual) return;
+    api
+      .get<TipoCambioVigente | null>(`/hoteles/${hotelActual.hotelId}/tipo-cambio/vigente`)
+      .then(setTipoCambio)
+      .catch(() => {});
+  }, [hotelActual]);
 
   function cargar() {
     if (!hotelActual || !id) return;
@@ -264,6 +279,7 @@ export function EstadiaDetalle() {
           hotelId={hotelActual.hotelId}
           estadiaId={estadia.id}
           saldoActual={Number(estadia.saldo)}
+          tipoCambio={tipoCambio}
           onRegistrado={cargar}
         />
       )}
@@ -566,15 +582,18 @@ function RegistrarMovimientoForm({
   hotelId,
   estadiaId,
   saldoActual,
+  tipoCambio,
   onRegistrado,
 }: {
   hotelId: string;
   estadiaId: string;
   saldoActual: number;
+  tipoCambio: TipoCambioVigente | null;
   onRegistrado: () => void;
 }) {
   const [tipo, setTipo] = useState('pago');
   const [monto, setMonto] = useState('');
+  const [moneda, setMoneda] = useState<'PEN' | 'USD'>('PEN');
   const [metodoPago, setMetodoPago] = useState('efectivo');
   const [notas, setNotas] = useState('');
   const [productos, setProductos] = useState<ProductoBazar[]>([]);
@@ -597,6 +616,10 @@ function RegistrarMovimientoForm({
   const catalogo = tipo === 'consumo_bazar' ? productosActivos : tiposDesayunoActivos;
   const itemId = tipo === 'consumo_bazar' ? productoId : tipoDesayunoId;
   const requiereMetodo = tipo === 'pago' || (esVentaConCatalogo && pagadoAlMomento);
+  const montoPEN =
+    tipo === 'pago' && moneda === 'USD' && tipoCambio
+      ? Number(monto || 0) * Number(tipoCambio.valor_compra)
+      : Number(monto || 0);
 
   function elegirItem(id: string) {
     if (tipo === 'consumo_bazar') setProductoId(id);
@@ -614,7 +637,11 @@ function RegistrarMovimientoForm({
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     setError(null);
-    if (tipo === 'pago' && Number(monto) > saldoActual + 0.01) {
+    if (tipo === 'pago' && moneda === 'USD' && !tipoCambio) {
+      setError('No hay un tipo de cambio configurado (Configuración → Tipo de cambio).');
+      return;
+    }
+    if (tipo === 'pago' && montoPEN > saldoActual + 0.01) {
       setError(`El pago no puede ser mayor que la deuda actual (S/. ${saldoActual.toFixed(2)})`);
       return;
     }
@@ -623,6 +650,7 @@ function RegistrarMovimientoForm({
       await api.post(`/hoteles/${hotelId}/estadias/${estadiaId}/movimientos`, {
         tipo,
         monto: Number(monto),
+        moneda: tipo === 'pago' && moneda === 'USD' ? 'USD' : undefined,
         metodoPago: requiereMetodo ? metodoPago : undefined,
         productoId: tipo === 'consumo_bazar' ? productoId : undefined,
         tipoDesayunoId: tipo === 'desayuno' ? tipoDesayunoId : undefined,
@@ -631,6 +659,7 @@ function RegistrarMovimientoForm({
         notas: notas || undefined,
       });
       setMonto('');
+      setMoneda('PEN');
       setNotas('');
       setProductoId('');
       setTipoDesayunoId('');
@@ -701,21 +730,37 @@ function RegistrarMovimientoForm({
           />
         </div>
       )}
+      {tipo === 'pago' && (
+        <div style={{ width: 90 }}>
+          <label style={labelStyle}>Moneda</label>
+          <select value={moneda} onChange={(e) => setMoneda(e.target.value as 'PEN' | 'USD')} style={inputStyle}>
+            <option value="PEN">PEN</option>
+            <option value="USD">USD</option>
+          </select>
+        </div>
+      )}
       <div style={{ width: 110 }}>
-        <label style={labelStyle}>Monto</label>
+        <label style={labelStyle}>Monto {tipo === 'pago' ? `(${moneda})` : ''}</label>
         <input
           type="number"
           min={0.01}
           step={0.01}
-          max={tipo === 'pago' ? saldoActual : undefined}
+          max={tipo === 'pago' && moneda === 'PEN' ? saldoActual : undefined}
           value={monto}
           onChange={(e) => setMonto(e.target.value)}
           style={inputStyle}
           required
         />
-        {tipo === 'pago' && (
+        {tipo === 'pago' && moneda === 'PEN' && (
           <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: '4px 0 0' }}>
             Máximo: S/. {saldoActual.toFixed(2)}
+          </p>
+        )}
+        {tipo === 'pago' && moneda === 'USD' && (
+          <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: '4px 0 0' }}>
+            {tipoCambio
+              ? `≈ S/. ${montoPEN.toFixed(2)} al T.C. compra ${Number(tipoCambio.valor_compra).toFixed(3)} · Máximo: S/. ${saldoActual.toFixed(2)}`
+              : 'No hay tipo de cambio configurado (Configuración → Tipo de cambio).'}
           </p>
         )}
       </div>

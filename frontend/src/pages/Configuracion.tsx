@@ -54,6 +54,12 @@ interface Turno {
   activo: boolean;
 }
 
+interface RegistroTipoCambio {
+  fecha: string;
+  valor_compra: number;
+  valor_venta: number;
+}
+
 interface HotelConfig {
   id: string;
   nombre: string;
@@ -86,6 +92,7 @@ export function Configuracion() {
   const [productosBazar, setProductosBazar] = useState<ProductoBazar[]>([]);
   const [tiposDesayuno, setTiposDesayuno] = useState<TipoDesayuno[]>([]);
   const [turnos, setTurnos] = useState<Turno[]>([]);
+  const [tiposCambio, setTiposCambio] = useState<RegistroTipoCambio[]>([]);
   const [personal, setPersonal] = useState<PersonalHotel[]>([]);
   const [hotel, setHotel] = useState<HotelConfig | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -102,6 +109,7 @@ export function Configuracion() {
     api.get<ProductoBazar[]>(`/hoteles/${h}/productos-bazar`).then(setProductosBazar).catch(reportarError);
     api.get<TipoDesayuno[]>(`/hoteles/${h}/tipos-desayuno`).then(setTiposDesayuno).catch(reportarError);
     api.get<Turno[]>(`/hoteles/${h}/turnos`).then(setTurnos).catch(reportarError);
+    api.get<RegistroTipoCambio[]>(`/hoteles/${h}/tipo-cambio`).then(setTiposCambio).catch(reportarError);
     api.get<PersonalHotel[]>(`/hoteles/${h}/personal`).then(setPersonal).catch(reportarError);
     api.get<HotelConfig>(`/hoteles/${h}`).then(setHotel).catch(reportarError);
   }
@@ -133,6 +141,7 @@ export function Configuracion() {
       <SeccionBazar hotelId={hotelActual.hotelId} productos={productosBazar} onCambio={cargarTodo} setError={setError} />
       <SeccionTiposDesayuno hotelId={hotelActual.hotelId} tipos={tiposDesayuno} onCambio={cargarTodo} setError={setError} />
       <SeccionTurnos hotelId={hotelActual.hotelId} turnos={turnos} onCambio={cargarTodo} setError={setError} />
+      <SeccionTipoCambio hotelId={hotelActual.hotelId} registros={tiposCambio} onCambio={cargarTodo} setError={setError} />
     </div>
   );
 }
@@ -1531,6 +1540,94 @@ function EditarTurnoForm({
         Cancelar
       </button>
     </form>
+  );
+}
+
+function hoyYMD(): string {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function SeccionTipoCambio({
+  hotelId,
+  registros,
+  onCambio,
+  setError,
+}: {
+  hotelId: string;
+  registros: RegistroTipoCambio[];
+  onCambio: () => void;
+  setError: (e: string | null) => void;
+}) {
+  const [fecha, setFecha] = useState(hoyYMD());
+  const [valorCompra, setValorCompra] = useState('');
+  const [valorVenta, setValorVenta] = useState('');
+  const [enviando, setEnviando] = useState(false);
+
+  async function guardar(e: FormEvent) {
+    e.preventDefault();
+    setEnviando(true);
+    setError(null);
+    try {
+      await api.post(`/hoteles/${hotelId}/tipo-cambio`, {
+        fecha,
+        valorCompra: Number(valorCompra),
+        valorVenta: Number(valorVenta),
+      });
+      setValorCompra('');
+      setValorVenta('');
+      onCambio();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'No se pudo guardar el tipo de cambio');
+    } finally {
+      setEnviando(false);
+    }
+  }
+
+  return (
+    <section>
+      <h2 style={{ fontSize: 15, marginBottom: 10 }}>Tipo de cambio</h2>
+      <p style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 8 }}>
+        Tipo de cambio SUNAT (compra/venta) del día. Se muestra siempre en la parte superior de la
+        app y se usa para convertir a soles los pagos que un huésped hace en dólares. Si ya existe
+        un registro para esa fecha, guardar lo reemplaza (para corregirlo).
+      </p>
+      <form onSubmit={guardar} style={formInlineStyle}>
+        <input type="date" value={fecha} onChange={(e) => setFecha(e.target.value)} style={{ ...inputStyle, width: 150 }} required />
+        <input
+          type="number"
+          min={0}
+          step={0.001}
+          placeholder="Compra"
+          value={valorCompra}
+          onChange={(e) => setValorCompra(e.target.value)}
+          style={{ ...inputStyle, width: 100 }}
+          required
+        />
+        <input
+          type="number"
+          min={0}
+          step={0.001}
+          placeholder="Venta"
+          value={valorVenta}
+          onChange={(e) => setValorVenta(e.target.value)}
+          style={{ ...inputStyle, width: 100 }}
+          required
+        />
+        <button type="submit" disabled={enviando} style={btnPrimary}>
+          Guardar
+        </button>
+      </form>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 12 }}>
+        {registros.map((r) => (
+          <div key={r.fecha} style={filaStyle}>
+            <span>{new Date(`${r.fecha}T00:00:00`).toLocaleDateString('es-PE')}</span>
+            <span style={{ color: 'var(--text-secondary)' }}>Compra: {Number(r.valor_compra).toFixed(3)}</span>
+            <span style={{ color: 'var(--text-secondary)' }}>Venta: {Number(r.valor_venta).toFixed(3)}</span>
+          </div>
+        ))}
+        {registros.length === 0 && <p style={{ color: 'var(--text-muted)', fontSize: 13 }}>Todavía no hay registros.</p>}
+      </div>
+    </section>
   );
 }
 

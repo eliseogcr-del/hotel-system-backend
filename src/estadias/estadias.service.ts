@@ -19,6 +19,7 @@ import { ActualizarNotasDto } from './dto/actualizar-notas.dto';
 import { ActualizarEstadiaDto } from './dto/actualizar-estadia.dto';
 import { ReservasService } from '../reservas/reservas.service';
 import { CrearReservaDto } from '../reservas/dto/crear-reserva.dto';
+import { TipoCambioService } from '../tipo-cambio/tipo-cambio.service';
 
 interface HotelHoras {
   hora_checkin: string;
@@ -75,7 +76,10 @@ interface EstadiaConReserva {
 
 @Injectable()
 export class EstadiasService {
-  constructor(private readonly reservasService: ReservasService) {}
+  constructor(
+    private readonly reservasService: ReservasService,
+    private readonly tipoCambioService: TipoCambioService,
+  ) {}
 
   /**
    * Check-in: crea la estadía la primera vez que se hace check-in de esa
@@ -393,18 +397,40 @@ export class EstadiasService {
         'El monto debe ser un valor positivo; el signo se calcula según el tipo de movimiento',
       );
     }
+
+    // Pago en dólares: el monto que llega en dto.monto está en USD -- se
+    // convierte a soles con el tipo de cambio (compra, porque el hotel
+    // está recibiendo dólares del huésped) vigente antes de tocar el
+    // saldo/caja, que siempre quedan en una sola moneda (soles).
+    let montoPago = dto.monto;
+    let monedaPago: 'PEN' | 'USD' | undefined;
+    let montoOriginalUsd: number | undefined;
+    let tipoCambioAplicado: number | undefined;
+    if (dto.tipo === 'pago' && dto.moneda === 'USD') {
+      const tc = await this.tipoCambioService.obtenerVigente(client);
+      if (!tc) {
+        throw new BadRequestException(
+          'No hay un tipo de cambio configurado; el administrador debe ingresarlo en Configuración → Tipo de cambio antes de registrar pagos en dólares.',
+        );
+      }
+      monedaPago = 'USD';
+      montoOriginalUsd = dto.monto;
+      tipoCambioAplicado = Number(tc.valor_compra);
+      montoPago = Number((dto.monto * tipoCambioAplicado).toFixed(2));
+    }
+
     // Un pago no puede dejar el saldo en negativo (el huésped pagando de más
     // sin que exista esa deuda). Si de verdad pagó de más y hay que
     // devolverle algo, eso se resuelve con un 'ajuste', no fingiendo que
     // debía más de lo que realmente debía.
-    if (dto.tipo === 'pago' && dto.monto > Number(estadia.saldo) + 0.01) {
+    if (dto.tipo === 'pago' && montoPago > Number(estadia.saldo) + 0.01) {
       throw new BadRequestException(
-        `El pago (S/. ${dto.monto.toFixed(2)}) no puede ser mayor que la deuda actual (S/. ${Number(estadia.saldo).toFixed(2)})`,
+        `El pago (S/. ${montoPago.toFixed(2)}) no puede ser mayor que la deuda actual (S/. ${Number(estadia.saldo).toFixed(2)})`,
       );
     }
 
     const esVentaConCatalogo = dto.tipo === 'consumo_bazar' || dto.tipo === 'desayuno';
-    const montoFinal = dto.tipo === 'pago' ? -Math.abs(dto.monto) : dto.monto;
+    const montoFinal = dto.tipo === 'pago' ? -Math.abs(montoPago) : montoPago;
     const pagadoAlMomento = esVentaConCatalogo ? (dto.pagadoAlMomento ?? true) : false;
     const generaCaja = dto.tipo === 'pago' || (esVentaConCatalogo && pagadoAlMomento);
 
@@ -441,6 +467,10 @@ export class EstadiasService {
       const descripcion = `${item.nombre}${cantidad > 1 ? ` x${cantidad}` : ''}`;
       notasCargo = dto.notas ? `${descripcion} — ${dto.notas}` : descripcion;
     }
+    if (monedaPago === 'USD') {
+      const refUsd = `Pago en USD $${montoOriginalUsd!.toFixed(2)} al T.C. compra ${tipoCambioAplicado!.toFixed(3)} = S/. ${montoPago.toFixed(2)}`;
+      notasCargo = dto.notas ? `${refUsd} — ${dto.notas}` : refUsd;
+    }
 
     await this.insertarMovimiento(client, estadiaId, {
       tipo: dto.tipo,
@@ -452,6 +482,9 @@ export class EstadiasService {
       sesionTurnoId,
       notas: notasCargo,
       registradoPor: personalId,
+      monedaPago,
+      montoOriginal: montoOriginalUsd,
+      tipoCambioAplicado,
     });
 
     // La venta con catálogo (bazar/desayuno) pagada al momento genera además
@@ -477,10 +510,13 @@ export class EstadiasService {
       const { error: cajaError } = await client.from('movimientos_caja').insert({
         sesion_turno_id: sesionTurnoId,
         tipo: 'ingreso',
-        monto: Math.abs(dto.monto),
+        monto: Math.abs(montoPago),
         concepto: conceptoCaja,
         metodo_pago: dto.metodoPago,
         notas: notasCargo ?? null,
+        moneda_pago: monedaPago ?? null,
+        monto_original: montoOriginalUsd ?? null,
+        tipo_cambio_aplicado: tipoCambioAplicado ?? null,
       });
       if (cajaError) throw cajaError;
     }
@@ -817,6 +853,9 @@ export class EstadiasService {
       sesionTurnoId?: string;
       notas?: string;
       registradoPor?: string;
+      monedaPago?: 'PEN' | 'USD';
+      montoOriginal?: number;
+      tipoCambioAplicado?: number;
     },
   ) {
     const { error: movError } = await client.from('movimientos_cuenta').insert({
@@ -830,6 +869,9 @@ export class EstadiasService {
       sesion_turno_id: input.sesionTurnoId ?? null,
       notas: input.notas ?? null,
       registrado_por: input.registradoPor ?? null,
+      moneda_pago: input.monedaPago ?? null,
+      monto_original: input.montoOriginal ?? null,
+      tipo_cambio_aplicado: input.tipoCambioAplicado ?? null,
     });
     if (movError) throw movError;
 

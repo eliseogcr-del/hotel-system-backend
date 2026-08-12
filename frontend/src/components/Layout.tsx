@@ -1,8 +1,15 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { NavLink, Outlet } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { useHotel } from '../contexts/HotelContext';
 import { useIsMobile } from '../hooks/useIsMobile';
+import { api } from '../lib/api';
+
+interface TipoCambioVigente {
+  fecha: string;
+  valor_compra: number;
+  valor_venta: number;
+}
 
 const NAV_ITEMS = [
   { to: '/habitaciones', label: 'Habitaciones', icon: '⊞' },
@@ -24,6 +31,15 @@ export function Layout() {
   const { asignaciones, hotelActual, cambiarHotel, personalNombre } = useHotel();
   const isMobile = useIsMobile();
   const [navAbierto, setNavAbierto] = useState(false);
+  const [tipoCambio, setTipoCambio] = useState<TipoCambioVigente | null>(null);
+
+  useEffect(() => {
+    if (!hotelActual) return;
+    api
+      .get<TipoCambioVigente | null>(`/hoteles/${hotelActual.hotelId}/tipo-cambio/vigente`)
+      .then(setTipoCambio)
+      .catch(() => {});
+  }, [hotelActual]);
 
   const navItems = [...NAV_ITEMS];
   if (hotelActual?.rol === 'admin' || hotelActual?.rol === 'recepcion') {
@@ -210,6 +226,25 @@ export function Layout() {
             </button>
           </div>
         </header>
+
+        <div
+          style={{
+            padding: isMobile ? '4px 12px' : '4px 20px',
+            borderBottom: '1px solid var(--border)',
+            background: 'var(--surface-1)',
+            fontSize: 11,
+            color: 'var(--text-secondary)',
+          }}
+        >
+          {tipoCambio ? (
+            <>
+              T.C. SUNAT · Compra: {Number(tipoCambio.valor_compra).toFixed(3)} · Venta:{' '}
+              {Number(tipoCambio.valor_venta).toFixed(3)} · {new Date(`${tipoCambio.fecha}T00:00:00`).toLocaleDateString('es-PE')}
+            </>
+          ) : (
+            'Sin tipo de cambio configurado (Configuración → Tipo de cambio)'
+          )}
+        </div>
 
         <main style={{ flex: 1, padding: isMobile ? 12 : 20, minWidth: 0 }}>
           <Outlet />

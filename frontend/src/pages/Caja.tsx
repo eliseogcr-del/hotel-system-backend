@@ -17,6 +17,9 @@ interface MovimientoCaja {
   metodo_pago: string;
   notas: string | null;
   created_at: string;
+  moneda_pago: 'PEN' | 'USD' | null;
+  monto_original: number | null;
+  tipo_cambio_aplicado: number | null;
 }
 
 const METODO_LABEL: Record<string, string> = {
@@ -308,7 +311,7 @@ function ResumenSesion({ sesion }: { sesion: SesionCaja }) {
       </div>
 
       <div style={{ overflowX: 'auto' }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, minWidth: 560 }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, minWidth: 680 }}>
           <thead>
             <tr style={{ textAlign: 'left', color: 'var(--text-secondary)', fontSize: 11 }}>
               <th style={thStyle}>Tipo</th>
@@ -316,6 +319,7 @@ function ResumenSesion({ sesion }: { sesion: SesionCaja }) {
               <th style={thStyle}>Método</th>
               <th style={thStyle}>Monto</th>
               <th style={thStyle}>Hora</th>
+              <th style={thStyle}>Notas</th>
             </tr>
           </thead>
           <tbody>
@@ -327,8 +331,16 @@ function ResumenSesion({ sesion }: { sesion: SesionCaja }) {
                   <td style={{ ...tdStyle, color, fontWeight: 500 }}>{m.tipo}</td>
                   <td style={{ ...tdStyle, color }}>{m.concepto}</td>
                   <td style={{ ...tdStyle, color }}>{m.metodo_pago}</td>
-                  <td style={{ ...tdStyle, color, fontWeight: 600 }}>{m.monto}</td>
+                  <td style={{ ...tdStyle, color, fontWeight: 600 }}>
+                    {m.monto}
+                    {m.moneda_pago === 'USD' && (
+                      <span style={{ fontSize: 10, fontWeight: 400, display: 'block' }}>
+                        (USD {Number(m.monto_original).toFixed(2)} @ {Number(m.tipo_cambio_aplicado).toFixed(3)})
+                      </span>
+                    )}
+                  </td>
                   <td style={{ ...tdStyle, color }}>{new Date(m.created_at).toLocaleTimeString()}</td>
+                  <td style={{ ...tdStyle, color }}>{m.notas ?? ''}</td>
                 </tr>
               );
             })}
