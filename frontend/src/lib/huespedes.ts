@@ -93,3 +93,19 @@ export async function buscarEmpresaPorRuc(hotelId: string, ruc: string): Promise
   if (error) throw error;
   return data;
 }
+
+// Igual que buscarHuespedesPorNombre, pero por razón social -- a veces el
+// cliente solo da el nombre de la empresa, no el RUC de memoria.
+export async function buscarEmpresasPorNombre(hotelId: string, texto: string): Promise<Empresa[]> {
+  const q = texto.trim();
+  if (!q) return [];
+  const { data, error } = await supabase
+    .from('empresas')
+    .select('id, ruc, razon_social')
+    .eq('hotel_id', hotelId)
+    .ilike('razon_social', `%${q}%`)
+    .order('razon_social', { ascending: true })
+    .limit(10);
+  if (error) throw error;
+  return data ?? [];
+}

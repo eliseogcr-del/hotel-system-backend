@@ -111,6 +111,7 @@ export function Reservas() {
   const [calendarioLoading, setCalendarioLoading] = useState(false);
   const [calendarioError, setCalendarioError] = useState<string | null>(null);
   const [precioMascotaDia, setPrecioMascotaDia] = useState(0);
+  const [horaCheckinHotel, setHoraCheckinHotel] = useState<string | undefined>(undefined);
 
   const [formulario, setFormulario] = useState<{
     modo: 'crear' | 'editar';
@@ -154,8 +155,11 @@ export function Reservas() {
       .then(setTiposHabitacion)
       .catch(() => {});
     api
-      .get<{ precio_mascota: number }>(`/hoteles/${hotelActual.hotelId}`)
-      .then((h) => setPrecioMascotaDia(Number(h.precio_mascota ?? 0)))
+      .get<{ precio_mascota: number; hora_checkin: string }>(`/hoteles/${hotelActual.hotelId}`)
+      .then((h) => {
+        setPrecioMascotaDia(Number(h.precio_mascota ?? 0));
+        setHoraCheckinHotel(h.hora_checkin?.slice(0, 5));
+      })
       .catch(() => {});
   }, [hotelActual]);
 
@@ -258,6 +262,7 @@ export function Reservas() {
             )?.precio_normal ?? 0
           }
           precioMascotaDia={precioMascotaDia}
+          horaSugerida={horaCheckinHotel}
           modo={formulario.modo}
           fechaInicial={formulario.fechaInicial}
           reservaId={formulario.reservaId}
@@ -408,10 +413,16 @@ function CalendarioReservas({
           };
     });
 
+    // Solo se fusionan días OCUPADOS consecutivos de la misma reserva (para
+    // pintar la barra tipo Gantt). Los días vacíos nunca se fusionan entre
+    // sí -- cada uno queda como su propia celda clickeable, para que el
+    // click abra el formulario con la fecha exacta que se tocó (si se
+    // fusionaran, el click siempre tomaría el primer día del bloque en vez
+    // del día bajo el cursor).
     const segmentos: SegmentoCelda[] = [];
     for (const e of estadoDias) {
       const ultimo = segmentos[segmentos.length - 1];
-      if (ultimo && ultimo.ocupado === e.ocupado && ultimo.key === e.key) {
+      if (ultimo && ultimo.ocupado && e.ocupado && ultimo.key === e.key) {
         ultimo.span += 1;
       } else {
         segmentos.push({ span: 1, ...e });

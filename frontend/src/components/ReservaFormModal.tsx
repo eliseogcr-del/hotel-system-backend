@@ -4,10 +4,13 @@ import {
   buscarHuespedPorDni,
   buscarHuespedesPorNombre,
   buscarEmpresaPorRuc,
+  buscarEmpresasPorNombre,
   crearHuesped,
   type Huesped,
   type Empresa,
 } from '../lib/huespedes';
+
+type ResultadoCliente = { tipo: 'huesped'; data: Huesped } | { tipo: 'empresa'; data: Empresa };
 
 const ORIGENES = ['telefono', 'whatsapp', 'booking', 'airbnb', 'directo', 'walkin'];
 const METODOS_PAGO = ['efectivo', 'yape', 'transferencia', 'tarjeta'];
@@ -46,6 +49,7 @@ interface Props {
   precioMascotaDia: number;
   modo: 'crear' | 'editar';
   fechaInicial?: string; // YYYY-MM-DD, solo modo 'crear'
+  horaSugerida?: string; // HH:MM, hora_checkin del hotel
   reservaId?: string; // solo modo 'editar'
   lineaId?: string; // solo modo 'editar'
   onClose: () => void;
@@ -90,6 +94,7 @@ export function ReservaFormModal({
   precioMascotaDia,
   modo,
   fechaInicial,
+  horaSugerida,
   reservaId,
   lineaId,
   onClose,
@@ -106,8 +111,11 @@ export function ReservaFormModal({
   const [empresaId, setEmpresaId] = useState<string | null>(null);
   const [nombres, setNombres] = useState('');
   const [apellidos, setApellidos] = useState('');
+  const [telefono, setTelefono] = useState('');
+  const [correo, setCorreo] = useState('');
   const [razonSocial, setRazonSocial] = useState('');
-  const [resultadosNombre, setResultadosNombre] = useState<Huesped[]>([]);
+  const [rucEmpresa, setRucEmpresa] = useState('');
+  const [resultados, setResultados] = useState<ResultadoCliente[]>([]);
   const [buscado, setBuscado] = useState(false);
   const [buscando, setBuscando] = useState(false);
 
@@ -116,7 +124,7 @@ export function ReservaFormModal({
   const [origen, setOrigen] = useState('directo');
   const [moneda, setMoneda] = useState<'PEN' | 'USD'>('PEN');
   const [fecha, setFecha] = useState(fechaInicial || hoyYMD());
-  const [hora, setHora] = useState(horaActual());
+  const [hora, setHora] = useState(horaSugerida || horaActual());
   const [dias, setDias] = useState(1);
   const [nroPersonas, setNroPersonas] = useState(2);
   const [incluyeDesayuno, setIncluyeDesayuno] = useState(false);
@@ -180,7 +188,7 @@ export function ReservaFormModal({
   function limpiarSeleccionCliente() {
     setHuespedId(null);
     setEmpresaId(null);
-    setResultadosNombre([]);
+    setResultados([]);
     setBuscado(false);
   }
 
@@ -189,19 +197,28 @@ export function ReservaFormModal({
     setEmpresaId(null);
     setNombres(h.nombres);
     setApellidos(h.apellidos);
-    setResultadosNombre([]);
+    setTelefono(h.telefono ?? '');
+    setCorreo(h.correo ?? '');
+    setResultados([]);
   }
 
   function seleccionarEmpresa(e: Empresa) {
     setEmpresaId(e.id);
     setHuespedId(null);
     setRazonSocial(e.razon_social);
-    setResultadosNombre([]);
+    setRucEmpresa(e.ruc);
+    setResultados([]);
+  }
+
+  function elegirResultado(r: ResultadoCliente) {
+    if (r.tipo === 'huesped') seleccionarHuesped(r.data);
+    else seleccionarEmpresa(r.data);
   }
 
   // Busca en este orden: RUC exacto de empresa (11 dígitos) -> documento
   // exacto de huésped -> si no hubo match exacto, nombre parcial (LIKE)
-  // sobre huéspedes -- a veces el cliente solo da su nombre o apellido por
+  // sobre huéspedes Y razón social parcial sobre empresas a la vez --
+  // a veces el cliente solo da su nombre/apellido (o el de su empresa) por
   // teléfono, y puede haber varias coincidencias para elegir.
   async function buscarCliente() {
     const q = busqueda.trim();
@@ -210,7 +227,7 @@ export function ReservaFormModal({
     setError(null);
     setHuespedId(null);
     setEmpresaId(null);
-    setResultadosNombre([]);
+    setResultados([]);
     try {
       if (/^\d{11}$/.test(q)) {
         const empresa = await buscarEmpresaPorRuc(hotelId, q);
@@ -226,11 +243,18 @@ export function ReservaFormModal({
         return;
       }
 
-      const resultados = await buscarHuespedesPorNombre(hotelId, q);
-      if (resultados.length === 1) {
-        seleccionarHuesped(resultados[0]);
-      } else if (resultados.length > 1) {
-        setResultadosNombre(resultados);
+      const [huespedes, empresas] = await Promise.all([
+        buscarHuespedesPorNombre(hotelId, q),
+        buscarEmpresasPorNombre(hotelId, q),
+      ]);
+      const combinados: ResultadoCliente[] = [
+        ...huespedes.map((h): ResultadoCliente => ({ tipo: 'huesped', data: h })),
+        ...empresas.map((e): ResultadoCliente => ({ tipo: 'empresa', data: e })),
+      ];
+      if (combinados.length === 1) {
+        elegirResultado(combinados[0]);
+      } else if (combinados.length > 1) {
+        setResultados(combinados);
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'No se pudo buscar el cliente');
@@ -240,7 +264,7 @@ export function ReservaFormModal({
     }
   }
 
-  const sinResultados = buscado && !huespedId && !empresaId && resultadosNombre.length === 0;
+  const sinResultados = buscado && !huespedId && !empresaId && resultados.length === 0;
 
   const checkoutCalculado = calcularCheckout(fecha, hora, dias);
   const cobroMascotaTotal = conMascota ? precioMascotaDia * dias : 0;
@@ -361,24 +385,27 @@ export function ReservaFormModal({
                 {huespedId && (
                   <p style={{ fontSize: 11, color: 'var(--disponible)', margin: '4px 0 0' }}>
                     Huésped encontrado: {nombres} {apellidos}
+                    {telefono && ` · Tel: ${telefono}`}
+                    {correo && ` · ${correo}`}
+                    {!telefono && !correo && ' (sin teléfono ni correo registrado)'}
                   </p>
                 )}
                 {empresaId && (
                   <p style={{ fontSize: 11, color: 'var(--disponible)', margin: '4px 0 0' }}>
-                    Empresa encontrada: {razonSocial}
+                    Empresa encontrada: {razonSocial} · RUC {rucEmpresa}
                   </p>
                 )}
 
-                {resultadosNombre.length > 0 && (
+                {resultados.length > 0 && (
                   <div style={{ marginTop: 8, border: '1px solid var(--border)', borderRadius: 'var(--radius)', overflow: 'hidden' }}>
                     <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: 0, padding: '6px 10px', background: 'var(--surface-1)' }}>
-                      {resultadosNombre.length} coincidencia(s) — elige una:
+                      {resultados.length} coincidencia(s) — elige una:
                     </p>
-                    {resultadosNombre.map((h) => (
+                    {resultados.map((r, i) => (
                       <button
-                        key={h.id}
+                        key={i}
                         type="button"
-                        onClick={() => seleccionarHuesped(h)}
+                        onClick={() => elegirResultado(r)}
                         style={{
                           display: 'block',
                           width: '100%',
@@ -391,7 +418,16 @@ export function ReservaFormModal({
                           cursor: 'pointer',
                         }}
                       >
-                        {h.nombres} {h.apellidos} <span style={{ color: 'var(--text-muted)' }}>· {h.nro_doc}</span>
+                        {r.tipo === 'huesped' ? (
+                          <>
+                            {r.data.nombres} {r.data.apellidos}{' '}
+                            <span style={{ color: 'var(--text-muted)' }}>· {r.data.nro_doc}</span>
+                          </>
+                        ) : (
+                          <>
+                            {r.data.razon_social} <span style={{ color: 'var(--text-muted)' }}>· Empresa · RUC {r.data.ruc}</span>
+                          </>
+                        )}
                       </button>
                     ))}
                   </div>
