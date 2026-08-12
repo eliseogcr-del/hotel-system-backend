@@ -53,8 +53,8 @@ export function Layout() {
         <aside
           style={{
             width: 190,
-            borderRight: '1px solid var(--border)',
-            background: 'var(--surface-1)',
+            borderRight: '1px solid var(--chrome-border)',
+            background: 'var(--chrome-bg)',
             padding: '16px 10px',
             display: 'flex',
             flexDirection: 'column',
@@ -78,19 +78,19 @@ export function Layout() {
                 width: 32,
                 height: 32,
                 borderRadius: 8,
-                background: 'var(--brand)',
+                background: '#fff',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                color: '#fff',
-                fontWeight: 500,
+                color: 'var(--chrome-bg)',
+                fontWeight: 700,
                 fontSize: 14,
                 flexShrink: 0,
               }}
             >
               H
             </div>
-            <span style={{ fontSize: 13, fontWeight: 500 }}>Hotel Suite</span>
+            <span style={{ fontSize: 13, fontWeight: 500, color: 'var(--chrome-text)' }}>Hotel Suite</span>
           </div>
 
           {navItems.map((item) => (
@@ -106,8 +106,8 @@ export function Layout() {
                 borderRadius: 'var(--radius)',
                 fontSize: 13,
                 textDecoration: 'none',
-                color: isActive ? 'var(--brand)' : 'var(--text-secondary)',
-                background: isActive ? 'var(--brand-bg)' : 'transparent',
+                color: isActive ? 'var(--chrome-text)' : 'var(--chrome-text-muted)',
+                background: isActive ? 'var(--chrome-active-bg)' : 'transparent',
                 fontWeight: isActive ? 500 : 400,
               })}
             >
@@ -126,8 +126,8 @@ export function Layout() {
             justifyContent: 'space-between',
             gap: 8,
             padding: isMobile ? '10px 12px' : '10px 20px',
-            borderBottom: '1px solid var(--border)',
-            background: 'var(--surface-1)',
+            borderBottom: '1px solid var(--chrome-border)',
+            background: 'var(--chrome-bg)',
           }}
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
@@ -136,13 +136,14 @@ export function Layout() {
                 onClick={() => setNavAbierto((v) => !v)}
                 aria-label="Abrir menú"
                 style={{
-                  border: '1px solid var(--border)',
+                  border: '1px solid var(--chrome-border)',
                   borderRadius: 'var(--radius)',
                   background: 'transparent',
                   padding: '6px 10px',
                   fontSize: 16,
                   lineHeight: 1,
                   flexShrink: 0,
+                  color: 'var(--chrome-text)',
                 }}
               >
                 ☰
@@ -157,6 +158,7 @@ export function Layout() {
                 padding: '6px 10px',
                 fontSize: 13,
                 background: 'var(--surface-1)',
+                color: 'var(--text-primary)',
                 minWidth: 0,
                 maxWidth: isMobile ? 150 : undefined,
               }}
@@ -176,7 +178,7 @@ export function Layout() {
                   style={{
                     fontSize: 13,
                     fontWeight: 500,
-                    color: 'var(--text-primary)',
+                    color: 'var(--chrome-text)',
                     overflow: 'hidden',
                     textOverflow: 'ellipsis',
                     whiteSpace: 'nowrap',
@@ -186,7 +188,7 @@ export function Layout() {
                   {personalNombre}
                 </div>
                 {hotelActual && (
-                  <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+                  <div style={{ fontSize: 11, color: 'var(--chrome-text-muted)' }}>
                     {ROL_LABEL[hotelActual.rol] ?? hotelActual.rol}
                   </div>
                 )}
@@ -195,12 +197,12 @@ export function Layout() {
             <button
               onClick={() => signOut()}
               style={{
-                border: '1px solid var(--border)',
+                border: '1px solid var(--chrome-border)',
                 borderRadius: 'var(--radius)',
                 background: 'transparent',
                 padding: '6px 12px',
                 fontSize: 13,
-                color: 'var(--text-secondary)',
+                color: 'var(--chrome-text)',
                 flexShrink: 0,
               }}
             >
