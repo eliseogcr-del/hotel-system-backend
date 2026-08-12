@@ -40,7 +40,16 @@ export async function buscarHuespedPorDni(
 
 export async function crearHuesped(
   hotelId: string,
-  datos: { nombres: string; apellidos: string; tipoDoc: string; nroDoc: string },
+  datos: {
+    nombres: string;
+    apellidos: string;
+    tipoDoc: string;
+    nroDoc: string;
+    telefono?: string;
+    correo?: string;
+    ruc?: string;
+    razonSocial?: string;
+  },
 ): Promise<Huesped> {
   const { data, error } = await supabase
     .from('huespedes')
@@ -50,9 +59,30 @@ export async function crearHuesped(
       apellidos: datos.apellidos,
       tipo_doc: datos.tipoDoc,
       nro_doc: datos.nroDoc,
+      telefono: datos.telefono || null,
+      correo: datos.correo || null,
+      ruc: datos.ruc || null,
+      razon_social: datos.razonSocial || null,
     })
     .select(HUESPED_SELECT)
     .single();
+  if (error) throw error;
+  return data;
+}
+
+// El RUC/razón social son atributos del propio huésped (para facturación:
+// puede pedir factura a su nombre o al de la empresa que paga su estadía,
+// ver comentario del schema en `huespedes`) -- no una entidad aparte. En
+// el hotel siempre se hospedan personas, así que un RUC de 11 dígitos casi
+// siempre es este campo del huésped, no el de la tabla `empresas`
+// (reservada para tarifas corporativas negociadas).
+export async function buscarHuespedPorRuc(hotelId: string, ruc: string): Promise<Huesped | null> {
+  const { data, error } = await supabase
+    .from('huespedes')
+    .select(HUESPED_SELECT)
+    .eq('hotel_id', hotelId)
+    .eq('ruc', ruc)
+    .maybeSingle();
   if (error) throw error;
   return data;
 }

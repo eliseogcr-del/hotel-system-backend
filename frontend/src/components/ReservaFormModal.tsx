@@ -2,6 +2,7 @@ import { useEffect, useState, type CSSProperties, type FormEvent } from 'react';
 import { api, ApiError } from '../lib/api';
 import {
   buscarHuespedPorDni,
+  buscarHuespedPorRuc,
   buscarHuespedesPorNombre,
   buscarEmpresaPorRuc,
   buscarEmpresasPorNombre,
@@ -113,6 +114,8 @@ export function ReservaFormModal({
   const [apellidos, setApellidos] = useState('');
   const [telefono, setTelefono] = useState('');
   const [correo, setCorreo] = useState('');
+  const [huespedRuc, setHuespedRuc] = useState('');
+  const [huespedRazonSocial, setHuespedRazonSocial] = useState('');
   const [razonSocial, setRazonSocial] = useState('');
   const [rucEmpresa, setRucEmpresa] = useState('');
   const [resultados, setResultados] = useState<ResultadoCliente[]>([]);
@@ -199,6 +202,8 @@ export function ReservaFormModal({
     setApellidos(h.apellidos);
     setTelefono(h.telefono ?? '');
     setCorreo(h.correo ?? '');
+    setHuespedRuc(h.ruc ?? '');
+    setHuespedRazonSocial(h.razon_social ?? '');
     setResultados([]);
   }
 
@@ -215,11 +220,15 @@ export function ReservaFormModal({
     else seleccionarEmpresa(r.data);
   }
 
-  // Busca en este orden: RUC exacto de empresa (11 dígitos) -> documento
-  // exacto de huésped -> si no hubo match exacto, nombre parcial (LIKE)
-  // sobre huéspedes Y razón social parcial sobre empresas a la vez --
-  // a veces el cliente solo da su nombre/apellido (o el de su empresa) por
-  // teléfono, y puede haber varias coincidencias para elegir.
+  // Busca en este orden: RUC exacto (11 dígitos) -- primero como atributo
+  // del propio huésped (`huespedes.ruc`, es lo normal: en el hotel siempre
+  // se hospedan personas, el RUC es solo un dato de facturación suyo), y
+  // solo si no hay huésped con ese RUC se prueba contra la tabla `empresas`
+  // (reservada para tarifas corporativas negociadas, un caso aparte) ->
+  // documento exacto de huésped -> si no hubo match exacto, nombre parcial
+  // (LIKE) sobre huéspedes Y razón social parcial sobre empresas a la vez
+  // -- a veces el cliente solo da su nombre/apellido por teléfono, y puede
+  // haber varias coincidencias para elegir.
   async function buscarCliente() {
     const q = busqueda.trim();
     if (!q) return;
@@ -230,6 +239,11 @@ export function ReservaFormModal({
     setResultados([]);
     try {
       if (/^\d{11}$/.test(q)) {
+        const huespedPorRuc = await buscarHuespedPorRuc(hotelId, q);
+        if (huespedPorRuc) {
+          seleccionarHuesped(huespedPorRuc);
+          return;
+        }
         const empresa = await buscarEmpresaPorRuc(hotelId, q);
         if (empresa) {
           seleccionarEmpresa(empresa);
@@ -294,6 +308,10 @@ export function ReservaFormModal({
             apellidos: apellidos.trim(),
             tipoDoc: 'dni',
             nroDoc: busqueda.trim(),
+            telefono: telefono.trim() || undefined,
+            correo: correo.trim() || undefined,
+            ruc: huespedRuc.trim() || undefined,
+            razonSocial: huespedRazonSocial.trim() || undefined,
           });
           idHuesped = creado.id;
         }
@@ -387,7 +405,9 @@ export function ReservaFormModal({
                     Huésped encontrado: {nombres} {apellidos}
                     {telefono && ` · Tel: ${telefono}`}
                     {correo && ` · ${correo}`}
-                    {!telefono && !correo && ' (sin teléfono ni correo registrado)'}
+                    {huespedRuc && ` · RUC: ${huespedRuc}`}
+                    {huespedRazonSocial && ` · ${huespedRazonSocial}`}
+                    {!telefono && !correo && !huespedRuc && !huespedRazonSocial && ' (sin más datos registrados)'}
                   </p>
                 )}
                 {empresaId && (
@@ -446,6 +466,36 @@ export function ReservaFormModal({
                       <label style={labelStyle}>Apellidos</label>
                       <input value={apellidos} onChange={(e) => setApellidos(e.target.value)} style={inputStyle} />
                     </div>
+                    <div style={{ flex: 1, minWidth: 140 }}>
+                      <label style={labelStyle}>Teléfono</label>
+                      <input value={telefono} onChange={(e) => setTelefono(e.target.value)} style={inputStyle} />
+                    </div>
+                    <div style={{ flex: 1, minWidth: 140 }}>
+                      <label style={labelStyle}>Correo</label>
+                      <input type="email" value={correo} onChange={(e) => setCorreo(e.target.value)} style={inputStyle} />
+                    </div>
+                    <div style={{ width: 150 }}>
+                      <label style={labelStyle}>RUC (opcional)</label>
+                      <input
+                        value={huespedRuc}
+                        onChange={(e) => setHuespedRuc(e.target.value)}
+                        placeholder="11 dígitos"
+                        maxLength={11}
+                        style={inputStyle}
+                      />
+                    </div>
+                    <div style={{ flex: 1, minWidth: 140 }}>
+                      <label style={labelStyle}>Razón social (opcional)</label>
+                      <input
+                        value={huespedRazonSocial}
+                        onChange={(e) => setHuespedRazonSocial(e.target.value)}
+                        style={inputStyle}
+                      />
+                    </div>
+                    <p style={{ fontSize: 11, color: 'var(--text-muted)', width: '100%', margin: 0 }}>
+                      RUC y razón social: del propio huésped si pidió factura a su nombre, o de la empresa que paga
+                      su estadía. Déjalo vacío si no aplica.
+                    </p>
                   </div>
                 )}
               </div>
