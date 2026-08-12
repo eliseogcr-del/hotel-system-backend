@@ -281,18 +281,26 @@ export function EstadiaDetalle() {
             </tr>
           </thead>
           <tbody>
-            {estadia.movimientos.map((m) => (
-              <tr key={m.id} style={{ borderTop: '1px solid var(--border)' }}>
-                <td style={tdStyle}>{new Date(m.fecha).toLocaleString()}</td>
-                <td style={tdStyle}>{TIPO_LABEL[m.tipo] ?? m.tipo}</td>
-                <td style={{ ...tdStyle, color: Number(m.monto) < 0 ? 'var(--disponible)' : 'var(--text-secondary)' }}>
-                  {m.monto}
-                </td>
-                <td style={tdStyle}>{m.metodo_pago ?? '—'}</td>
-                <td style={tdStyle}>{m.personal?.nombre ?? '—'}</td>
-                <td style={tdStyle}>{m.notas ?? ''}</td>
-              </tr>
-            ))}
+            {estadia.movimientos.map((m) => {
+              // Un monto negativo es un pago/abono del huésped (reduce la
+              // deuda); positivo es un cargo -- lo que se le está cobrando
+              // (cuenta por cobrar). Se distinguen por color para que se
+              // note de un vistazo cuál es cuál en un libro que mezcla los
+              // dos tipos de movimiento.
+              const esPago = Number(m.monto) < 0;
+              const color = esPago ? 'var(--ingreso)' : 'var(--disponible)';
+              const bg = esPago ? 'var(--ingreso-bg)' : 'var(--disponible-bg)';
+              return (
+                <tr key={m.id} style={{ borderTop: '1px solid var(--border)', background: bg }}>
+                  <td style={{ ...tdStyle, color }}>{new Date(m.fecha).toLocaleString()}</td>
+                  <td style={{ ...tdStyle, color, fontWeight: 500 }}>{TIPO_LABEL[m.tipo] ?? m.tipo}</td>
+                  <td style={{ ...tdStyle, color, fontWeight: 600 }}>{m.monto}</td>
+                  <td style={{ ...tdStyle, color }}>{m.metodo_pago ?? '—'}</td>
+                  <td style={{ ...tdStyle, color }}>{m.personal?.nombre ?? '—'}</td>
+                  <td style={{ ...tdStyle, color }}>{m.notas ?? ''}</td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>
