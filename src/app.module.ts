@@ -13,6 +13,7 @@ import { ConfiguracionModule } from './configuracion/configuracion.module';
 import { HuespedesModule } from './huespedes/huespedes.module';
 import { ProductosBazarModule } from './productos-bazar/productos-bazar.module';
 import { TiposDesayunoModule } from './tipos-desayuno/tipos-desayuno.module';
+import { TurnosModule } from './turnos/turnos.module';
 
 @Module({
   imports: [
@@ -30,6 +31,7 @@ import { TiposDesayunoModule } from './tipos-desayuno/tipos-desayuno.module';
     HuespedesModule,
     ProductosBazarModule,
     TiposDesayunoModule,
+    TurnosModule,
   ],
 })
 export class AppModule {}

@@ -46,6 +46,14 @@ interface TipoDesayuno {
   activo: boolean;
 }
 
+interface Turno {
+  id: string;
+  nombre: string;
+  hora_inicio: string;
+  hora_fin: string;
+  activo: boolean;
+}
+
 interface HotelConfig {
   id: string;
   nombre: string;
@@ -77,6 +85,7 @@ export function Configuracion() {
   const [cocheras, setCocheras] = useState<Cochera[]>([]);
   const [productosBazar, setProductosBazar] = useState<ProductoBazar[]>([]);
   const [tiposDesayuno, setTiposDesayuno] = useState<TipoDesayuno[]>([]);
+  const [turnos, setTurnos] = useState<Turno[]>([]);
   const [personal, setPersonal] = useState<PersonalHotel[]>([]);
   const [hotel, setHotel] = useState<HotelConfig | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -92,6 +101,7 @@ export function Configuracion() {
     api.get<Cochera[]>(`/hoteles/${h}/cocheras`).then(setCocheras).catch(reportarError);
     api.get<ProductoBazar[]>(`/hoteles/${h}/productos-bazar`).then(setProductosBazar).catch(reportarError);
     api.get<TipoDesayuno[]>(`/hoteles/${h}/tipos-desayuno`).then(setTiposDesayuno).catch(reportarError);
+    api.get<Turno[]>(`/hoteles/${h}/turnos`).then(setTurnos).catch(reportarError);
     api.get<PersonalHotel[]>(`/hoteles/${h}/personal`).then(setPersonal).catch(reportarError);
     api.get<HotelConfig>(`/hoteles/${h}`).then(setHotel).catch(reportarError);
   }
@@ -122,6 +132,7 @@ export function Configuracion() {
       <SeccionCocheras hotelId={hotelActual.hotelId} cocheras={cocheras} onCambio={cargarTodo} setError={setError} />
       <SeccionBazar hotelId={hotelActual.hotelId} productos={productosBazar} onCambio={cargarTodo} setError={setError} />
       <SeccionTiposDesayuno hotelId={hotelActual.hotelId} tipos={tiposDesayuno} onCambio={cargarTodo} setError={setError} />
+      <SeccionTurnos hotelId={hotelActual.hotelId} turnos={turnos} onCambio={cargarTodo} setError={setError} />
     </div>
   );
 }
@@ -1334,6 +1345,183 @@ function EditarTipoDesayunoForm({
         value={precio}
         onChange={(e) => setPrecio(e.target.value)}
         style={{ ...inputStyle, width: 100 }}
+        required
+      />
+      <button type="submit" disabled={guardando} style={btnPrimary}>
+        Guardar
+      </button>
+      <button type="button" onClick={onCancelar} style={btnSecondary}>
+        Cancelar
+      </button>
+    </form>
+  );
+}
+
+function SeccionTurnos({
+  hotelId,
+  turnos,
+  onCambio,
+  setError,
+}: {
+  hotelId: string;
+  turnos: Turno[];
+  onCambio: () => void;
+  setError: (e: string | null) => void;
+}) {
+  const [nombre, setNombre] = useState('');
+  const [horaInicio, setHoraInicio] = useState('');
+  const [horaFin, setHoraFin] = useState('');
+  const [enviando, setEnviando] = useState(false);
+  const [editandoId, setEditandoId] = useState<string | null>(null);
+
+  async function crear(e: FormEvent) {
+    e.preventDefault();
+    setEnviando(true);
+    setError(null);
+    try {
+      await api.post(`/hoteles/${hotelId}/turnos`, { nombre, horaInicio, horaFin });
+      setNombre('');
+      setHoraInicio('');
+      setHoraFin('');
+      onCambio();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'No se pudo crear el turno');
+    } finally {
+      setEnviando(false);
+    }
+  }
+
+  async function alternarActivo(turno: Turno) {
+    setError(null);
+    try {
+      await api.patch(`/hoteles/${hotelId}/turnos/${turno.id}`, { activo: !turno.activo });
+      onCambio();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'No se pudo actualizar');
+    }
+  }
+
+  return (
+    <section>
+      <h2 style={{ fontSize: 15, marginBottom: 10 }}>Turnos</h2>
+      <p style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 8 }}>
+        Turnos de trabajo (ej. Mañana, Tarde, Noche) que el personal elige al abrir su caja. Un
+        turno inactivo deja de aparecer para abrir turnos nuevos, pero no afecta las sesiones ya
+        registradas con él.
+      </p>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 12 }}>
+        {turnos.map((t) =>
+          editandoId === t.id ? (
+            <EditarTurnoForm
+              key={t.id}
+              hotelId={hotelId}
+              turno={t}
+              onGuardado={() => {
+                setEditandoId(null);
+                onCambio();
+              }}
+              onCancelar={() => setEditandoId(null)}
+              setError={setError}
+            />
+          ) : (
+            <div key={t.id} style={filaStyle}>
+              <span>{t.nombre}</span>
+              <span style={{ color: 'var(--text-secondary)' }}>
+                {t.hora_inicio.slice(0, 5)} – {t.hora_fin.slice(0, 5)}
+              </span>
+              <span style={{ fontSize: 11, color: t.activo ? 'var(--disponible)' : 'var(--text-muted)' }}>
+                {t.activo ? 'Activo' : 'Inactivo'}
+              </span>
+              <span style={{ display: 'flex', gap: 6 }}>
+                <button onClick={() => setEditandoId(t.id)} style={btnSecondary}>
+                  Editar
+                </button>
+                <button onClick={() => alternarActivo(t)} style={btnSecondary}>
+                  {t.activo ? 'Desactivar' : 'Activar'}
+                </button>
+              </span>
+            </div>
+          ),
+        )}
+        {turnos.length === 0 && <p style={{ color: 'var(--text-muted)', fontSize: 13 }}>No hay turnos creados.</p>}
+      </div>
+      <form onSubmit={crear} style={formInlineStyle}>
+        <input
+          placeholder="Nombre (ej. Mañana)"
+          value={nombre}
+          onChange={(e) => setNombre(e.target.value)}
+          style={inputStyle}
+          required
+        />
+        <input
+          type="time"
+          value={horaInicio}
+          onChange={(e) => setHoraInicio(e.target.value)}
+          style={{ ...inputStyle, width: 130 }}
+          required
+        />
+        <input
+          type="time"
+          value={horaFin}
+          onChange={(e) => setHoraFin(e.target.value)}
+          style={{ ...inputStyle, width: 130 }}
+          required
+        />
+        <button type="submit" disabled={enviando} style={btnPrimary}>
+          + Agregar turno
+        </button>
+      </form>
+    </section>
+  );
+}
+
+function EditarTurnoForm({
+  hotelId,
+  turno,
+  onGuardado,
+  onCancelar,
+  setError,
+}: {
+  hotelId: string;
+  turno: Turno;
+  onGuardado: () => void;
+  onCancelar: () => void;
+  setError: (e: string | null) => void;
+}) {
+  const [nombre, setNombre] = useState(turno.nombre);
+  const [horaInicio, setHoraInicio] = useState(turno.hora_inicio.slice(0, 5));
+  const [horaFin, setHoraFin] = useState(turno.hora_fin.slice(0, 5));
+  const [guardando, setGuardando] = useState(false);
+
+  async function guardar(e: FormEvent) {
+    e.preventDefault();
+    setGuardando(true);
+    setError(null);
+    try {
+      await api.patch(`/hoteles/${hotelId}/turnos/${turno.id}`, { nombre, horaInicio, horaFin });
+      onGuardado();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'No se pudo guardar');
+    } finally {
+      setGuardando(false);
+    }
+  }
+
+  return (
+    <form onSubmit={guardar} style={{ ...filaStyle, justifyContent: 'flex-start', gap: 8 }}>
+      <input value={nombre} onChange={(e) => setNombre(e.target.value)} style={{ ...inputStyle, flex: 1 }} required />
+      <input
+        type="time"
+        value={horaInicio}
+        onChange={(e) => setHoraInicio(e.target.value)}
+        style={{ ...inputStyle, width: 130 }}
+        required
+      />
+      <input
+        type="time"
+        value={horaFin}
+        onChange={(e) => setHoraFin(e.target.value)}
+        style={{ ...inputStyle, width: 130 }}
         required
       />
       <button type="submit" disabled={guardando} style={btnPrimary}>
