@@ -20,9 +20,26 @@ interface SesionConHotel {
   estado: 'abierta' | 'cerrada';
   abierta_en: string;
   cerrada_en: string | null;
+  cerrada_automaticamente: boolean;
   personal_hotel: { hotel_id: string };
   turnos: { nombre: string } | null;
 }
+
+// Mismo criterio de zona horaria que estadias.service.ts: el servidor
+// (Render) no corre necesariamente en hora de Lima, así que para comparar
+// contra hora_fin del turno (que sí es hora de Lima) hay que traducir el
+// instante real a "reloj de pared de Lima" explícitamente.
+const PERU_UTC_OFFSET_MS = 5 * 60 * 60 * 1000;
+
+function comoRelojLima(fecha: Date): Date {
+  return new Date(fecha.getTime() - PERU_UTC_OFFSET_MS);
+}
+
+// Cuántos minutos antes de que termine el turno se avisa al recepcionista
+// que debe cerrar su caja, y cuántos minutos de gracia después del fin del
+// turno se le dan antes de que el sistema la cierre solo.
+const AVISO_CIERRE_MINUTOS_ANTES = 10;
+const GRACIA_CIERRE_MINUTOS = 5;
 
 @Injectable()
 export class CajaService {
@@ -180,6 +197,7 @@ export class CajaService {
       .select(
         `
         id, fecha, saldo_inicial, saldo_final, estado, abierta_en, cerrada_en,
+        cerrada_automaticamente,
         turnos(nombre),
         personal_hotel!inner(hotel_id, personal(nombre))
       `,
@@ -210,6 +228,100 @@ export class CajaService {
       throw new NotFoundException('No tienes una sesión de turno abierta en este hotel');
     }
     return this.obtenerDetalle(client, hotelId, data.id);
+  }
+
+  /**
+   * Estado del turno en curso del usuario, pensado para que el frontend lo
+   * consulte periódicamente (ver Layout.tsx): avisa unos minutos antes de
+   * que el turno termine para que el recepcionista liquide su caja, y si
+   * pasan GRACIA_CIERRE_MINUTOS del fin del turno sin que la haya cerrado,
+   * el sistema la cierra solo (mismo patrón de "cron oportunista" que
+   * procesarSalidasVencidas: no hay cron real posible en Render free tier,
+   * así que esto se dispara en cuanto alguien con la app abierta hace poll).
+   * Nunca lanza 404: si no hay sesión abierta simplemente responde eso.
+   */
+  async obtenerEstadoTurno(client: SupabaseClient, hotelId: string, personalId: string) {
+    const personalHotel = await this.cargarPersonalHotel(client, hotelId, personalId);
+
+    const { data: sesion, error } = await client
+      .from('sesiones_turno')
+      .select('id, fecha, turnos(hora_inicio, hora_fin)')
+      .eq('personal_hotel_id', personalHotel.id)
+      .eq('estado', 'abierta')
+      .order('abierta_en', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (error) throw error;
+    if (!sesion) {
+      return { sesionAbierta: false, avisoCierre: false, cerradaAutomaticamente: false };
+    }
+
+    const turno = (sesion as unknown as { turnos: { hora_inicio: string; hora_fin: string } | null })
+      .turnos;
+    if (!turno) {
+      return { sesionAbierta: true, avisoCierre: false, cerradaAutomaticamente: false };
+    }
+
+    const finTurnoLima = this.calcularFinTurnoLima(sesion.fecha, turno.hora_inicio, turno.hora_fin);
+    const ahoraLima = comoRelojLima(new Date());
+    const minutosParaFin = Math.round((finTurnoLima.getTime() - ahoraLima.getTime()) / 60000);
+
+    if (minutosParaFin <= -GRACIA_CIERRE_MINUTOS) {
+      // Se usa el cliente de servicio a propósito: es el sistema quien
+      // cierra la caja, no el usuario, y no debe depender de que su sesión
+      // siga teniendo permisos de UPDATE en ese instante.
+      const service = this.supabase.getServiceClient();
+      await this.cerrarTurnoAutomaticamente(service, hotelId, sesion.id);
+      return { sesionAbierta: false, avisoCierre: false, cerradaAutomaticamente: true };
+    }
+
+    return {
+      sesionAbierta: true,
+      avisoCierre: minutosParaFin <= AVISO_CIERRE_MINUTOS_ANTES,
+      cerradaAutomaticamente: false,
+      minutosParaFin,
+    };
+  }
+
+  // hora_fin es solo un time (sin fecha); se combina con la fecha de la
+  // sesión interpretándola como hora de Lima. Si hora_fin <= hora_inicio se
+  // asume turno nocturno que cruza la medianoche (ej. 22:00–06:00) y el fin
+  // cae al día siguiente de la fecha de apertura.
+  private calcularFinTurnoLima(fecha: string, horaInicio: string, horaFin: string): Date {
+    const [hIni] = horaInicio.split(':').map(Number);
+    const [hFin, mFin, sFin] = horaFin.split(':').map(Number);
+    const [anio, mes, dia] = fecha.split('-').map(Number);
+
+    const cruzaMedianoche = hFin <= hIni;
+    const finLima = new Date(Date.UTC(anio, mes - 1, dia + (cruzaMedianoche ? 1 : 0)));
+    finLima.setUTCHours(hFin, mFin, sFin || 0, 0);
+    return finLima;
+  }
+
+  private async cerrarTurnoAutomaticamente(
+    service: SupabaseClient,
+    hotelId: string,
+    sesionId: string,
+  ) {
+    const sesion = await this.cargarSesionHotel(service, hotelId, sesionId);
+    if (sesion.estado !== 'abierta') return;
+
+    const { totalIngresosEfectivo, totalEgresosEfectivo } = await this.sumarMovimientos(
+      service,
+      sesionId,
+    );
+    const saldoFinal = Number(sesion.saldo_inicial) + totalIngresosEfectivo - totalEgresosEfectivo;
+
+    const { error } = await service
+      .from('sesiones_turno')
+      .update({
+        estado: 'cerrada',
+        saldo_final: saldoFinal,
+        cerrada_en: new Date().toISOString(),
+        cerrada_automaticamente: true,
+      })
+      .eq('id', sesionId);
+    if (error) throw error;
   }
 
   async obtenerDetalle(client: SupabaseClient, hotelId: string, sesionId: string) {
@@ -291,7 +403,7 @@ export class CajaService {
       .select(
         `
         id, personal_hotel_id, turno_id, fecha, saldo_inicial, saldo_final,
-        estado, abierta_en, cerrada_en,
+        estado, abierta_en, cerrada_en, cerrada_automaticamente,
         personal_hotel!inner(hotel_id),
         turnos(nombre)
       `,

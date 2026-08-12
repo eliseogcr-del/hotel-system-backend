@@ -105,6 +105,7 @@ export function EstadiaDetalle() {
   const [cobroLate, setCobroLate] = useState('');
   const [checkoutReal, setCheckoutReal] = useState(ahoraLocal());
   const [tipoCambio, setTipoCambio] = useState<TipoCambioVigente | null>(null);
+  const [cajaAbierta, setCajaAbierta] = useState(true);
 
   useEffect(() => {
     if (!hotelActual) return;
@@ -112,6 +113,19 @@ export function EstadiaDetalle() {
       .get<TipoCambioVigente | null>(`/hoteles/${hotelActual.hotelId}/tipo-cambio/vigente`)
       .then(setTipoCambio)
       .catch(() => {});
+  }, [hotelActual]);
+
+  useEffect(() => {
+    if (!hotelActual) return;
+    // Se asume caja abierta mientras no se sepa lo contrario, para no
+    // bloquear el formulario de golpe si esta consulta tarda o falla; el
+    // backend igual rechaza el pago si de verdad no hay sesión abierta.
+    api
+      .get(`/hoteles/${hotelActual.hotelId}/caja/actual`)
+      .then(() => setCajaAbierta(true))
+      .catch((err) => {
+        if (err instanceof ApiError && err.status === 404) setCajaAbierta(false);
+      });
   }, [hotelActual]);
 
   function cargar() {
@@ -280,6 +294,7 @@ export function EstadiaDetalle() {
           estadiaId={estadia.id}
           saldoActual={Number(estadia.saldo)}
           tipoCambio={tipoCambio}
+          cajaAbierta={cajaAbierta}
           onRegistrado={cargar}
         />
       )}
@@ -583,12 +598,14 @@ function RegistrarMovimientoForm({
   estadiaId,
   saldoActual,
   tipoCambio,
+  cajaAbierta,
   onRegistrado,
 }: {
   hotelId: string;
   estadiaId: string;
   saldoActual: number;
   tipoCambio: TipoCambioVigente | null;
+  cajaAbierta: boolean;
   onRegistrado: () => void;
 }) {
   const [tipo, setTipo] = useState('pago');
@@ -637,6 +654,10 @@ function RegistrarMovimientoForm({
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     setError(null);
+    if (requiereMetodo && !cajaAbierta) {
+      setError('No tienes una caja abierta: ve al módulo Caja y abre tu turno antes de registrar cobros.');
+      return;
+    }
     if (tipo === 'pago' && moneda === 'USD' && !tipoCambio) {
       setError('No hay un tipo de cambio configurado (Configuración → Tipo de cambio).');
       return;
@@ -791,12 +812,17 @@ function RegistrarMovimientoForm({
           placeholder={esVentaConCatalogo ? 'Opcional, se agrega a la descripción' : undefined}
         />
       </div>
-      <button type="submit" disabled={enviando} style={btnPrimary}>
+      <button type="submit" disabled={enviando || (requiereMetodo && !cajaAbierta)} style={btnPrimary}>
         {enviando ? 'Guardando...' : 'Registrar'}
       </button>
       {esVentaConCatalogo && !pagadoAlMomento && (
         <p style={{ fontSize: 11, color: 'var(--text-muted)', width: '100%', margin: 0 }}>
           No pagó al momento: solo se suma a lo que debe, no genera ingreso de caja ahora.
+        </p>
+      )}
+      {requiereMetodo && !cajaAbierta && (
+        <p style={{ color: 'var(--egreso)', fontSize: 12, width: '100%', margin: 0 }}>
+          No tienes una caja abierta: ve al módulo Caja y abre tu turno antes de registrar cobros.
         </p>
       )}
       {error && <p style={{ color: 'var(--danger)', fontSize: 12, width: '100%' }}>{error}</p>}

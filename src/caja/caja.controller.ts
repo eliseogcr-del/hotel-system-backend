@@ -56,6 +56,19 @@ export class CajaController {
     return this.cajaService.obtenerSesionActual(client, hotelId, user.personalId);
   }
 
+  // Pensado para poll periódico del frontend (ver Layout.tsx): nunca lanza
+  // 404, siempre responde 200 con el estado (sin sesión / normal / aviso de
+  // cierre próximo / recién cerrada automáticamente).
+  @Get('estado-turno')
+  @Roles('admin', 'recepcion')
+  async estadoTurno(
+    @Param('hotelId') hotelId: string,
+    @CurrentUser() user: RequestUser,
+  ) {
+    const client = this.supabase.getClientForRequest(user.accessToken);
+    return this.cajaService.obtenerEstadoTurno(client, hotelId, user.personalId);
+  }
+
   @Get('sesiones')
   @Roles('admin', 'recepcion')
   async listarSesiones(

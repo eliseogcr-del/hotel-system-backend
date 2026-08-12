@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react';
-import { NavLink, Outlet } from 'react-router-dom';
+import { useEffect, useRef, useState } from 'react';
+import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { useHotel } from '../contexts/HotelContext';
 import { useIsMobile } from '../hooks/useIsMobile';
@@ -10,6 +10,20 @@ interface TipoCambioVigente {
   valor_compra: number;
   valor_venta: number;
 }
+
+interface EstadoTurno {
+  sesionAbierta: boolean;
+  avisoCierre: boolean;
+  cerradaAutomaticamente: boolean;
+  minutosParaFin?: number;
+}
+
+// Cada cuánto se consulta el estado del turno (ver caja/estado-turno en el
+// backend): no hay cron real posible en Render free tier, así que el aviso
+// de "tu turno está por terminar" y el cierre automático de caja se
+// disparan aquí, con la app abierta, igual que la sincronización del tipo
+// de cambio más abajo.
+const POLL_ESTADO_TURNO_MS = 60_000;
 
 const NAV_ITEMS = [
   { to: '/habitaciones', label: 'Habitaciones', icon: '⊞' },
@@ -54,6 +68,60 @@ export function Layout() {
       })
       .catch(() => {});
   }, [hotelActual]);
+
+  const navigate = useNavigate();
+  const [estadoTurno, setEstadoTurno] = useState<EstadoTurno | null>(null);
+  const avisoMostradoRef = useRef(false);
+
+  useEffect(() => {
+    // Solo admin/recepción pueden tener caja abierta (mismos roles que
+    // habilitan el módulo Caja); HK no necesita este poll.
+    if (!hotelActual || (hotelActual.rol !== 'admin' && hotelActual.rol !== 'recepcion')) {
+      setEstadoTurno(null);
+      avisoMostradoRef.current = false;
+      return;
+    }
+
+    let cancelado = false;
+
+    async function consultarEstadoTurno() {
+      try {
+        const estado = await api.get<EstadoTurno>(`/hoteles/${hotelActual!.hotelId}/caja/estado-turno`);
+        if (cancelado) return;
+        setEstadoTurno(estado);
+
+        if (estado.cerradaAutomaticamente) {
+          alert(
+            'Tu turno terminó hace más de 5 minutos y tu caja fue cerrada automáticamente. ' +
+              'El sistema va a cerrar tu sesión: vuelve a iniciar sesión para abrir una nueva caja.',
+          );
+          await signOut();
+          navigate('/login', { replace: true });
+          return;
+        }
+
+        if (estado.avisoCierre && !avisoMostradoRef.current) {
+          avisoMostradoRef.current = true;
+          alert(
+            `Tu turno termina en ${Math.max(estado.minutosParaFin ?? 0, 0)} minuto(s). ` +
+              'Saca tu liquidación de caja y ciérrala antes de irte.',
+          );
+        } else if (!estado.avisoCierre) {
+          avisoMostradoRef.current = false;
+        }
+      } catch {
+        // Silencioso: si la consulta falla (red, servidor dormido, etc.) el
+        // header simplemente no muestra el aviso hasta el próximo poll.
+      }
+    }
+
+    consultarEstadoTurno();
+    const intervalo = setInterval(consultarEstadoTurno, POLL_ESTADO_TURNO_MS);
+    return () => {
+      cancelado = true;
+      clearInterval(intervalo);
+    };
+  }, [hotelActual, signOut, navigate]);
 
   const navItems = [...NAV_ITEMS];
   if (hotelActual?.rol === 'admin' || hotelActual?.rol === 'recepcion') {
@@ -259,6 +327,22 @@ export function Layout() {
             'Sin tipo de cambio configurado (Configuración → Tipo de cambio)'
           )}
         </div>
+
+        {estadoTurno?.avisoCierre && (
+          <div
+            style={{
+              padding: isMobile ? '6px 12px' : '6px 20px',
+              borderBottom: '1px solid var(--border)',
+              background: 'var(--egreso-bg)',
+              color: 'var(--egreso)',
+              fontSize: 12,
+              fontWeight: 500,
+            }}
+          >
+            ⚠ Tu turno termina en {Math.max(estadoTurno.minutosParaFin ?? 0, 0)} minuto(s) — saca tu
+            liquidación y cierra tu caja en el módulo Caja.
+          </div>
+        )}
 
         <main style={{ flex: 1, padding: isMobile ? 12 : 20, minWidth: 0 }}>
           <Outlet />

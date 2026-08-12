@@ -73,7 +73,8 @@ create table sesiones_turno (
     saldo_final numeric(10,2),
     estado text not null default 'abierta' check (estado in ('abierta','cerrada')),
     abierta_en timestamptz not null default now(),
-    cerrada_en timestamptz
+    cerrada_en timestamptz,
+    cerrada_automaticamente boolean not null default false
 );
 
 create table movimientos_caja (
