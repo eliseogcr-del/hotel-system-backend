@@ -1588,8 +1588,10 @@ function SeccionTipoCambio({
       <h2 style={{ fontSize: 15, marginBottom: 10 }}>Tipo de cambio</h2>
       <p style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 8 }}>
         Tipo de cambio SUNAT (compra/venta) del día. Se muestra siempre en la parte superior de la
-        app y se usa para convertir a soles los pagos que un huésped hace en dólares. Si ya existe
-        un registro para esa fecha, guardar lo reemplaza (para corregirlo).
+        app y se usa para convertir a soles los pagos que un huésped hace en dólares. El sistema
+        intenta traerlo solo de SUNAT en cuanto alguien abre la app y todavía no hay uno cargado
+        hoy; este formulario sirve para corregirlo a mano si SUNAT no respondió o el valor está
+        mal (guardar sobre una fecha existente la reemplaza).
       </p>
       <form onSubmit={guardar} style={formInlineStyle}>
         <input type="date" value={fecha} onChange={(e) => setFecha(e.target.value)} style={{ ...inputStyle, width: 150 }} required />

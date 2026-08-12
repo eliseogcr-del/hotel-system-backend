@@ -35,9 +35,23 @@ export function Layout() {
 
   useEffect(() => {
     if (!hotelActual) return;
+    const hoy = new Date().toISOString().slice(0, 10);
     api
       .get<TipoCambioVigente | null>(`/hoteles/${hotelActual.hotelId}/tipo-cambio/vigente`)
-      .then(setTipoCambio)
+      .then((tc) => {
+        setTipoCambio(tc);
+        // Sin cron real posible (Render free tier duerme): si lo que hay
+        // guardado no es el de hoy, se intenta traer de SUNAT en cuanto
+        // alguien abre la app -- mismo patrón ya usado para las salidas
+        // vencidas de Habitaciones.tsx. Silencioso si SUNAT no responde:
+        // el header simplemente sigue mostrando el último conocido.
+        if (!tc || tc.fecha !== hoy) {
+          api
+            .post<TipoCambioVigente>(`/hoteles/${hotelActual.hotelId}/tipo-cambio/sincronizar`)
+            .then(setTipoCambio)
+            .catch(() => {});
+        }
+      })
       .catch(() => {});
   }, [hotelActual]);
 

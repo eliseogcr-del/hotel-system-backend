@@ -42,4 +42,15 @@ export class TipoCambioController {
     const client = this.supabase.getClientForRequest(user.accessToken);
     return this.tipoCambioService.obtenerVigente(client);
   }
+
+  // Cualquier rol lo puede disparar (el frontend lo hace solo -- ver
+  // Layout.tsx -- cuando el tipo de cambio guardado no es el de hoy): usa
+  // el cliente de servicio porque el dato viene de SUNAT, no del usuario,
+  // así que no hace falta ser admin para activarlo.
+  @Post('sincronizar')
+  @Roles('admin', 'recepcion', 'hk')
+  async sincronizar(@Param('hotelId') hotelId: string) {
+    const client = this.supabase.getServiceClient();
+    return this.tipoCambioService.sincronizarDesdeSunat(client);
+  }
 }
