@@ -1,5 +1,6 @@
 import { useEffect, useState, type CSSProperties, type FormEvent } from 'react';
 import { api, ApiError } from '../lib/api';
+import { useIsMobile } from '../hooks/useIsMobile';
 import {
   buscarHuespedPorDni,
   buscarHuespedPorRuc,
@@ -101,6 +102,7 @@ export function ReservaFormModal({
   onClose,
   onGuardado,
 }: Props) {
+  const isMobile = useIsMobile();
   const [cargando, setCargando] = useState(modo === 'editar');
   const [huespedNombre, setHuespedNombre] = useState<string | null>(null);
 
@@ -368,9 +370,15 @@ export function ReservaFormModal({
     }
   }
 
+  const gridRowStyle: CSSProperties = {
+    display: 'grid',
+    gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr',
+    gap: 16,
+  };
+
   return (
     <div style={overlayStyle}>
-      <div style={modalStyle}>
+      <div style={{ ...modalStyle, maxWidth: isMobile ? 560 : 960 }}>
         <h2 style={{ fontSize: 17, marginBottom: 16 }}>
           {modo === 'crear' ? 'Nueva reserva' : 'Editar reserva'} · Habitación {habNumero}
         </h2>
@@ -378,322 +386,354 @@ export function ReservaFormModal({
         {cargando ? (
           <p style={{ color: 'var(--text-muted)' }}>Cargando...</p>
         ) : (
-          <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+          <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
             {error && <p style={{ color: 'var(--danger)', fontSize: 13 }}>{error}</p>}
 
-            {modo === 'crear' ? (
-              <div>
-                <label style={labelStyle}>DNI, RUC (empresa) o nombre del cliente</label>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-                  <input
-                    value={busqueda}
-                    onChange={(e) => {
-                      setBusqueda(e.target.value);
-                      limpiarSeleccionCliente();
-                    }}
-                    placeholder="Ej. 45678912, 20601234567 o RIOS"
-                    style={{ ...inputStyle, flex: 1, minWidth: 140 }}
-                    required={!huespedId && !empresaId}
-                  />
-                  <button type="button" onClick={buscarCliente} disabled={buscando || !busqueda.trim()} style={btnSecondary}>
-                    {buscando ? 'Buscando...' : 'Buscar'}
-                  </button>
-                </div>
-
-                {huespedId && (
-                  <p style={{ fontSize: 11, color: 'var(--disponible)', margin: '4px 0 0' }}>
-                    Huésped encontrado: {nombres} {apellidos}
-                    {telefono && ` · Tel: ${telefono}`}
-                    {correo && ` · ${correo}`}
-                    {huespedRuc && ` · RUC: ${huespedRuc}`}
-                    {huespedRazonSocial && ` · ${huespedRazonSocial}`}
-                    {!telefono && !correo && !huespedRuc && !huespedRazonSocial && ' (sin más datos registrados)'}
-                  </p>
-                )}
-                {empresaId && (
-                  <p style={{ fontSize: 11, color: 'var(--disponible)', margin: '4px 0 0' }}>
-                    Empresa encontrada: {razonSocial} · RUC {rucEmpresa}
-                  </p>
-                )}
-
-                {resultados.length > 0 && (
-                  <div style={{ marginTop: 8, border: '1px solid var(--border)', borderRadius: 'var(--radius)', overflow: 'hidden' }}>
-                    <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: 0, padding: '6px 10px', background: 'var(--surface-1)' }}>
-                      {resultados.length} coincidencia(s) — elige una:
-                    </p>
-                    {resultados.map((r, i) => (
-                      <button
-                        key={i}
-                        type="button"
-                        onClick={() => elegirResultado(r)}
-                        style={{
-                          display: 'block',
-                          width: '100%',
-                          textAlign: 'left',
-                          padding: '8px 10px',
-                          background: 'transparent',
-                          border: 'none',
-                          borderTop: '1px solid var(--border)',
-                          fontSize: 12,
-                          cursor: 'pointer',
-                        }}
-                      >
-                        {r.tipo === 'huesped' ? (
-                          <>
-                            {r.data.nombres} {r.data.apellidos}{' '}
-                            <span style={{ color: 'var(--text-muted)' }}>· {r.data.nro_doc}</span>
-                          </>
-                        ) : (
-                          <>
-                            {r.data.razon_social} <span style={{ color: 'var(--text-muted)' }}>· Empresa · RUC {r.data.ruc}</span>
-                          </>
-                        )}
-                      </button>
-                    ))}
-                  </div>
-                )}
-
-                {sinResultados && (
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 8 }}>
-                    <p style={{ fontSize: 11, color: 'var(--text-muted)', width: '100%', margin: 0 }}>
-                      No se encontró: completa los datos para registrar un huésped nuevo (usará "{busqueda.trim()}" como documento).
-                    </p>
-                    <div style={{ flex: 1, minWidth: 140 }}>
-                      <label style={labelStyle}>Nombres</label>
-                      <input value={nombres} onChange={(e) => setNombres(e.target.value)} style={inputStyle} />
-                    </div>
-                    <div style={{ flex: 1, minWidth: 140 }}>
-                      <label style={labelStyle}>Apellidos</label>
-                      <input value={apellidos} onChange={(e) => setApellidos(e.target.value)} style={inputStyle} />
-                    </div>
-                    <div style={{ flex: 1, minWidth: 140 }}>
-                      <label style={labelStyle}>Teléfono</label>
-                      <input value={telefono} onChange={(e) => setTelefono(e.target.value)} style={inputStyle} />
-                    </div>
-                    <div style={{ flex: 1, minWidth: 140 }}>
-                      <label style={labelStyle}>Correo</label>
-                      <input type="email" value={correo} onChange={(e) => setCorreo(e.target.value)} style={inputStyle} />
-                    </div>
-                    <div style={{ width: 150 }}>
-                      <label style={labelStyle}>RUC (opcional)</label>
-                      <input
-                        value={huespedRuc}
-                        onChange={(e) => setHuespedRuc(e.target.value)}
-                        placeholder="11 dígitos"
-                        maxLength={11}
-                        style={inputStyle}
-                      />
-                    </div>
-                    <div style={{ flex: 1, minWidth: 140 }}>
-                      <label style={labelStyle}>Razón social (opcional)</label>
-                      <input
-                        value={huespedRazonSocial}
-                        onChange={(e) => setHuespedRazonSocial(e.target.value)}
-                        style={inputStyle}
-                      />
-                    </div>
-                    <p style={{ fontSize: 11, color: 'var(--text-muted)', width: '100%', margin: 0 }}>
-                      RUC y razón social: del propio huésped si pidió factura a su nombre, o de la empresa que paga
-                      su estadía. Déjalo vacío si no aplica.
-                    </p>
-                  </div>
-                )}
-              </div>
-            ) : (
-              huespedNombre && (
-                <p style={{ fontSize: 13, color: 'var(--text-secondary)' }}>Huésped: {huespedNombre}</p>
-              )
-            )}
-
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-              <div style={{ flex: 1, minWidth: 140 }}>
-                <label style={labelStyle}>Origen de la reserva</label>
-                <select value={origen} onChange={(e) => setOrigen(e.target.value)} style={inputStyle}>
-                  {ORIGENES.map((o) => (
-                    <option key={o} value={o}>
-                      {o}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div style={{ width: 110 }}>
-                <label style={labelStyle}>Moneda</label>
-                <select value={moneda} onChange={(e) => setMoneda(e.target.value as 'PEN' | 'USD')} style={inputStyle}>
-                  <option value="PEN">PEN</option>
-                  <option value="USD">USD</option>
-                </select>
-              </div>
-            </div>
-
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-              <div style={{ flex: 1, minWidth: 140 }}>
-                <label style={labelStyle}>Chk In (fecha)</label>
-                <input type="date" value={fecha} onChange={(e) => setFecha(e.target.value)} style={inputStyle} required />
-              </div>
-              <div style={{ width: 120 }}>
-                <label style={labelStyle}>Hora ingreso</label>
-                <input type="time" value={hora} onChange={(e) => setHora(e.target.value)} style={inputStyle} required />
-              </div>
-              <div style={{ width: 90 }}>
-                <label style={labelStyle}>Días</label>
-                <input
-                  type="number"
-                  min={1}
-                  value={dias}
-                  onChange={(e) => setDias(Number(e.target.value))}
-                  style={inputStyle}
-                  required
-                />
-              </div>
-            </div>
-            <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: '-8px 0 0' }}>
-              Chk out (calculado): {checkoutCalculado ? checkoutCalculado.toLocaleString('es-PE') : '—'}
-            </p>
-
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'flex-end' }}>
-              <div style={{ width: 130 }}>
-                <label style={labelStyle}>N° personas</label>
-                <input
-                  type="number"
-                  min={1}
-                  value={nroPersonas}
-                  onChange={(e) => setNroPersonas(Number(e.target.value))}
-                  style={{ ...inputStyle, ...(excedeAforo ? { borderColor: 'var(--danger)' } : {}) }}
-                  required
-                />
-              </div>
-              <p style={{ fontSize: 11, color: excedeAforo ? 'var(--danger)' : 'var(--text-muted)', margin: 0 }}>
-                {aforoMax > 0
-                  ? `Aforo máximo de esta habitación: ${aforoMax} persona(s)${excedeAforo ? ' — supera la referencia' : ''}`
-                  : 'Sin aforo máximo configurado para este tipo de habitación'}
-              </p>
-            </div>
-
-            <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13 }}>
-              <input type="checkbox" checked={incluyeDesayuno} onChange={(e) => setIncluyeDesayuno(e.target.checked)} />
-              Incluye desayuno (cortesía, no se cobra)
-            </label>
-
-            <div>
-              <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, marginBottom: conMascota ? 6 : 0 }}>
-                <input type="checkbox" checked={conMascota} onChange={(e) => setConMascota(e.target.checked)} />
-                Viene con mascota
-              </label>
-              {conMascota && (
-                <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: 0 }}>
-                  {precioMascotaDia > 0
-                    ? `Cobro: S/. ${precioMascotaDia.toFixed(2)}/día × ${dias} día(s) = S/. ${cobroMascotaTotal.toFixed(2)} (se cobra al check-in)`
-                    : 'Este hotel no tiene configurado un cobro por mascota (Configuración → Hotel).'}
-                </p>
-              )}
-            </div>
-
-            <div>
-              <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, marginBottom: 8 }}>
-                <input type="checkbox" checked={tieneVehiculo} onChange={(e) => setTieneVehiculo(e.target.checked)} />
-                El huésped tiene vehículo
-              </label>
-              {tieneVehiculo && (
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-                  <div style={{ width: 150 }}>
-                    <label style={labelStyle}>Marca</label>
-                    <input value={vehiculoMarca} onChange={(e) => setVehiculoMarca(e.target.value)} style={inputStyle} />
-                  </div>
-                  <div style={{ width: 130 }}>
-                    <label style={labelStyle}>Tipo</label>
+            {/* ---------- Cliente ---------- */}
+            <div style={cardStyle}>
+              <p style={cardTitleStyle}>Cliente</p>
+              {modo === 'crear' ? (
+                <div>
+                  <label style={labelStyle}>DNI, RUC (empresa) o nombre del cliente</label>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
                     <input
-                      value={vehiculoTipo}
-                      onChange={(e) => setVehiculoTipo(e.target.value)}
-                      placeholder="Auto, camioneta..."
-                      style={inputStyle}
+                      value={busqueda}
+                      onChange={(e) => {
+                        setBusqueda(e.target.value);
+                        limpiarSeleccionCliente();
+                      }}
+                      placeholder="Ej. 45678912, 20601234567 o RIOS"
+                      style={{ ...inputStyle, flex: 1, minWidth: 140 }}
+                      required={!huespedId && !empresaId}
                     />
+                    <button type="button" onClick={buscarCliente} disabled={buscando || !busqueda.trim()} style={btnSecondary}>
+                      {buscando ? 'Buscando...' : 'Buscar'}
+                    </button>
                   </div>
-                  <div style={{ width: 130 }}>
-                    <label style={labelStyle}>Placa</label>
-                    <input value={vehiculoPlaca} onChange={(e) => setVehiculoPlaca(e.target.value)} style={inputStyle} />
-                  </div>
-                </div>
-              )}
-            </div>
 
-            <div>
-              <label style={labelStyle}>Observaciones</label>
-              <textarea
-                value={observaciones}
-                onChange={(e) => setObservaciones(e.target.value)}
-                placeholder="Notas de esta reserva (pedidos especiales, referencias, etc.)"
-                rows={2}
-                style={{ ...inputStyle, resize: 'vertical' }}
-              />
-            </div>
+                  {huespedId && (
+                    <p style={{ fontSize: 11, color: 'var(--disponible)', margin: '6px 0 0' }}>
+                      Huésped encontrado: {nombres} {apellidos}
+                      {telefono && ` · Tel: ${telefono}`}
+                      {correo && ` · ${correo}`}
+                      {huespedRuc && ` · RUC: ${huespedRuc}`}
+                      {huespedRazonSocial && ` · ${huespedRazonSocial}`}
+                      {!telefono && !correo && !huespedRuc && !huespedRazonSocial && ' (sin más datos registrados)'}
+                    </p>
+                  )}
+                  {empresaId && (
+                    <p style={{ fontSize: 11, color: 'var(--disponible)', margin: '6px 0 0' }}>
+                      Empresa encontrada: {razonSocial} · RUC {rucEmpresa}
+                    </p>
+                  )}
 
-            <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end' }}>
-              <div style={{ width: 150 }}>
-                <label style={labelStyle}>Tarifa/día ({moneda})</label>
-                <input
-                  type="number"
-                  min={0}
-                  step={0.01}
-                  value={tarifaDia}
-                  onChange={(e) => setTarifaDia(Number(e.target.value))}
-                  style={inputStyle}
-                  required
-                />
-              </div>
-            </div>
+                  {resultados.length > 0 && (
+                    <div style={{ marginTop: 8, border: '1px solid var(--border)', borderRadius: 'var(--radius)', overflow: 'hidden' }}>
+                      <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: 0, padding: '6px 10px', background: 'var(--surface-2)' }}>
+                        {resultados.length} coincidencia(s) — elige una:
+                      </p>
+                      {resultados.map((r, i) => (
+                        <button
+                          key={i}
+                          type="button"
+                          onClick={() => elegirResultado(r)}
+                          style={{
+                            display: 'block',
+                            width: '100%',
+                            textAlign: 'left',
+                            padding: '8px 10px',
+                            background: 'transparent',
+                            border: 'none',
+                            borderTop: '1px solid var(--border)',
+                            fontSize: 12,
+                            cursor: 'pointer',
+                          }}
+                        >
+                          {r.tipo === 'huesped' ? (
+                            <>
+                              {r.data.nombres} {r.data.apellidos}{' '}
+                              <span style={{ color: 'var(--text-muted)' }}>· {r.data.nro_doc}</span>
+                            </>
+                          ) : (
+                            <>
+                              {r.data.razon_social} <span style={{ color: 'var(--text-muted)' }}>· Empresa · RUC {r.data.ruc}</span>
+                            </>
+                          )}
+                        </button>
+                      ))}
+                    </div>
+                  )}
 
-            <div style={{ background: 'var(--surface-1)', border: '1px solid var(--border)', borderRadius: 'var(--radius)', padding: '10px 12px' }}>
-              <p style={{ fontSize: 13, fontWeight: 600, margin: 0 }}>
-                Importe total: {moneda} {importeTotal.toFixed(2)}
-              </p>
-              <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: '2px 0 0' }}>
-                Tarifa × días{conMascota ? ' + cobro de mascota' : ''}
-              </p>
-            </div>
-
-            <hr style={{ border: 'none', borderTop: '1px solid var(--border)' }} />
-
-            {anticipoYaRegistrado ? (
-              <p style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
-                Anticipo ya registrado: {moneda} {anticipoYaRegistrado.monto.toFixed(2)}
-                {anticipoYaRegistrado.metodo ? ` (${anticipoYaRegistrado.metodo})` : ''}
-              </p>
-            ) : (
-              <div>
-                <p style={{ fontSize: 13, fontWeight: 500, marginBottom: 8 }}>Pago adelantado (anticipo, opcional)</p>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-                  <div style={{ width: 150 }}>
-                    <label style={labelStyle}>Monto ({moneda})</label>
-                    <input
-                      type="number"
-                      min={0}
-                      step={0.01}
-                      value={anticipoMonto}
-                      onChange={(e) => setAnticipoMonto(e.target.value)}
-                      style={inputStyle}
-                    />
-                  </div>
-                  {anticipoMonto !== '' && Number(anticipoMonto) > 0 && (
-                    <div style={{ width: 160 }}>
-                      <label style={labelStyle}>Método de pago</label>
-                      <select value={anticipoMetodoPago} onChange={(e) => setAnticipoMetodoPago(e.target.value)} style={inputStyle}>
-                        {METODOS_PAGO.map((m) => (
-                          <option key={m} value={m}>
-                            {m}
-                          </option>
-                        ))}
-                      </select>
+                  {sinResultados && (
+                    <div
+                      style={{
+                        display: 'grid',
+                        gridTemplateColumns: isMobile ? '1fr' : 'repeat(3, 1fr)',
+                        gap: 8,
+                        marginTop: 10,
+                      }}
+                    >
+                      <p style={{ fontSize: 11, color: 'var(--text-muted)', gridColumn: '1 / -1', margin: 0 }}>
+                        No se encontró: completa los datos para registrar un huésped nuevo (usará "{busqueda.trim()}" como documento).
+                      </p>
+                      <div>
+                        <label style={labelStyle}>Nombres</label>
+                        <input value={nombres} onChange={(e) => setNombres(e.target.value)} style={inputStyle} />
+                      </div>
+                      <div>
+                        <label style={labelStyle}>Apellidos</label>
+                        <input value={apellidos} onChange={(e) => setApellidos(e.target.value)} style={inputStyle} />
+                      </div>
+                      <div>
+                        <label style={labelStyle}>Teléfono</label>
+                        <input value={telefono} onChange={(e) => setTelefono(e.target.value)} style={inputStyle} />
+                      </div>
+                      <div>
+                        <label style={labelStyle}>Correo</label>
+                        <input type="email" value={correo} onChange={(e) => setCorreo(e.target.value)} style={inputStyle} />
+                      </div>
+                      <div>
+                        <label style={labelStyle}>RUC (opcional)</label>
+                        <input
+                          value={huespedRuc}
+                          onChange={(e) => setHuespedRuc(e.target.value)}
+                          placeholder="11 dígitos"
+                          maxLength={11}
+                          style={inputStyle}
+                        />
+                      </div>
+                      <div>
+                        <label style={labelStyle}>Razón social (opcional)</label>
+                        <input
+                          value={huespedRazonSocial}
+                          onChange={(e) => setHuespedRazonSocial(e.target.value)}
+                          style={inputStyle}
+                        />
+                      </div>
+                      <p style={{ fontSize: 11, color: 'var(--text-muted)', gridColumn: '1 / -1', margin: 0 }}>
+                        RUC y razón social: del propio huésped si pidió factura a su nombre, o de la empresa que paga
+                        su estadía. Déjalo vacío si no aplica.
+                      </p>
                     </div>
                   )}
                 </div>
-                <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: '4px 0 0' }}>
-                  Si es efectivo, entra a la caja de tu turno abierto ahora. Se enlaza como pago a la estadía real
-                  cuando el huésped haga check-in.
+              ) : (
+                <p style={{ fontSize: 13, color: 'var(--text-secondary)', margin: 0 }}>
+                  {huespedNombre ?? 'Sin datos de cliente'}
+                </p>
+              )}
+            </div>
+
+            {/* ---------- Datos de la reserva + Fechas ---------- */}
+            <div style={gridRowStyle}>
+              <div style={cardStyle}>
+                <p style={cardTitleStyle}>Datos de la reserva</p>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                  <div style={{ flex: 1, minWidth: 120 }}>
+                    <label style={labelStyle}>Origen</label>
+                    <select value={origen} onChange={(e) => setOrigen(e.target.value)} style={inputStyle}>
+                      {ORIGENES.map((o) => (
+                        <option key={o} value={o}>
+                          {o}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div style={{ width: 110 }}>
+                    <label style={labelStyle}>Moneda</label>
+                    <select value={moneda} onChange={(e) => setMoneda(e.target.value as 'PEN' | 'USD')} style={inputStyle}>
+                      <option value="PEN">PEN</option>
+                      <option value="USD">USD</option>
+                    </select>
+                  </div>
+                  <div style={{ width: 110 }}>
+                    <label style={labelStyle}>N° personas</label>
+                    <input
+                      type="number"
+                      min={1}
+                      value={nroPersonas}
+                      onChange={(e) => setNroPersonas(Number(e.target.value))}
+                      style={{ ...inputStyle, ...(excedeAforo ? { borderColor: 'var(--danger)' } : {}) }}
+                      required
+                    />
+                  </div>
+                </div>
+                <p style={{ fontSize: 11, color: excedeAforo ? 'var(--danger)' : 'var(--text-muted)', margin: '6px 0 0' }}>
+                  {aforoMax > 0
+                    ? `Aforo máximo de esta habitación: ${aforoMax} persona(s)${excedeAforo ? ' — supera la referencia' : ''}`
+                    : 'Sin aforo máximo configurado para este tipo de habitación'}
                 </p>
               </div>
-            )}
 
-            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 8 }}>
+              <div style={cardStyle}>
+                <p style={cardTitleStyle}>Fechas y estancia</p>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                  <div style={{ flex: 1, minWidth: 130 }}>
+                    <label style={labelStyle}>Chk In (fecha)</label>
+                    <input type="date" value={fecha} onChange={(e) => setFecha(e.target.value)} style={inputStyle} required />
+                  </div>
+                  <div style={{ width: 110 }}>
+                    <label style={labelStyle}>Hora ingreso</label>
+                    <input type="time" value={hora} onChange={(e) => setHora(e.target.value)} style={inputStyle} required />
+                  </div>
+                  <div style={{ width: 80 }}>
+                    <label style={labelStyle}>Días</label>
+                    <input
+                      type="number"
+                      min={1}
+                      value={dias}
+                      onChange={(e) => setDias(Number(e.target.value))}
+                      style={inputStyle}
+                      required
+                    />
+                  </div>
+                </div>
+                <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: '6px 0 0' }}>
+                  Chk out (calculado): {checkoutCalculado ? checkoutCalculado.toLocaleString('es-PE') : '—'}
+                </p>
+              </div>
+            </div>
+
+            {/* ---------- Servicios + Vehículo ---------- */}
+            <div style={gridRowStyle}>
+              <div style={cardStyle}>
+                <p style={cardTitleStyle}>Servicios adicionales</p>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, marginBottom: 10 }}>
+                  <input type="checkbox" checked={incluyeDesayuno} onChange={(e) => setIncluyeDesayuno(e.target.checked)} />
+                  Incluye desayuno (cortesía, no se cobra)
+                </label>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, marginBottom: conMascota ? 6 : 0 }}>
+                  <input type="checkbox" checked={conMascota} onChange={(e) => setConMascota(e.target.checked)} />
+                  Viene con mascota
+                </label>
+                {conMascota && (
+                  <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: 0 }}>
+                    {precioMascotaDia > 0
+                      ? `Cobro: S/. ${precioMascotaDia.toFixed(2)}/día × ${dias} día(s) = S/. ${cobroMascotaTotal.toFixed(2)} (se cobra al check-in)`
+                      : 'Este hotel no tiene configurado un cobro por mascota (Configuración → Hotel).'}
+                  </p>
+                )}
+              </div>
+
+              <div style={cardStyle}>
+                <p style={cardTitleStyle}>Vehículo</p>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, marginBottom: tieneVehiculo ? 8 : 0 }}>
+                  <input type="checkbox" checked={tieneVehiculo} onChange={(e) => setTieneVehiculo(e.target.checked)} />
+                  El huésped tiene vehículo
+                </label>
+                {tieneVehiculo && (
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                    <div style={{ flex: 1, minWidth: 100 }}>
+                      <label style={labelStyle}>Marca</label>
+                      <input value={vehiculoMarca} onChange={(e) => setVehiculoMarca(e.target.value)} style={inputStyle} />
+                    </div>
+                    <div style={{ flex: 1, minWidth: 100 }}>
+                      <label style={labelStyle}>Tipo</label>
+                      <input
+                        value={vehiculoTipo}
+                        onChange={(e) => setVehiculoTipo(e.target.value)}
+                        placeholder="Auto, camioneta..."
+                        style={inputStyle}
+                      />
+                    </div>
+                    <div style={{ flex: 1, minWidth: 100 }}>
+                      <label style={labelStyle}>Placa</label>
+                      <input value={vehiculoPlaca} onChange={(e) => setVehiculoPlaca(e.target.value)} style={inputStyle} />
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* ---------- Tarifa + Observaciones ---------- */}
+            <div style={gridRowStyle}>
+              <div style={cardStyle}>
+                <p style={cardTitleStyle}>Tarifa</p>
+                <div style={{ width: 150 }}>
+                  <label style={labelStyle}>Tarifa/día ({moneda})</label>
+                  <input
+                    type="number"
+                    min={0}
+                    step={0.01}
+                    value={tarifaDia}
+                    onChange={(e) => setTarifaDia(Number(e.target.value))}
+                    style={inputStyle}
+                    required
+                  />
+                </div>
+                <div
+                  style={{
+                    marginTop: 10,
+                    background: 'var(--surface-2)',
+                    borderRadius: 'var(--radius)',
+                    padding: '10px 12px',
+                  }}
+                >
+                  <p style={{ fontSize: 13, fontWeight: 600, margin: 0 }}>
+                    Importe total: {moneda} {importeTotal.toFixed(2)}
+                  </p>
+                  <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: '2px 0 0' }}>
+                    Tarifa × días{conMascota ? ' + cobro de mascota' : ''}
+                  </p>
+                </div>
+              </div>
+
+              <div style={cardStyle}>
+                <p style={cardTitleStyle}>Observaciones</p>
+                <textarea
+                  value={observaciones}
+                  onChange={(e) => setObservaciones(e.target.value)}
+                  placeholder="Notas de esta reserva (pedidos especiales, referencias, etc.)"
+                  rows={4}
+                  style={{ ...inputStyle, resize: 'vertical' }}
+                />
+              </div>
+            </div>
+
+            {/* ---------- Anticipo ---------- */}
+            <div style={cardStyle}>
+              <p style={cardTitleStyle}>Pago adelantado (anticipo, opcional)</p>
+              {anticipoYaRegistrado ? (
+                <p style={{ fontSize: 12, color: 'var(--text-secondary)', margin: 0 }}>
+                  Anticipo ya registrado: {moneda} {anticipoYaRegistrado.monto.toFixed(2)}
+                  {anticipoYaRegistrado.metodo ? ` (${anticipoYaRegistrado.metodo})` : ''}
+                </p>
+              ) : (
+                <div>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                    <div style={{ width: 150 }}>
+                      <label style={labelStyle}>Monto ({moneda})</label>
+                      <input
+                        type="number"
+                        min={0}
+                        step={0.01}
+                        value={anticipoMonto}
+                        onChange={(e) => setAnticipoMonto(e.target.value)}
+                        style={inputStyle}
+                      />
+                    </div>
+                    {anticipoMonto !== '' && Number(anticipoMonto) > 0 && (
+                      <div style={{ width: 160 }}>
+                        <label style={labelStyle}>Método de pago</label>
+                        <select value={anticipoMetodoPago} onChange={(e) => setAnticipoMetodoPago(e.target.value)} style={inputStyle}>
+                          {METODOS_PAGO.map((m) => (
+                            <option key={m} value={m}>
+                              {m}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
+                  </div>
+                  <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: '6px 0 0' }}>
+                    Si es efectivo, entra a la caja de tu turno abierto ahora. Se enlaza como pago a la estadía real
+                    cuando el huésped haga check-in.
+                  </p>
+                </div>
+              )}
+            </div>
+
+            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 4 }}>
               <button type="button" onClick={onClose} style={btnSecondary}>
                 Cancelar
               </button>
@@ -726,7 +766,22 @@ const modalStyle: CSSProperties = {
   borderRadius: 12,
   padding: 24,
   width: '100%',
-  maxWidth: 560,
+};
+
+const cardStyle: CSSProperties = {
+  border: '1px solid var(--border)',
+  borderRadius: 'var(--radius)',
+  padding: 14,
+  background: 'var(--surface-1)',
+};
+
+const cardTitleStyle: CSSProperties = {
+  fontSize: 11,
+  fontWeight: 700,
+  color: 'var(--text-secondary)',
+  margin: '0 0 10px',
+  textTransform: 'uppercase',
+  letterSpacing: 0.4,
 };
 
 const labelStyle: CSSProperties = {

@@ -1,5 +1,6 @@
 import { useEffect, useState, type CSSProperties, type FormEvent } from 'react';
 import { api, ApiError } from '../lib/api';
+import { useIsMobile } from '../hooks/useIsMobile';
 import { buscarHuespedPorDni } from '../lib/huespedes';
 
 const TIPOS_DOC = [
@@ -61,6 +62,7 @@ export function CheckinRapidoModal({
   onClose,
   onCreado,
 }: Props) {
+  const isMobile = useIsMobile();
   const [nroDoc, setNroDoc] = useState('');
   const [buscando, setBuscando] = useState(false);
   const [huespedEncontrado, setHuespedEncontrado] = useState<boolean | null>(null);
@@ -182,15 +184,22 @@ export function CheckinRapidoModal({
     }
   }
 
+  const gridRowStyle: CSSProperties = {
+    display: 'grid',
+    gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr',
+    gap: 16,
+  };
+
   return (
     <div style={overlayStyle}>
-      <div style={modalStyle}>
+      <div style={{ ...modalStyle, maxWidth: isMobile ? 560 : 960 }}>
         <h2 style={{ fontSize: 17, marginBottom: 16 }}>Check-in · Habitación {habNumero}</h2>
         {error && <p style={{ color: 'var(--danger)', fontSize: 13, marginBottom: 12 }}>{error}</p>}
 
-        <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-          <div>
-            <label style={labelStyle}>Documento del huésped</label>
+        <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          {/* ---------- Documento ---------- */}
+          <div style={cardStyle}>
+            <p style={cardTitleStyle}>Documento del huésped</p>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
               <select value={tipoDoc} onChange={(e) => setTipoDoc(e.target.value)} style={{ ...inputStyle, width: 160 }}>
                 {TIPOS_DOC.map((t) => (
@@ -214,181 +223,193 @@ export function CheckinRapidoModal({
               </button>
             </div>
             {huespedEncontrado === true && (
-              <p style={{ fontSize: 11, color: 'var(--disponible)', margin: '4px 0 0' }}>
+              <p style={{ fontSize: 11, color: 'var(--disponible)', margin: '6px 0 0' }}>
                 Huésped ya registrado — datos autocompletados.
               </p>
             )}
             {huespedEncontrado === false && (
-              <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: '4px 0 0' }}>
+              <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: '6px 0 0' }}>
                 No se encontró: complete los datos para registrarlo.
               </p>
             )}
           </div>
 
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-            <div style={{ flex: 1, minWidth: 140 }}>
-              <label style={labelStyle}>Nombres</label>
-              <input value={nombres} onChange={(e) => setNombres(e.target.value)} style={inputStyle} required />
-            </div>
-            <div style={{ flex: 1, minWidth: 140 }}>
-              <label style={labelStyle}>Apellidos</label>
-              <input value={apellidos} onChange={(e) => setApellidos(e.target.value)} style={inputStyle} required />
-            </div>
-          </div>
-
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-            <div style={{ flex: 1, minWidth: 140 }}>
-              <label style={labelStyle}>Teléfono</label>
-              <input value={telefono} onChange={(e) => setTelefono(e.target.value)} style={inputStyle} />
-            </div>
-            <div style={{ flex: 1, minWidth: 140 }}>
-              <label style={labelStyle}>Correo</label>
-              <input type="email" value={correo} onChange={(e) => setCorreo(e.target.value)} style={inputStyle} />
-            </div>
-          </div>
-
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-            <div style={{ width: 170 }}>
-              <label style={labelStyle}>Nacionalidad</label>
-              <select value={nacionalidad} onChange={(e) => setNacionalidad(e.target.value)} style={inputStyle}>
-                <option value="">Sin especificar</option>
-                <option value="peruano">Peruano</option>
-                <option value="extranjero">Extranjero</option>
-              </select>
-            </div>
-            {nacionalidad === 'extranjero' && (
-              <div style={{ flex: 1, minWidth: 140 }}>
-                <label style={labelStyle}>País de origen</label>
-                <input value={origen} onChange={(e) => setOrigen(e.target.value)} placeholder="Ej. Colombia" style={inputStyle} />
+          {/* ---------- Datos personales + Nacionalidad/facturación ---------- */}
+          <div style={gridRowStyle}>
+            <div style={cardStyle}>
+              <p style={cardTitleStyle}>Datos personales</p>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 8 }}>
+                <div style={{ flex: 1, minWidth: 140 }}>
+                  <label style={labelStyle}>Nombres</label>
+                  <input value={nombres} onChange={(e) => setNombres(e.target.value)} style={inputStyle} required />
+                </div>
+                <div style={{ flex: 1, minWidth: 140 }}>
+                  <label style={labelStyle}>Apellidos</label>
+                  <input value={apellidos} onChange={(e) => setApellidos(e.target.value)} style={inputStyle} required />
+                </div>
               </div>
-            )}
-            <div style={{ flex: 1, minWidth: 140 }}>
-              <label style={labelStyle}>Fecha de nacimiento</label>
-              <input
-                type="date"
-                value={fechaNacimiento}
-                onChange={(e) => setFechaNacimiento(e.target.value)}
-                style={inputStyle}
-              />
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                <div style={{ flex: 1, minWidth: 140 }}>
+                  <label style={labelStyle}>Teléfono</label>
+                  <input value={telefono} onChange={(e) => setTelefono(e.target.value)} style={inputStyle} />
+                </div>
+                <div style={{ flex: 1, minWidth: 140 }}>
+                  <label style={labelStyle}>Correo</label>
+                  <input type="email" value={correo} onChange={(e) => setCorreo(e.target.value)} style={inputStyle} />
+                </div>
+              </div>
+            </div>
+
+            <div style={cardStyle}>
+              <p style={cardTitleStyle}>Nacionalidad y facturación</p>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 8 }}>
+                <div style={{ width: 150 }}>
+                  <label style={labelStyle}>Nacionalidad</label>
+                  <select value={nacionalidad} onChange={(e) => setNacionalidad(e.target.value)} style={inputStyle}>
+                    <option value="">Sin especificar</option>
+                    <option value="peruano">Peruano</option>
+                    <option value="extranjero">Extranjero</option>
+                  </select>
+                </div>
+                {nacionalidad === 'extranjero' && (
+                  <div style={{ flex: 1, minWidth: 120 }}>
+                    <label style={labelStyle}>País de origen</label>
+                    <input value={origen} onChange={(e) => setOrigen(e.target.value)} placeholder="Ej. Colombia" style={inputStyle} />
+                  </div>
+                )}
+                <div style={{ flex: 1, minWidth: 140 }}>
+                  <label style={labelStyle}>Fecha de nacimiento</label>
+                  <input
+                    type="date"
+                    value={fechaNacimiento}
+                    onChange={(e) => setFechaNacimiento(e.target.value)}
+                    style={inputStyle}
+                  />
+                </div>
+              </div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                <div style={{ width: 150 }}>
+                  <label style={labelStyle}>RUC</label>
+                  <input value={ruc} onChange={(e) => setRuc(e.target.value)} placeholder="11 dígitos" maxLength={11} style={inputStyle} />
+                </div>
+                <div style={{ flex: 1, minWidth: 140 }}>
+                  <label style={labelStyle}>Razón social</label>
+                  <input value={razonSocial} onChange={(e) => setRazonSocial(e.target.value)} style={inputStyle} />
+                </div>
+              </div>
+              <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: '6px 0 0' }}>
+                RUC y razón social: del propio huésped si pidió factura a su nombre, o de la empresa que paga su
+                estadía. Déjalo vacío si no aplica.
+              </p>
             </div>
           </div>
 
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-            <div style={{ width: 170 }}>
-              <label style={labelStyle}>RUC</label>
-              <input value={ruc} onChange={(e) => setRuc(e.target.value)} placeholder="11 dígitos" maxLength={11} style={inputStyle} />
+          {/* ---------- Estancia + Tarifa ---------- */}
+          <div style={gridRowStyle}>
+            <div style={cardStyle}>
+              <p style={cardTitleStyle}>Estancia</p>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 8 }}>
+                <div style={{ width: 110 }}>
+                  <label style={labelStyle}>N° personas</label>
+                  <input
+                    type="number"
+                    min={1}
+                    value={nroPersonas}
+                    onChange={(e) => setNroPersonas(Number(e.target.value))}
+                    style={inputStyle}
+                    required
+                  />
+                </div>
+                <div style={{ flex: 1, minWidth: 130 }}>
+                  <label style={labelStyle}>Tipo de cliente</label>
+                  <select
+                    value={tipoCliente}
+                    onChange={(e) => cambiarTipoCliente(e.target.value as TipoCliente)}
+                    style={inputStyle}
+                  >
+                    <option value="normal">Normal</option>
+                    <option value="corporativo">Corporativo</option>
+                    <option value="web">Web</option>
+                  </select>
+                </div>
+                <div style={{ width: 80 }}>
+                  <label style={labelStyle}>Días</label>
+                  <input
+                    type="number"
+                    min={1}
+                    value={dias}
+                    onChange={(e) => setDias(Number(e.target.value))}
+                    style={inputStyle}
+                    required
+                  />
+                </div>
+              </div>
+              <div style={{ marginBottom: 8 }}>
+                <label style={labelStyle}>Fecha y hora de check-in</label>
+                <input
+                  type="datetime-local"
+                  value={checkinPrevisto}
+                  onChange={(e) => setCheckinPrevisto(e.target.value)}
+                  style={inputStyle}
+                  required
+                />
+              </div>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13 }}>
+                <input type="checkbox" checked={incluyeDesayuno} onChange={(e) => setIncluyeDesayuno(e.target.checked)} />
+                Incluye desayuno (cortesía, no se cobra)
+              </label>
+              <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: '6px 0 0' }}>
+                La salida programada se calcula sola (check-in + días, según la hora de check-out del hotel).
+              </p>
             </div>
-            <div style={{ flex: 1, minWidth: 140 }}>
-              <label style={labelStyle}>Razón social</label>
-              <input value={razonSocial} onChange={(e) => setRazonSocial(e.target.value)} style={inputStyle} />
+
+            <div style={cardStyle}>
+              <p style={cardTitleStyle}>Tarifa</p>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 8 }}>
+                <div style={{ width: 150 }}>
+                  <label style={labelStyle}>Tarifa/día (S/.)</label>
+                  <input
+                    type="number"
+                    min={0}
+                    step={0.01}
+                    value={tarifaDia}
+                    onChange={(e) => setTarifaDia(Number(e.target.value))}
+                    style={{
+                      ...inputStyle,
+                      ...(tarifaBajoCosto ? { borderColor: 'var(--danger)' } : {}),
+                    }}
+                    required
+                  />
+                </div>
+                <div style={{ width: 150 }}>
+                  <label style={labelStyle}>Cargo early (S/.)</label>
+                  <input
+                    type="number"
+                    min={0}
+                    step={0.01}
+                    placeholder="Automático"
+                    value={cobroEarly}
+                    onChange={(e) => setCobroEarly(e.target.value)}
+                    style={inputStyle}
+                  />
+                </div>
+              </div>
+              <p style={{ fontSize: 11, color: tarifaBajoCosto ? 'var(--danger)' : 'var(--text-muted)', margin: 0 }}>
+                {precioCosto > 0
+                  ? `Precio de costo: S/. ${precioCosto}${tarifaBajoCosto ? ' — la tarifa no puede quedar por debajo de este valor.' : ''}`
+                  : 'Este tipo de habitación no tiene un precio de costo configurado.'}
+              </p>
+              <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: '6px 0 0' }}>
+                Cargo early: vacío = se calcula solo (50% de la tarifa si ingresa antes de la hora de check-in);
+                pon 0 para no cobrarlo.
+              </p>
             </div>
           </div>
-          <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: '-8px 0 0' }}>
-            RUC y razón social: del propio huésped si pidió factura a su nombre, o de la empresa que paga su
-            estadía. Déjalo vacío si no aplica.
-          </p>
 
-          <hr style={{ border: 'none', borderTop: '1px solid var(--border)' }} />
-
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-            <div style={{ width: 130 }}>
-              <label style={labelStyle}>N° personas</label>
-              <input
-                type="number"
-                min={1}
-                value={nroPersonas}
-                onChange={(e) => setNroPersonas(Number(e.target.value))}
-                style={inputStyle}
-                required
-              />
-            </div>
-            <div style={{ width: 150 }}>
-              <label style={labelStyle}>Tipo de cliente</label>
-              <select
-                value={tipoCliente}
-                onChange={(e) => cambiarTipoCliente(e.target.value as TipoCliente)}
-                style={inputStyle}
-              >
-                <option value="normal">Normal</option>
-                <option value="corporativo">Corporativo</option>
-                <option value="web">Web</option>
-              </select>
-            </div>
-            <div style={{ width: 90 }}>
-              <label style={labelStyle}>Días</label>
-              <input
-                type="number"
-                min={1}
-                value={dias}
-                onChange={(e) => setDias(Number(e.target.value))}
-                style={inputStyle}
-                required
-              />
-            </div>
-          </div>
-
-          <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13 }}>
-            <input type="checkbox" checked={incluyeDesayuno} onChange={(e) => setIncluyeDesayuno(e.target.checked)} />
-            Incluye desayuno (cortesía, no se cobra)
-          </label>
-
-          <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end' }}>
-            <div style={{ width: 150 }}>
-              <label style={labelStyle}>Tarifa/día (S/.)</label>
-              <input
-                type="number"
-                min={0}
-                step={0.01}
-                value={tarifaDia}
-                onChange={(e) => setTarifaDia(Number(e.target.value))}
-                style={{
-                  ...inputStyle,
-                  ...(tarifaBajoCosto ? { borderColor: 'var(--danger)' } : {}),
-                }}
-                required
-              />
-            </div>
-            <p style={{ fontSize: 11, color: tarifaBajoCosto ? 'var(--danger)' : 'var(--text-muted)', margin: 0 }}>
-              {precioCosto > 0
-                ? `Precio de costo: S/. ${precioCosto}${tarifaBajoCosto ? ' — la tarifa no puede quedar por debajo de este valor.' : ''}`
-                : 'Este tipo de habitación no tiene un precio de costo configurado.'}
-            </p>
-          </div>
-
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-            <div style={{ flex: 1, minWidth: 140 }}>
-              <label style={labelStyle}>Fecha y hora de check-in</label>
-              <input
-                type="datetime-local"
-                value={checkinPrevisto}
-                onChange={(e) => setCheckinPrevisto(e.target.value)}
-                style={inputStyle}
-                required
-              />
-            </div>
-            <div style={{ width: 160 }}>
-              <label style={labelStyle}>Cargo early (S/.)</label>
-              <input
-                type="number"
-                min={0}
-                step={0.01}
-                placeholder="Automático"
-                value={cobroEarly}
-                onChange={(e) => setCobroEarly(e.target.value)}
-                style={inputStyle}
-              />
-            </div>
-          </div>
-          <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: '-8px 0 0' }}>
-            La salida programada se calcula sola (check-in + días, según la hora de check-out del hotel).
-            El cargo early: vacío = se calcula solo (50% de la tarifa si ingresa antes de la hora de
-            check-in); pon 0 para no cobrarlo.
-          </p>
-
-          <hr style={{ border: 'none', borderTop: '1px solid var(--border)' }} />
-
-          <div>
-            <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, marginBottom: 8 }}>
+          {/* ---------- Vehículo y cochera ---------- */}
+          <div style={cardStyle}>
+            <p style={cardTitleStyle}>Vehículo y cochera</p>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, marginBottom: tieneVehiculo ? 8 : 0 }}>
               <input type="checkbox" checked={tieneVehiculo} onChange={(e) => setTieneVehiculo(e.target.checked)} />
               El huésped tiene vehículo
             </label>
@@ -433,7 +454,7 @@ export function CheckinRapidoModal({
             )}
           </div>
 
-          <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 8 }}>
+          <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 4 }}>
             <button type="button" onClick={onClose} style={btnSecondary}>
               Cancelar
             </button>
@@ -465,7 +486,22 @@ const modalStyle: CSSProperties = {
   borderRadius: 12,
   padding: 24,
   width: '100%',
-  maxWidth: 560,
+};
+
+const cardStyle: CSSProperties = {
+  border: '1px solid var(--border)',
+  borderRadius: 'var(--radius)',
+  padding: 14,
+  background: 'var(--surface-1)',
+};
+
+const cardTitleStyle: CSSProperties = {
+  fontSize: 11,
+  fontWeight: 700,
+  color: 'var(--text-secondary)',
+  margin: '0 0 10px',
+  textTransform: 'uppercase',
+  letterSpacing: 0.4,
 };
 
 const labelStyle: CSSProperties = {
