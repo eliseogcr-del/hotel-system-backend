@@ -561,6 +561,65 @@ export class EstadiasService {
   }
 
   /**
+   * Anula un cargo (cuenta por cobrar) ya registrado: pone su monto en 0 y
+   * deja constancia en notas de quién lo anuló, sin borrar el registro (se
+   * conserva el histórico de qué se cobró originalmente). Excepción
+   * deliberada al principio de "nunca editar movimientos ya posteados" de
+   * este libro (ver `actualizar()`/CLAUDE.md): ahí se pidió explícitamente
+   * poder anular en la misma fila, no agregar un movimiento compensatorio.
+   * Solo aplica a cargos (monto > 0); los pagos (monto < 0) no se anulan
+   * por aquí porque eso resucitaría una deuda ya saldada -- si un pago se
+   * registró mal, se corrige con un 'ajuste'.
+   */
+  async anularMovimiento(
+    client: SupabaseClient,
+    hotelId: string,
+    estadiaId: string,
+    movimientoId: string,
+    personalId: string,
+  ) {
+    await this.cargarEstadiaHotel(client, hotelId, estadiaId);
+
+    const { data: movimiento, error: movError } = await client
+      .from('movimientos_cuenta')
+      .select('id, monto, notas')
+      .eq('id', movimientoId)
+      .eq('estadia_id', estadiaId)
+      .maybeSingle();
+    if (movError) throw movError;
+    if (!movimiento) {
+      throw new NotFoundException('Movimiento no encontrado en esta estadía');
+    }
+    if (Number(movimiento.monto) <= 0) {
+      throw new BadRequestException(
+        'Solo se pueden anular cargos (cuentas por cobrar); este movimiento ya está anulado o es un pago',
+      );
+    }
+
+    const { data: personal, error: personalError } = await client
+      .from('personal')
+      .select('nombre')
+      .eq('id', personalId)
+      .maybeSingle();
+    if (personalError) throw personalError;
+    const nombreAnulador = personal?.nombre ?? 'usuario desconocido';
+
+    const notasNuevas = movimiento.notas
+      ? `${movimiento.notas} — Anulado por ${nombreAnulador}`
+      : `Anulado por ${nombreAnulador}`;
+
+    const { error: updError } = await client
+      .from('movimientos_cuenta')
+      .update({ monto: 0, notas: notasNuevas })
+      .eq('id', movimientoId);
+    if (updError) throw updError;
+
+    await this.recalcularSaldo(client, estadiaId);
+
+    return this.obtenerDetalle(client, hotelId, estadiaId);
+  }
+
+  /**
    * Notas libres de recepción sobre el huésped actual (incidencias, hora
    * de desayuno, algo que se le prestó, etc). Vive en
    * reserva_habitacion.observaciones -- ya existía el campo, solo faltaba

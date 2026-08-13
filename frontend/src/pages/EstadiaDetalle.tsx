@@ -157,6 +157,21 @@ export function EstadiaDetalle() {
     }
   }
 
+  async function anularMovimiento(movimientoId: string) {
+    if (!hotelActual || !id) return;
+    if (!confirm('¿Anular este cargo? El importe pasará a S/. 0 y no se puede deshacer.')) return;
+    setAccionando(true);
+    setError(null);
+    try {
+      await api.post(`/hoteles/${hotelActual.hotelId}/estadias/${id}/movimientos/${movimientoId}/anular`);
+      cargar();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'No se pudo anular el cargo');
+    } finally {
+      setAccionando(false);
+    }
+  }
+
   if (!hotelActual) return null;
   if (error && !estadia) return <p style={{ color: 'var(--danger)' }}>{error}</p>;
   if (!estadia) return <p style={{ color: 'var(--text-muted)' }}>Cargando...</p>;
@@ -309,6 +324,7 @@ export function EstadiaDetalle() {
               <th style={thStyle}>Método</th>
               <th style={thStyle}>Personal</th>
               <th style={thStyle}>Notas</th>
+              <th style={thStyle}></th>
             </tr>
           </thead>
           <tbody>
@@ -319,6 +335,7 @@ export function EstadiaDetalle() {
               // note de un vistazo cuál es cuál en un libro que mezcla los
               // dos tipos de movimiento.
               const esPago = Number(m.monto) < 0;
+              const esCargoAnulable = Number(m.monto) > 0;
               const color = esPago ? 'var(--ingreso)' : 'var(--disponible)';
               const bg = esPago ? 'var(--ingreso-bg)' : 'var(--disponible-bg)';
               return (
@@ -329,6 +346,25 @@ export function EstadiaDetalle() {
                   <td style={{ ...tdStyle, color }}>{m.metodo_pago ?? '—'}</td>
                   <td style={{ ...tdStyle, color }}>{m.personal?.nombre ?? '—'}</td>
                   <td style={{ ...tdStyle, color }}>{m.notas ?? ''}</td>
+                  <td style={tdStyle}>
+                    {esCargoAnulable && (
+                      <button
+                        onClick={() => anularMovimiento(m.id)}
+                        disabled={accionando}
+                        style={{
+                          border: 'none',
+                          background: 'transparent',
+                          color: 'var(--danger)',
+                          fontSize: 12,
+                          textDecoration: 'underline',
+                          cursor: 'pointer',
+                          padding: 0,
+                        }}
+                      >
+                        Anular
+                      </button>
+                    )}
+                  </td>
                 </tr>
               );
             })}

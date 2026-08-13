@@ -83,6 +83,18 @@ export class EstadiasController {
     );
   }
 
+  @Post(':id/movimientos/:movimientoId/anular')
+  @Roles('admin', 'recepcion')
+  async anularMovimiento(
+    @Param('hotelId') hotelId: string,
+    @Param('id') id: string,
+    @Param('movimientoId') movimientoId: string,
+    @CurrentUser() user: RequestUser,
+  ) {
+    const client = this.supabase.getClientForRequest(user.accessToken);
+    return this.estadiasService.anularMovimiento(client, hotelId, id, movimientoId, user.personalId);
+  }
+
   // Sin cron real en el backend (Render free tier se duerme): esto lo
   // dispara el frontend cada vez que se carga/recarga Habitaciones, para
   // extender automáticamente las estadías cuya salida programada ya venció
