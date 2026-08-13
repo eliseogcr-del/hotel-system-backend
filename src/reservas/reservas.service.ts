@@ -16,6 +16,7 @@ import {
 import { ListarReservasQueryDto } from './dto/listar-reservas-query.dto';
 import { CalendarioQueryDto } from './dto/calendario-query.dto';
 import { ActualizarReservaLineaDto } from './dto/actualizar-reserva-linea.dto';
+import { CancelarReservaDto } from './dto/cancelar-reserva.dto';
 
 type MetodoPagoAnticipo = 'efectivo' | 'transferencia' | 'yape' | 'tarjeta';
 
@@ -323,10 +324,43 @@ export class ReservasService {
     return data;
   }
 
-  async cancelar(client: SupabaseClient, hotelId: string, reservaId: string) {
+  /**
+   * Anula la reserva completa (todas sus líneas). No se permite si
+   * cualquiera de sus líneas ya tiene una estadía asociada (hubo check-in
+   * real) -- anularla dejaría un huésped físicamente alojado colgado de
+   * una reserva 'cancelada', un estado inconsistente. Un anticipo ya
+   * registrado NO bloquea la anulación (es solo informativo para quien la
+   * anula); el dinero ya cobrado queda registrado igual en su libro de
+   * caja/movimientos, la anulación no lo revierte.
+   */
+  async cancelar(
+    client: SupabaseClient,
+    hotelId: string,
+    reservaId: string,
+    dto: CancelarReservaDto,
+    personalId: string,
+  ) {
+    const { data: lineas, error: lineasError } = await client
+      .from('reserva_habitacion')
+      .select('id, estadias(estado_actual)')
+      .eq('reserva_id', reservaId);
+    if (lineasError) throw lineasError;
+
+    const tieneEstadia = (lineas ?? []).some((l: any) => l.estadias);
+    if (tieneEstadia) {
+      throw new BadRequestException(
+        'No se puede anular: esta reserva ya tiene una estadía asociada (hubo check-in). Si corresponde, gestiónalo desde el detalle de la estadía.',
+      );
+    }
+
     const { data, error } = await client
       .from('reservas')
-      .update({ estado: 'cancelada' })
+      .update({
+        estado: 'cancelada',
+        motivo_cancelacion: dto?.motivo?.trim() || null,
+        cancelado_por: personalId,
+        cancelado_en: new Date().toISOString(),
+      })
       .eq('id', reservaId)
       .eq('hotel_id', hotelId)
       .select()

@@ -209,6 +209,9 @@ create table reservas (
     estado text not null default 'confirmada' check (estado in ('pendiente_revision','confirmada','cancelada')),
     creado_por uuid references personal(id),
     created_at timestamptz not null default now(),
+    motivo_cancelacion text,
+    cancelado_por uuid references personal(id),
+    cancelado_en timestamptz,
     -- Anticipo (pago adelantado): el método lo decide quien reserva: solo
     -- si es 'efectivo' genera ingreso en la caja de la sesión de turno de
     -- quien lo registra (yape/tarjeta/transferencia van directo a la

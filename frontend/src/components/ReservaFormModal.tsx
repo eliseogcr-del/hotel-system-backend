@@ -150,6 +150,10 @@ export function ReservaFormModal({
   const [enviando, setEnviando] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const [mostrarAnular, setMostrarAnular] = useState(false);
+  const [motivoAnulacion, setMotivoAnulacion] = useState('');
+  const [anulando, setAnulando] = useState(false);
+
   useEffect(() => {
     if (modo !== 'editar' || !reservaId) return;
     api
@@ -370,6 +374,23 @@ export function ReservaFormModal({
     }
   }
 
+  async function anularReserva() {
+    if (!reservaId) return;
+    setAnulando(true);
+    setError(null);
+    try {
+      await api.patch(`/hoteles/${hotelId}/reservas/${reservaId}/cancelar`, {
+        motivo: motivoAnulacion.trim() || undefined,
+      });
+      onGuardado();
+      onClose();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'No se pudo anular la reserva');
+    } finally {
+      setAnulando(false);
+    }
+  }
+
   const gridRowStyle: CSSProperties = {
     display: 'grid',
     gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr',
@@ -379,9 +400,59 @@ export function ReservaFormModal({
   return (
     <div style={overlayStyle}>
       <div style={{ ...modalStyle, maxWidth: isMobile ? 560 : 960 }}>
-        <h2 style={{ fontSize: 17, marginBottom: 16 }}>
-          {modo === 'crear' ? 'Nueva reserva' : 'Editar reserva'} · Habitación {habNumero}
-        </h2>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, marginBottom: 16 }}>
+          <h2 style={{ fontSize: 17, margin: 0 }}>
+            {modo === 'crear' ? 'Nueva reserva' : 'Editar reserva'} · Habitación {habNumero}
+          </h2>
+          {modo === 'editar' && !cargando && (
+            <button
+              type="button"
+              onClick={() => setMostrarAnular((v) => !v)}
+              style={{ ...btnSecondary, color: 'var(--danger)', borderColor: 'var(--danger)', flexShrink: 0 }}
+            >
+              Anular reserva
+            </button>
+          )}
+        </div>
+
+        {mostrarAnular && (
+          <div
+            style={{
+              ...cardStyle,
+              borderColor: 'var(--danger)',
+              marginBottom: 16,
+            }}
+          >
+            <p style={cardTitleStyle}>Anular reserva</p>
+            {anticipoYaRegistrado && (
+              <p style={{ fontSize: 12, color: 'var(--danger)', margin: '0 0 8px' }}>
+                ⚠ Esta reserva tiene un anticipo de {moneda} {anticipoYaRegistrado.monto.toFixed(2)} registrado.
+                Aun así se puede anular.
+              </p>
+            )}
+            <label style={labelStyle}>Motivo de la anulación (opcional)</label>
+            <textarea
+              value={motivoAnulacion}
+              onChange={(e) => setMotivoAnulacion(e.target.value)}
+              placeholder="Ej. El cliente no se presentó"
+              rows={2}
+              style={{ ...inputStyle, resize: 'vertical' }}
+            />
+            <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
+              <button type="button" onClick={() => setMostrarAnular(false)} style={btnSecondary}>
+                Volver
+              </button>
+              <button
+                type="button"
+                onClick={anularReserva}
+                disabled={anulando}
+                style={{ ...btnPrimary, background: 'var(--danger)' }}
+              >
+                {anulando ? 'Anulando...' : 'Confirmar anulación'}
+              </button>
+            </div>
+          </div>
+        )}
 
         {cargando ? (
           <p style={{ color: 'var(--text-muted)' }}>Cargando...</p>

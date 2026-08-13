@@ -20,6 +20,7 @@ import { CrearReservaHabitacionDto } from './dto/crear-reserva-habitacion.dto';
 import { ListarReservasQueryDto } from './dto/listar-reservas-query.dto';
 import { CalendarioQueryDto } from './dto/calendario-query.dto';
 import { ActualizarReservaLineaDto } from './dto/actualizar-reserva-linea.dto';
+import { CancelarReservaDto } from './dto/cancelar-reserva.dto';
 
 @Controller('hoteles/:hotelId/reservas')
 @UseGuards(AuthGuard, RolesGuard)
@@ -83,10 +84,11 @@ export class ReservasController {
   async cancelar(
     @Param('hotelId') hotelId: string,
     @Param('id') id: string,
+    @Body() dto: CancelarReservaDto,
     @CurrentUser() user: RequestUser,
   ) {
     const client = this.supabase.getClientForRequest(user.accessToken);
-    return this.reservasService.cancelar(client, hotelId, id);
+    return this.reservasService.cancelar(client, hotelId, id, dto, user.personalId);
   }
 
   @Post(':id/habitaciones')
