@@ -31,15 +31,21 @@ interface ReservaHabitacionDetalle {
   vehiculos: { marca: string | null; tipo: string | null; placa: string | null } | null;
 }
 
+interface AnticipoExistente {
+  id: string;
+  monto: number;
+  metodo_pago: string;
+  fecha: string;
+}
+
 interface ReservaDetalle {
   id: string;
   origen: string;
   moneda: 'PEN' | 'USD';
-  anticipo_monto: number;
-  anticipo_metodo_pago: string | null;
   huespedes: { nombres: string; apellidos: string } | null;
   empresas: { razon_social: string } | null;
   reserva_habitacion: ReservaHabitacionDetalle[];
+  anticipos_reserva: AnticipoExistente[];
 }
 
 interface Props {
@@ -140,10 +146,7 @@ export function ReservaFormModal({
   const [vehiculoPlaca, setVehiculoPlaca] = useState('');
   const [tarifaDia, setTarifaDia] = useState(tarifaSugerida);
 
-  const [anticipoYaRegistrado, setAnticipoYaRegistrado] = useState<{
-    monto: number;
-    metodo: string | null;
-  } | null>(null);
+  const [anticiposExistentes, setAnticiposExistentes] = useState<AnticipoExistente[]>([]);
   const [anticipoMonto, setAnticipoMonto] = useState('');
   const [anticipoMetodoPago, setAnticipoMetodoPago] = useState('efectivo');
 
@@ -167,12 +170,7 @@ export function ReservaFormModal({
             ? `${reserva.huespedes.nombres} ${reserva.huespedes.apellidos}`
             : (reserva.empresas?.razon_social ?? null),
         );
-        if (Number(reserva.anticipo_monto) > 0) {
-          setAnticipoYaRegistrado({
-            monto: Number(reserva.anticipo_monto),
-            metodo: reserva.anticipo_metodo_pago,
-          });
-        }
+        setAnticiposExistentes(reserva.anticipos_reserva ?? []);
         if (linea) {
           setFecha(isoAFechaLocal(linea.fecha_hora_checkin_prevista));
           setHora(isoAHoraLocal(linea.fecha_hora_checkin_prevista));
@@ -290,6 +288,7 @@ export function ReservaFormModal({
   const cobroMascotaTotal = conMascota ? precioMascotaDia * dias : 0;
   const importeTotal = tarifaDia * dias + cobroMascotaTotal;
   const excedeAforo = aforoMax > 0 && nroPersonas > aforoMax;
+  const totalAnticipos = anticiposExistentes.reduce((acc, a) => acc + Number(a.monto), 0);
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -361,8 +360,8 @@ export function ReservaFormModal({
           vehiculoMarca: tieneVehiculo ? vehiculoMarca.trim() || undefined : undefined,
           vehiculoTipo: tieneVehiculo ? vehiculoTipo.trim() || undefined : undefined,
           vehiculoPlaca: tieneVehiculo ? vehiculoPlaca.trim() || undefined : undefined,
-          anticipoMonto: !anticipoYaRegistrado ? anticipoMontoNum : undefined,
-          anticipoMetodoPago: !anticipoYaRegistrado && anticipoMontoNum ? anticipoMetodoPago : undefined,
+          anticipoMonto: anticipoMontoNum,
+          anticipoMetodoPago: anticipoMontoNum ? anticipoMetodoPago : undefined,
         });
       }
       onGuardado();
@@ -424,9 +423,9 @@ export function ReservaFormModal({
             }}
           >
             <p style={cardTitleStyle}>Anular reserva</p>
-            {anticipoYaRegistrado && (
+            {totalAnticipos > 0 && (
               <p style={{ fontSize: 12, color: 'var(--danger)', margin: '0 0 8px' }}>
-                ⚠ Esta reserva tiene un anticipo de {moneda} {anticipoYaRegistrado.monto.toFixed(2)} registrado.
+                ⚠ Esta reserva tiene {moneda} {totalAnticipos.toFixed(2)} en anticipos registrados.
                 Aun así se puede anular.
               </p>
             )}
@@ -764,44 +763,51 @@ export function ReservaFormModal({
             {/* ---------- Anticipo ---------- */}
             <div style={cardStyle}>
               <p style={cardTitleStyle}>Pago adelantado (anticipo, opcional)</p>
-              {anticipoYaRegistrado ? (
-                <p style={{ fontSize: 12, color: 'var(--text-secondary)', margin: 0 }}>
-                  Anticipo ya registrado: {moneda} {anticipoYaRegistrado.monto.toFixed(2)}
-                  {anticipoYaRegistrado.metodo ? ` (${anticipoYaRegistrado.metodo})` : ''}
-                </p>
-              ) : (
-                <div>
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-                    <div style={{ width: 150 }}>
-                      <label style={labelStyle}>Monto ({moneda})</label>
-                      <input
-                        type="number"
-                        min={0}
-                        step={0.01}
-                        value={anticipoMonto}
-                        onChange={(e) => setAnticipoMonto(e.target.value)}
-                        style={inputStyle}
-                      />
-                    </div>
-                    {anticipoMonto !== '' && Number(anticipoMonto) > 0 && (
-                      <div style={{ width: 160 }}>
-                        <label style={labelStyle}>Método de pago</label>
-                        <select value={anticipoMetodoPago} onChange={(e) => setAnticipoMetodoPago(e.target.value)} style={inputStyle}>
-                          {METODOS_PAGO.map((m) => (
-                            <option key={m} value={m}>
-                              {m}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-                    )}
-                  </div>
-                  <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: '6px 0 0' }}>
-                    Si es efectivo, entra a la caja de tu turno abierto ahora. Se enlaza como pago a la estadía real
-                    cuando el huésped haga check-in.
+              {anticiposExistentes.length > 0 && (
+                <div style={{ marginBottom: 10 }}>
+                  {anticiposExistentes.map((a) => (
+                    <p key={a.id} style={{ fontSize: 12, color: 'var(--text-secondary)', margin: '0 0 2px' }}>
+                      {moneda} {Number(a.monto).toFixed(2)} ({a.metodo_pago}) · {new Date(a.fecha).toLocaleDateString('es-PE')}
+                    </p>
+                  ))}
+                  <p style={{ fontSize: 12, fontWeight: 600, margin: '4px 0 0' }}>
+                    Total anticipado: {moneda} {totalAnticipos.toFixed(2)}
                   </p>
                 </div>
               )}
+              <div>
+                <label style={labelStyle}>
+                  {anticiposExistentes.length > 0 ? 'Agregar otro anticipo' : 'Monto'} ({moneda})
+                </label>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                  <div style={{ width: 150 }}>
+                    <input
+                      type="number"
+                      min={0}
+                      step={0.01}
+                      value={anticipoMonto}
+                      onChange={(e) => setAnticipoMonto(e.target.value)}
+                      style={inputStyle}
+                    />
+                  </div>
+                  {anticipoMonto !== '' && Number(anticipoMonto) > 0 && (
+                    <div style={{ width: 160 }}>
+                      <label style={labelStyle}>Método de pago</label>
+                      <select value={anticipoMetodoPago} onChange={(e) => setAnticipoMetodoPago(e.target.value)} style={inputStyle}>
+                        {METODOS_PAGO.map((m) => (
+                          <option key={m} value={m}>
+                            {m}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
+                </div>
+                <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: '6px 0 0' }}>
+                  Si es efectivo, entra a la caja de tu turno abierto ahora. Se enlaza como pago a la estadía real
+                  cuando el huésped haga check-in. Se guarda al hacer clic en "Guardar".
+                </p>
+              </div>
             </div>
 
             <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 4 }}>

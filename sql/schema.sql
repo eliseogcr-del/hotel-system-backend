@@ -211,19 +211,25 @@ create table reservas (
     created_at timestamptz not null default now(),
     motivo_cancelacion text,
     cancelado_por uuid references personal(id),
-    cancelado_en timestamptz,
-    -- Anticipo (pago adelantado): el método lo decide quien reserva: solo
-    -- si es 'efectivo' genera ingreso en la caja de la sesión de turno de
-    -- quien lo registra (yape/tarjeta/transferencia van directo a la
-    -- cuenta de la empresa). Se enlaza a la estadía real recién al hacer
-    -- check-in, como un 'pago' que reduce el saldo -- ver
-    -- EstadiasService.checkin().
-    anticipo_monto numeric(10,2) not null default 0,
-    anticipo_metodo_pago text check (anticipo_metodo_pago in ('efectivo','transferencia','yape','tarjeta')),
-    anticipo_registrado_por uuid references personal(id),
-    anticipo_sesion_turno_id uuid references sesiones_turno(id),
-    anticipo_fecha timestamptz,
-    anticipo_vinculado_estadia_id uuid references estadias(id)
+    cancelado_en timestamptz
+);
+
+-- Anticipos (pagos adelantados) de una reserva -- una reserva puede tener
+-- varios (ej. el cliente abona en dos partes). El método lo decide quien
+-- registra cada uno: solo si es 'efectivo' genera ingreso en la caja de la
+-- sesión de turno de quien lo registra (yape/tarjeta/transferencia van
+-- directo a la cuenta de la empresa). Cada anticipo se enlaza a la estadía
+-- real recién al hacer check-in, como un 'pago' propio que reduce el saldo
+-- -- ver EstadiasService.checkin().
+create table anticipos_reserva (
+    id uuid primary key default gen_random_uuid(),
+    reserva_id uuid not null references reservas(id) on delete cascade,
+    monto numeric(10,2) not null,
+    metodo_pago text not null check (metodo_pago in ('efectivo','transferencia','yape','tarjeta')),
+    registrado_por uuid references personal(id),
+    sesion_turno_id uuid references sesiones_turno(id),
+    fecha timestamptz not null default now(),
+    vinculado_estadia_id uuid references estadias(id)
 );
 
 create table reserva_habitacion (
@@ -473,6 +479,7 @@ alter table huespedes enable row level security;
 alter table empresas enable row level security;
 alter table tarifas_especiales enable row level security;
 alter table reservas enable row level security;
+alter table anticipos_reserva enable row level security;
 alter table reserva_habitacion enable row level security;
 alter table vehiculos enable row level security;
 alter table estadias enable row level security;
@@ -536,6 +543,9 @@ create policy p_tarifas_especiales on tarifas_especiales for all
 
 create policy p_reservas on reservas for all
     using (is_super_admin() or hotel_id in (select my_hotel_ids()));
+
+create policy p_anticipos_reserva on anticipos_reserva for all
+    using (is_super_admin() or reserva_id in (select id from reservas where hotel_id in (select my_hotel_ids())));
 
 create policy p_reserva_habitacion on reserva_habitacion for all
     using (is_super_admin() or reserva_id in (select id from reservas where hotel_id in (select my_hotel_ids())));

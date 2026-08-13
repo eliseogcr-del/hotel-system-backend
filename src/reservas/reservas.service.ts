@@ -312,7 +312,8 @@ export class ReservasService {
           *,
           habitaciones(hab_numero, piso, tipos_habitacion(nombre)),
           vehiculos(*)
-        )
+        ),
+        anticipos_reserva(id, monto, metodo_pago, fecha, vinculado_estadia_id)
       `,
       )
       .eq('id', reservaId)
@@ -479,7 +480,7 @@ export class ReservasService {
         `
         id, habitacion_id, nro_personas, incluye_desayuno, con_mascota, tarifa_dia, dias,
         tipo_alquiler, fecha_hora_checkin_prevista, fecha_hora_checkout_prevista,
-        reservas!inner(id, hotel_id, estado, origen, moneda, descuento_total, anticipo_monto),
+        reservas!inner(id, hotel_id, estado, origen, moneda, descuento_total),
         vehiculos(id, marca, tipo, placa),
         estadias(estado_actual)
       `,
@@ -502,15 +503,8 @@ export class ReservasService {
         'Esta reserva ya tiene un check-in en curso; edítala desde el detalle de la estadía.',
       );
     }
-    if (dto.anticipoMonto !== undefined && dto.anticipoMonto > 0) {
-      if (Number(reserva.anticipo_monto) > 0) {
-        throw new BadRequestException(
-          'Esta reserva ya tiene un anticipo registrado; no se puede modificar (el libro de movimientos nunca se edita retroactivamente).',
-        );
-      }
-      if (!dto.anticipoMetodoPago) {
-        throw new BadRequestException('anticipoMetodoPago es requerido para registrar un anticipo');
-      }
+    if (dto.anticipoMonto !== undefined && dto.anticipoMonto > 0 && !dto.anticipoMetodoPago) {
+      throw new BadRequestException('anticipoMetodoPago es requerido para registrar un anticipo');
     }
 
     const checkinNuevo = dto.checkinPrevisto ?? rhData.fecha_hora_checkin_prevista;
@@ -758,12 +752,15 @@ export class ReservasService {
   }
 
   /**
-   * Anticipo (pago adelantado) de una reserva. El método de pago lo decide
-   * quien reserva: solo si es 'efectivo' genera un ingreso en la caja de
-   * la sesión de turno abierta de quien lo registra (yape/tarjeta/
-   * transferencia van directo a la cuenta de la empresa, mismo criterio
-   * que el resto del sistema -- ver CajaService). Se enlaza a la estadía
-   * real recién al hacer check-in (EstadiasService.checkin()).
+   * Registra UN anticipo (pago adelantado) más de una reserva -- una
+   * reserva puede acumular varios (ej. el cliente abona en dos partes),
+   * cada uno como su propia fila en `anticipos_reserva`. El método de pago
+   * lo decide quien reserva: solo si es 'efectivo' genera un ingreso en la
+   * caja de la sesión de turno abierta de quien lo registra (yape/
+   * tarjeta/transferencia van directo a la cuenta de la empresa, mismo
+   * criterio que el resto del sistema -- ver CajaService). Cada anticipo
+   * se enlaza a la estadía real recién al hacer check-in (ver
+   * EstadiasService.checkin()).
    */
   private async procesarAnticipo(
     client: SupabaseClient,
@@ -792,16 +789,13 @@ export class ReservasService {
       if (cajaError) throw cajaError;
     }
 
-    const { error } = await client
-      .from('reservas')
-      .update({
-        anticipo_monto: monto,
-        anticipo_metodo_pago: metodoPago,
-        anticipo_registrado_por: personalId,
-        anticipo_sesion_turno_id: sesionTurnoId,
-        anticipo_fecha: new Date().toISOString(),
-      })
-      .eq('id', reservaId);
+    const { error } = await client.from('anticipos_reserva').insert({
+      reserva_id: reservaId,
+      monto,
+      metodo_pago: metodoPago,
+      registrado_por: personalId,
+      sesion_turno_id: sesionTurnoId,
+    });
     if (error) throw error;
   }
 

@@ -98,7 +98,7 @@ export class EstadiasService {
         `
         id, habitacion_id, subtotal, tarifa_dia, dias, cargo_aforo_extra,
         cobro_early, cobro_late, cobro_mascota,
-        reservas!inner(id, hotel_id, estado, anticipo_monto, anticipo_vinculado_estadia_id)
+        reservas!inner(id, hotel_id, estado)
       `,
       )
       .eq('id', dto.reservaHabitacionId)
@@ -189,26 +189,38 @@ export class EstadiasService {
       });
     }
 
-    // Si la reserva traía un anticipo (pago adelantado, ver
-    // ReservasService.procesarAnticipo()), se enlaza recién ahora como un
-    // 'pago' que reduce el saldo de la estadía real. No genera un segundo
-    // ingreso de caja: si el anticipo fue en efectivo, ya se contó en la
-    // caja de quien lo tomó en su momento; si fue yape/tarjeta/
-    // transferencia, nunca tocó ninguna caja (va directo a la cuenta de
-    // la empresa), igual que cualquier otro pago con esos métodos.
+    // Si la reserva traía uno o más anticipos (pagos adelantados, ver
+    // ReservasService.procesarAnticipo()) todavía sin enlazar, se enlazan
+    // recién ahora, cada uno como su propio 'pago' que reduce el saldo de
+    // la estadía real. No genera un segundo ingreso de caja: si el
+    // anticipo fue en efectivo, ya se contó en la caja de quien lo tomó en
+    // su momento; si fue yape/tarjeta/transferencia, nunca tocó ninguna
+    // caja (va directo a la cuenta de la empresa), igual que cualquier
+    // otro pago con esos métodos.
     const reservaData = rhData.reservas;
-    const anticipoMonto = Number(reservaData?.anticipo_monto ?? 0);
-    if (anticipoMonto > 0 && !reservaData.anticipo_vinculado_estadia_id) {
+    const { data: anticipos, error: anticiposError } = await client
+      .from('anticipos_reserva')
+      .select('id, monto, metodo_pago')
+      .eq('reserva_id', reservaData.id)
+      .is('vinculado_estadia_id', null);
+    if (anticiposError) throw anticiposError;
+
+    for (const anticipo of anticipos ?? []) {
       await this.insertarMovimiento(client, estadiaId, {
         tipo: 'pago',
-        monto: -anticipoMonto,
-        notas: 'Anticipo de la reserva',
+        monto: -Number(anticipo.monto),
+        metodoPago: anticipo.metodo_pago,
+        notas: `Anticipo de la reserva (${anticipo.metodo_pago})`,
         registradoPor: personalId,
       });
+    }
+
+    if ((anticipos ?? []).length > 0) {
       const { error: anticipoError } = await client
-        .from('reservas')
-        .update({ anticipo_vinculado_estadia_id: estadiaId })
-        .eq('id', reservaData.id);
+        .from('anticipos_reserva')
+        .update({ vinculado_estadia_id: estadiaId })
+        .eq('reserva_id', reservaData.id)
+        .is('vinculado_estadia_id', null);
       if (anticipoError) throw anticipoError;
     }
 
