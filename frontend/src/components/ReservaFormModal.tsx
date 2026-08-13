@@ -1,4 +1,5 @@
 import { useEffect, useState, type CSSProperties, type FormEvent } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { api, ApiError } from '../lib/api';
 import { useIsMobile } from '../hooks/useIsMobile';
 import {
@@ -42,6 +43,7 @@ interface ReservaDetalle {
   id: string;
   origen: string;
   moneda: 'PEN' | 'USD';
+  estado: string;
   huespedes: { nombres: string; apellidos: string } | null;
   empresas: { razon_social: string } | null;
   reserva_habitacion: ReservaHabitacionDetalle[];
@@ -109,8 +111,11 @@ export function ReservaFormModal({
   onGuardado,
 }: Props) {
   const isMobile = useIsMobile();
+  const navigate = useNavigate();
   const [cargando, setCargando] = useState(modo === 'editar');
   const [huespedNombre, setHuespedNombre] = useState<string | null>(null);
+  const [reservaEstado, setReservaEstado] = useState<string | null>(null);
+  const [haciendoCheckin, setHaciendoCheckin] = useState(false);
 
   // Cliente (solo modo 'crear'): DNI/RUC exacto o nombre parcial. Puede
   // resolver a un huésped, a una empresa, a varias coincidencias por
@@ -165,6 +170,7 @@ export function ReservaFormModal({
         const linea = reserva.reserva_habitacion.find((l) => l.id === lineaId);
         setOrigen(reserva.origen);
         setMoneda(reserva.moneda);
+        setReservaEstado(reserva.estado);
         setHuespedNombre(
           reserva.huespedes
             ? `${reserva.huespedes.nombres} ${reserva.huespedes.apellidos}`
@@ -390,6 +396,28 @@ export function ReservaFormModal({
     }
   }
 
+  // Convierte esta línea de reserva en una estadía real (copia sus datos y
+  // anticipos): solo el día que corresponde y con la habitación libre, lo
+  // valida el backend. Lo que falte se termina de editar ya en
+  // EstadiaDetalle.tsx, no aquí.
+  async function hacerCheckin() {
+    if (!lineaId) return;
+    setHaciendoCheckin(true);
+    setError(null);
+    try {
+      const estadia = await api.post<{ id: string }>(`/hoteles/${hotelId}/estadias/checkin`, {
+        reservaHabitacionId: lineaId,
+      });
+      onGuardado();
+      onClose();
+      navigate(`/estadias/${estadia.id}`);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'No se pudo hacer el check-in');
+    } finally {
+      setHaciendoCheckin(false);
+    }
+  }
+
   const gridRowStyle: CSSProperties = {
     display: 'grid',
     gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr',
@@ -404,13 +432,25 @@ export function ReservaFormModal({
             {modo === 'crear' ? 'Nueva reserva' : 'Editar reserva'} · Habitación {habNumero}
           </h2>
           {modo === 'editar' && !cargando && (
-            <button
-              type="button"
-              onClick={() => setMostrarAnular((v) => !v)}
-              style={{ ...btnSecondary, color: 'var(--danger)', borderColor: 'var(--danger)', flexShrink: 0 }}
-            >
-              Anular reserva
-            </button>
+            <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
+              {reservaEstado === 'confirmada' && (
+                <button
+                  type="button"
+                  onClick={hacerCheckin}
+                  disabled={haciendoCheckin}
+                  style={btnPrimary}
+                >
+                  {haciendoCheckin ? 'Procesando...' : 'Hacer check-in'}
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => setMostrarAnular((v) => !v)}
+                style={{ ...btnSecondary, color: 'var(--danger)', borderColor: 'var(--danger)' }}
+              >
+                Anular reserva
+              </button>
+            </div>
           )}
         </div>
 

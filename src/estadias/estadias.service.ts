@@ -91,13 +91,15 @@ export class EstadiasService {
     hotelId: string,
     dto: CheckinDto,
     personalId: string,
+    opciones: { validarFechaHoy?: boolean } = {},
   ) {
     const { data: rh, error: rhError } = await client
       .from('reserva_habitacion')
       .select(
         `
         id, habitacion_id, subtotal, tarifa_dia, dias, cargo_aforo_extra,
-        cobro_early, cobro_late, cobro_mascota,
+        cobro_early, cobro_late, cobro_mascota, fecha_hora_checkin_prevista,
+        habitaciones(estado),
         reservas!inner(id, hotel_id, estado)
       `,
       )
@@ -128,6 +130,37 @@ export class EstadiasService {
       throw new ConflictException(
         `Esta habitación ya tiene un check-in registrado (estado: ${existente.estado_actual})`,
       );
+    }
+
+    // La habitación tiene que estar libre en este instante -- la reserva
+    // solo garantizó disponibilidad para el rango de fechas al crearla,
+    // pero el estado real puede haber cambiado después (mantenimiento,
+    // limpieza pendiente, etc).
+    const habitacionEstado = (rh as any).habitaciones?.estado;
+    if (habitacionEstado !== 'disponible') {
+      throw new BadRequestException(
+        `No se puede hacer check-in: la habitación está en estado '${habitacionEstado}', debe estar disponible.`,
+      );
+    }
+
+    // Convertir una reserva en estadía (walk-in del día programado) solo se
+    // permite el día exacto que corresponde -- no antes ni después. El
+    // check-in rápido (walkin sin reserva previa) omite esta validación
+    // porque su checkinPrevisto puede ajustarse a mano a la hora real de
+    // llegada, no representa "el día de una reserva ya planificada".
+    if (opciones.validarFechaHoy ?? true) {
+      const hoyLima = comoRelojLima(new Date());
+      const checkinPrevistoLima = comoRelojLima(new Date((rh as any).fecha_hora_checkin_prevista));
+      const mismoDia =
+        hoyLima.getUTCFullYear() === checkinPrevistoLima.getUTCFullYear() &&
+        hoyLima.getUTCMonth() === checkinPrevistoLima.getUTCMonth() &&
+        hoyLima.getUTCDate() === checkinPrevistoLima.getUTCDate();
+      if (!mismoDia) {
+        const fechaTexto = `${String(checkinPrevistoLima.getUTCDate()).padStart(2, '0')}/${String(checkinPrevistoLima.getUTCMonth() + 1).padStart(2, '0')}/${checkinPrevistoLima.getUTCFullYear()}`;
+        throw new BadRequestException(
+          `Esta reserva es para el ${fechaTexto}; el check-in solo se puede hacer ese día.`,
+        );
+      }
     }
 
     const ahora = new Date().toISOString();
@@ -200,17 +233,24 @@ export class EstadiasService {
     const reservaData = rhData.reservas;
     const { data: anticipos, error: anticiposError } = await client
       .from('anticipos_reserva')
-      .select('id, monto, metodo_pago')
+      .select('id, monto, metodo_pago, fecha')
       .eq('reserva_id', reservaData.id)
       .is('vinculado_estadia_id', null);
     if (anticiposError) throw anticiposError;
 
     for (const anticipo of anticipos ?? []) {
+      // La fecha del anticipo se deja explícita en la nota a propósito: es
+      // un pago de OTRO día (y posiblemente de otro turno/recepcionista),
+      // no de hoy -- por eso tampoco genera un ingreso de caja aquí (ver
+      // comentario arriba); dejar la fecha visible evita que alguien lo
+      // confunda con un pago del día del check-in al revisar el libro.
+      const fechaAnticipoLima = comoRelojLima(new Date(anticipo.fecha));
+      const fechaTexto = `${String(fechaAnticipoLima.getUTCDate()).padStart(2, '0')}/${String(fechaAnticipoLima.getUTCMonth() + 1).padStart(2, '0')}/${fechaAnticipoLima.getUTCFullYear()}`;
       await this.insertarMovimiento(client, estadiaId, {
         tipo: 'pago',
         monto: -Number(anticipo.monto),
         metodoPago: anticipo.metodo_pago,
-        notas: `Anticipo de la reserva (${anticipo.metodo_pago})`,
+        notas: `Anticipo de la reserva del ${fechaTexto} (${anticipo.metodo_pago})`,
         registradoPor: personalId,
       });
     }
@@ -371,7 +411,9 @@ export class EstadiasService {
     const reserva = await this.reservasService.crear(client, hotelId, reservaDto, personalId);
     const reservaHabitacionId = (reserva as any).reserva_habitacion[0].id;
 
-    return this.checkin(client, hotelId, { reservaHabitacionId }, personalId);
+    return this.checkin(client, hotelId, { reservaHabitacionId }, personalId, {
+      validarFechaHoy: false,
+    });
   }
 
   /**
