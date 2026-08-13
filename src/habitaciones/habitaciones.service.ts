@@ -4,6 +4,18 @@ import { DisponibilidadService } from './disponibilidad/disponibilidad.service';
 import { ValidarDisponibilidadDto } from './dto/validar-disponibilidad.dto';
 import { ResultadoDisponibilidad } from './disponibilidad/disponibilidad.types';
 
+// Mismo criterio de zona horaria que en caja/estadías: el servidor no
+// corre necesariamente en hora de Lima.
+const PERU_UTC_OFFSET_MS = 5 * 60 * 60 * 1000;
+
+function comoRelojLima(fecha: Date): Date {
+  return new Date(fecha.getTime() - PERU_UTC_OFFSET_MS);
+}
+
+function fechaYMD(relojLima: Date): string {
+  return `${relojLima.getUTCFullYear()}-${String(relojLima.getUTCMonth() + 1).padStart(2, '0')}-${String(relojLima.getUTCDate()).padStart(2, '0')}`;
+}
+
 @Injectable()
 export class HabitacionesService {
   constructor(private readonly disponibilidad: DisponibilidadService) {}
@@ -59,6 +71,37 @@ export class HabitacionesService {
 
     if (lineasError) throw lineasError;
 
+    // Reservas cuyo check-in previsto es HOY (hora Lima) y que todavía no
+    // se convirtieron en estadía (aviso "hay que pasar a estadía" para
+    // recepción, ver Habitaciones.tsx). `estadias` es 1:1 con
+    // reserva_habitacion y solo se crea al hacer check-in real -- si viene
+    // null, esa línea nunca tuvo check-in todavía.
+    const { data: reservasSinCheckin, error: reservasSinCheckinError } = await client
+      .from('reserva_habitacion')
+      .select(
+        `
+        habitacion_id, fecha_hora_checkin_prevista,
+        reservas!inner(id, hotel_id, estado, huespedes(nombres, apellidos), empresas(razon_social)),
+        estadias(id)
+      `,
+      )
+      .eq('reservas.hotel_id', hotelId)
+      .neq('reservas.estado', 'cancelada');
+    if (reservasSinCheckinError) throw reservasSinCheckinError;
+
+    const hoyTexto = fechaYMD(comoRelojLima(new Date()));
+    const reservaHoyPorHabitacion = new Map<string, { reservaId: string; huesped: string | null }>();
+    for (const linea of (reservasSinCheckin ?? []) as any[]) {
+      if (linea.estadias) continue;
+      if (fechaYMD(comoRelojLima(new Date(linea.fecha_hora_checkin_prevista))) !== hoyTexto) continue;
+      const huesped = linea.reservas.huespedes;
+      const empresa = linea.reservas.empresas;
+      reservaHoyPorHabitacion.set(linea.habitacion_id, {
+        reservaId: linea.reservas.id,
+        huesped: huesped ? `${huesped.nombres} ${huesped.apellidos}` : (empresa?.razon_social ?? null),
+      });
+    }
+
     const estadiaIds = (lineasActivas ?? []).map((l: any) => l.estadias.id);
     const movimientosPorEstadia = new Map<string, { tipo: string; monto: number }[]>();
 
@@ -109,6 +152,10 @@ export class HabitacionesService {
 
     return (habitaciones ?? []).map((hab) => ({
       ...hab,
+      // Solo tiene sentido avisar "hay que pasar a estadía" si la
+      // habitación está físicamente libre ahora mismo -- si está ocupada,
+      // en limpieza, etc, ese estado real manda sobre el aviso de reserva.
+      reservaHoy: hab.estado === 'disponible' ? (reservaHoyPorHabitacion.get(hab.id) ?? null) : null,
       tareaHkEnProceso: tareaEnProcesoPorHabitacion.get(hab.id) ?? null,
       ...(detallePorHabitacion.get(hab.id) ?? {
         estadiaId: null,

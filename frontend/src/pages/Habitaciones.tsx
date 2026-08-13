@@ -15,6 +15,7 @@ interface Habitacion {
   piso: number;
   estado: Estado;
   mantenimiento_planificado: boolean;
+  reservaHoy: { reservaId: string; huesped: string | null } | null;
   tareaHkEnProceso: { tipo: 'limpieza' | 'mantenimiento'; notas: string | null } | null;
   tipos_habitacion: { id: string; nombre: string } | null;
   estadiaId: string | null;
@@ -172,9 +173,17 @@ export function Habitaciones() {
   }
 
   function etiquetaEstado(h: Habitacion): string {
+    if (h.reservaHoy) return 'Reservada';
     if (h.tareaHkEnProceso?.tipo === 'limpieza' && h.estado === 'limpieza') return 'En proceso de limpieza';
     if (h.tareaHkEnProceso?.tipo === 'mantenimiento' && h.estado === 'ocupada') return 'En proceso de mantenimiento';
     return ESTADO_LABEL[h.estado];
+  }
+
+  // Color a usar para pintar la fila/tarjeta: si hay una reserva para hoy
+  // sin check-in todavía, el celeste "reservada" manda sobre el estado
+  // real (que en ese caso siempre es 'disponible').
+  function colorEstado(h: Habitacion): string {
+    return h.reservaHoy ? 'reservada' : h.estado;
   }
 
   if (!hotelActual) return <p style={{ color: 'var(--text-muted)' }}>Cargando hotel...</p>;
@@ -229,6 +238,18 @@ export function Habitaciones() {
               {ESTADO_LABEL[estado]}
             </span>
           ))}
+          <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+            <span
+              style={{
+                width: 8,
+                height: 8,
+                borderRadius: '50%',
+                background: 'var(--reservada)',
+                display: 'inline-block',
+              }}
+            />
+            Reservada (hay que pasar a estadía)
+          </span>
         </div>
 
         <div style={{ display: 'flex', border: '1px solid var(--border)', borderRadius: 'var(--radius)', overflow: 'hidden' }}>
@@ -302,10 +323,16 @@ export function Habitaciones() {
                 }}
               >
                 <td style={tdStyle}>
-                  {h.estado === 'disponible' && (
-                    <button onClick={() => setCheckinHab(h)} style={linkBtnStyle}>
-                      Check-in
-                    </button>
+                  {h.reservaHoy ? (
+                    <Link to={`/reservas/${h.reservaHoy.reservaId}`} style={linkBtnStyle}>
+                      Ver reserva
+                    </Link>
+                  ) : (
+                    h.estado === 'disponible' && (
+                      <button onClick={() => setCheckinHab(h)} style={linkBtnStyle}>
+                        Check-in
+                      </button>
+                    )
                   )}
                   {h.estado === 'ocupada' && h.estadiaId && (
                     <Link to={`/estadias/${h.estadiaId}`} style={linkBtnStyle}>
@@ -327,8 +354,8 @@ export function Habitaciones() {
                 <td style={tdStyle}>
                   <span
                     style={{
-                      background: `var(--${h.estado}-bg)`,
-                      color: `var(--${h.estado}-text)`,
+                      background: `var(--${colorEstado(h)}-bg)`,
+                      color: `var(--${colorEstado(h)}-text)`,
                       padding: '2px 8px',
                       borderRadius: 999,
                       fontSize: 11,
@@ -337,7 +364,7 @@ export function Habitaciones() {
                     {etiquetaEstado(h)}
                   </span>
                 </td>
-                <td style={tdStyle}>{h.huesped ?? ''}</td>
+                <td style={tdStyle}>{h.huesped ?? h.reservaHoy?.huesped ?? ''}</td>
                 <td style={tdStyle}>{h.huesped ? formatoFechaHora(h.checkinReal) : ''}</td>
                 <td style={tdStyle}>{h.huesped ? formatoFechaHora(h.checkoutPrevisto) : ''}</td>
                 <td style={tdStyle}>{h.huesped ? formatoMonto(h.totalAlquiler) : ''}</td>
@@ -452,7 +479,8 @@ export function Habitaciones() {
           habitaciones={habitaciones}
           cocheras={cocheras}
           onClickHabitacion={(h) => {
-            if (h.estado === 'disponible') setCheckinHab(h);
+            if (h.reservaHoy) navigate(`/reservas/${h.reservaHoy.reservaId}`);
+            else if (h.estado === 'disponible') setCheckinHab(h);
             else if (h.estado === 'ocupada' && h.estadiaId) navigate(`/estadias/${h.estadiaId}`);
           }}
           onClickCochera={(c) => {
@@ -495,28 +523,29 @@ function VistaTarjetas({
     <div>
       <div style={tarjetasGridStyle}>
         {habitaciones.map((h) => {
-          const clickable = h.estado === 'disponible' || (h.estado === 'ocupada' && !!h.estadiaId);
+          const clickable = !!h.reservaHoy || h.estado === 'disponible' || (h.estado === 'ocupada' && !!h.estadiaId);
+          const color = h.reservaHoy ? 'reservada' : h.estado;
+          const etiqueta = h.reservaHoy ? 'Reservada' : ESTADO_LABEL[h.estado];
           const notasHk = h.huesped ? null : h.tareaHkEnProceso?.notas ?? null;
+          const tituloClick = h.reservaHoy ? 'Ver la reserva y pasarla a estadía' : h.estado === 'disponible' ? 'Hacer check-in' : 'Ver detalle';
           return (
             <div
               key={h.id}
               onClick={() => clickable && onClickHabitacion(h)}
               style={{
                 ...tarjetaStyle,
-                background: `var(--${h.estado}-bg)`,
-                border: `1px solid var(--${h.estado})`,
+                background: `var(--${color}-bg)`,
+                border: `1px solid var(--${color})`,
                 cursor: clickable ? 'pointer' : 'default',
               }}
-              title={clickable ? (h.estado === 'disponible' ? 'Hacer check-in' : 'Ver detalle') : undefined}
+              title={clickable ? tituloClick : undefined}
             >
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
                 <span style={{ fontSize: 20, fontWeight: 700, color: 'var(--text-primary)' }}>{h.hab_numero}</span>
-                <span style={{ fontSize: 10, fontWeight: 600, color: `var(--${h.estado}-text)` }}>
-                  {ESTADO_LABEL[h.estado]}
-                </span>
+                <span style={{ fontSize: 10, fontWeight: 600, color: `var(--${color}-text)` }}>{etiqueta}</span>
               </div>
               <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{h.tipos_habitacion?.nombre ?? '—'}</span>
-              {h.huesped && (
+              {(h.huesped || h.reservaHoy?.huesped) && (
                 <span
                   style={{
                     fontSize: 12,
@@ -525,9 +554,9 @@ function VistaTarjetas({
                     textOverflow: 'ellipsis',
                     whiteSpace: 'nowrap',
                   }}
-                  title={h.huesped}
+                  title={h.huesped ?? h.reservaHoy?.huesped ?? undefined}
                 >
-                  {h.huesped}
+                  {h.huesped ?? h.reservaHoy?.huesped}
                 </span>
               )}
               {h.huesped && (
