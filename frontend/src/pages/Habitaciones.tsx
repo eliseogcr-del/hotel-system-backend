@@ -4,6 +4,7 @@ import { api, ApiError } from '../lib/api';
 import { useHotel } from '../contexts/HotelContext';
 import { useIsMobile } from '../hooks/useIsMobile';
 import { CheckinRapidoModal } from '../components/CheckinRapidoModal';
+import { ReservaFormModal } from '../components/ReservaFormModal';
 
 type Vista = 'tabla' | 'tarjetas';
 
@@ -15,9 +16,9 @@ interface Habitacion {
   piso: number;
   estado: Estado;
   mantenimiento_planificado: boolean;
-  reservaHoy: { reservaId: string; huesped: string | null } | null;
+  reservaHoy: { reservaId: string; lineaId: string; huesped: string | null } | null;
   tareaHkEnProceso: { tipo: 'limpieza' | 'mantenimiento'; notas: string | null } | null;
-  tipos_habitacion: { id: string; nombre: string } | null;
+  tipos_habitacion: { id: string; nombre: string; aforo_max: number } | null;
   estadiaId: string | null;
   huesped: string | null;
   checkinReal: string | null;
@@ -88,6 +89,8 @@ export function Habitaciones() {
   const [error, setError] = useState<string | null>(null);
   const [ahora, setAhora] = useState(new Date());
   const [checkinHab, setCheckinHab] = useState<Habitacion | null>(null);
+  const [reservaModal, setReservaModal] = useState<Habitacion | null>(null);
+  const [precioMascotaDia, setPrecioMascotaDia] = useState(0);
   const [vista, setVista] = useState<Vista>(
     () => (localStorage.getItem('habitaciones_vista') as Vista | null) ?? 'tabla',
   );
@@ -125,6 +128,10 @@ export function Habitaciones() {
     api
       .get<Cochera[]>(`/hoteles/${hotelActual.hotelId}/cocheras`)
       .then(setCocheras)
+      .catch(() => {});
+    api
+      .get<{ precio_mascota: number }>(`/hoteles/${hotelActual.hotelId}`)
+      .then((h) => setPrecioMascotaDia(Number(h.precio_mascota ?? 0)))
       .catch(() => {});
   }
 
@@ -324,9 +331,9 @@ export function Habitaciones() {
               >
                 <td style={tdStyle}>
                   {h.reservaHoy ? (
-                    <Link to={`/reservas/${h.reservaHoy.reservaId}`} style={linkBtnStyle}>
+                    <button onClick={() => setReservaModal(h)} style={linkBtnStyle}>
                       Ver reserva
-                    </Link>
+                    </button>
                   ) : (
                     h.estado === 'disponible' && (
                       <button onClick={() => setCheckinHab(h)} style={linkBtnStyle}>
@@ -479,7 +486,7 @@ export function Habitaciones() {
           habitaciones={habitaciones}
           cocheras={cocheras}
           onClickHabitacion={(h) => {
-            if (h.reservaHoy) navigate(`/reservas/${h.reservaHoy.reservaId}`);
+            if (h.reservaHoy) setReservaModal(h);
             else if (h.estado === 'disponible') setCheckinHab(h);
             else if (h.estado === 'ocupada' && h.estadiaId) navigate(`/estadias/${h.estadiaId}`);
           }}
@@ -500,6 +507,22 @@ export function Habitaciones() {
           precios={preciosDe(checkinHab.tipos_habitacion?.id)}
           onClose={() => setCheckinHab(null)}
           onCreado={cargar}
+        />
+      )}
+
+      {reservaModal && reservaModal.reservaHoy && (
+        <ReservaFormModal
+          hotelId={hotelActual.hotelId}
+          habitacionId={reservaModal.id}
+          habNumero={reservaModal.hab_numero}
+          aforoMax={reservaModal.tipos_habitacion?.aforo_max ?? 0}
+          tarifaSugerida={preciosDe(reservaModal.tipos_habitacion?.id)?.precio_normal ?? 0}
+          precioMascotaDia={precioMascotaDia}
+          modo="editar"
+          reservaId={reservaModal.reservaHoy.reservaId}
+          lineaId={reservaModal.reservaHoy.lineaId}
+          onClose={() => setReservaModal(null)}
+          onGuardado={cargar}
         />
       )}
     </div>

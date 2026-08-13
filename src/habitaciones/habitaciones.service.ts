@@ -80,7 +80,7 @@ export class HabitacionesService {
       .from('reserva_habitacion')
       .select(
         `
-        habitacion_id, fecha_hora_checkin_prevista,
+        id, habitacion_id, fecha_hora_checkin_prevista,
         reservas!inner(id, hotel_id, estado, huespedes(nombres, apellidos), empresas(razon_social)),
         estadias(id)
       `,
@@ -90,7 +90,10 @@ export class HabitacionesService {
     if (reservasSinCheckinError) throw reservasSinCheckinError;
 
     const hoyTexto = fechaYMD(comoRelojLima(new Date()));
-    const reservaHoyPorHabitacion = new Map<string, { reservaId: string; huesped: string | null }>();
+    const reservaHoyPorHabitacion = new Map<
+      string,
+      { reservaId: string; lineaId: string; huesped: string | null }
+    >();
     for (const linea of (reservasSinCheckin ?? []) as any[]) {
       if (linea.estadias) continue;
       if (fechaYMD(comoRelojLima(new Date(linea.fecha_hora_checkin_prevista))) !== hoyTexto) continue;
@@ -98,6 +101,7 @@ export class HabitacionesService {
       const empresa = linea.reservas.empresas;
       reservaHoyPorHabitacion.set(linea.habitacion_id, {
         reservaId: linea.reservas.id,
+        lineaId: linea.id,
         huesped: huesped ? `${huesped.nombres} ${huesped.apellidos}` : (empresa?.razon_social ?? null),
       });
     }
