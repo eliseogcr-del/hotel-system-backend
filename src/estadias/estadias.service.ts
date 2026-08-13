@@ -430,14 +430,19 @@ export class EstadiasService {
   ) {
     const estadia = await this.cargarEstadiaHotel(client, hotelId, estadiaId);
 
-    if (
-      estadia.estado_actual === 'finalizada' &&
-      dto.tipo !== 'pago' &&
-      dto.tipo !== 'ajuste'
-    ) {
-      throw new BadRequestException(
-        'La estadía ya finalizó; solo se pueden registrar pagos o ajustes de saldo pendiente.',
-      );
+    if (estadia.estado_actual === 'finalizada') {
+      if (dto.tipo !== 'pago' && dto.tipo !== 'ajuste') {
+        throw new BadRequestException(
+          'La estadía ya finalizó; solo se pueden registrar pagos o ajustes de saldo pendiente.',
+        );
+      }
+      // Una vez saldada la deuda, una estadía finalizada queda congelada
+      // por completo: ya no hay nada que cobrar ni que corregir.
+      if (Number(estadia.saldo) <= 0) {
+        throw new BadRequestException(
+          'Esta estadía ya finalizó y no tiene saldo pendiente; no se pueden registrar más movimientos.',
+        );
+      }
     }
 
     if (dto.tipo === 'consumo_bazar' && !dto.productoId) {
@@ -632,7 +637,12 @@ export class EstadiasService {
     movimientoId: string,
     personalId: string,
   ) {
-    await this.cargarEstadiaHotel(client, hotelId, estadiaId);
+    const estadia = await this.cargarEstadiaHotel(client, hotelId, estadiaId);
+    if (estadia.estado_actual === 'finalizada') {
+      throw new BadRequestException(
+        'No se puede anular un cargo de una estadía finalizada; el libro de una estadía ya cerrada no se corrige, solo se cobra el saldo pendiente si lo tuviera.',
+      );
+    }
 
     const { data: movimiento, error: movError } = await client
       .from('movimientos_cuenta')

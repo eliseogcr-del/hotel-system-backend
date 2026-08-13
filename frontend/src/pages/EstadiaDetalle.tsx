@@ -303,13 +303,14 @@ export function EstadiaDetalle() {
         </div>
       )}
 
-      {estadia.estado_actual !== 'finalizada' && (
+      {(estadia.estado_actual !== 'finalizada' || Number(estadia.saldo) > 0) && (
         <RegistrarMovimientoForm
           hotelId={hotelActual.hotelId}
           estadiaId={estadia.id}
           saldoActual={Number(estadia.saldo)}
           tipoCambio={tipoCambio}
           cajaAbierta={cajaAbierta}
+          soloPagoAjuste={estadia.estado_actual === 'finalizada'}
           onRegistrado={cargar}
         />
       )}
@@ -335,7 +336,7 @@ export function EstadiaDetalle() {
               // note de un vistazo cuál es cuál en un libro que mezcla los
               // dos tipos de movimiento.
               const esPago = Number(m.monto) < 0;
-              const esCargoAnulable = Number(m.monto) > 0;
+              const esCargoAnulable = Number(m.monto) > 0 && estadia.estado_actual !== 'finalizada';
               const color = esPago ? 'var(--ingreso)' : 'var(--disponible)';
               const bg = esPago ? 'var(--ingreso-bg)' : 'var(--disponible-bg)';
               return (
@@ -635,6 +636,7 @@ function RegistrarMovimientoForm({
   saldoActual,
   tipoCambio,
   cajaAbierta,
+  soloPagoAjuste,
   onRegistrado,
 }: {
   hotelId: string;
@@ -642,8 +644,10 @@ function RegistrarMovimientoForm({
   saldoActual: number;
   tipoCambio: TipoCambioVigente | null;
   cajaAbierta: boolean;
+  soloPagoAjuste: boolean;
   onRegistrado: () => void;
 }) {
+  const tiposDisponibles = soloPagoAjuste ? TIPOS_MOVIMIENTO.filter((t) => t === 'pago' || t === 'ajuste') : TIPOS_MOVIMIENTO;
   const [tipo, setTipo] = useState('pago');
   const [monto, setMonto] = useState('');
   const [moneda, setMoneda] = useState<'PEN' | 'USD'>('PEN');
@@ -746,7 +750,7 @@ function RegistrarMovimientoForm({
       <div>
         <label style={labelStyle}>Tipo</label>
         <select value={tipo} onChange={(e) => setTipo(e.target.value)} style={inputStyle}>
-          {TIPOS_MOVIMIENTO.map((t) => (
+          {tiposDisponibles.map((t) => (
             <option key={t} value={t}>
               {TIPO_LABEL[t] ?? t}
             </option>
@@ -854,6 +858,11 @@ function RegistrarMovimientoForm({
       {esVentaConCatalogo && !pagadoAlMomento && (
         <p style={{ fontSize: 11, color: 'var(--text-muted)', width: '100%', margin: 0 }}>
           No pagó al momento: solo se suma a lo que debe, no genera ingreso de caja ahora.
+        </p>
+      )}
+      {soloPagoAjuste && (
+        <p style={{ fontSize: 11, color: 'var(--text-muted)', width: '100%', margin: 0 }}>
+          Esta estadía ya finalizó: solo se puede registrar un pago o ajuste para saldar la deuda pendiente.
         </p>
       )}
       {requiereMetodo && !cajaAbierta && (
