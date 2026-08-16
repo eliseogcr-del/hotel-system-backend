@@ -75,7 +75,7 @@ interface PersonalHotel {
   id: string;
   rol: RolHotel;
   activo: boolean;
-  personal: { id: string; nombre: string; usuario: string; activo: boolean } | null;
+  personal: { id: string; nombre: string; usuario: string; activo: boolean; email: string | null } | null;
 }
 
 const ROL_LABEL: Record<RolHotel, string> = {
@@ -334,6 +334,7 @@ function SeccionPersonal({
             <div key={p.id} style={filaStyle}>
               <span style={{ fontWeight: 500 }}>{p.personal?.nombre ?? '—'}</span>
               <span style={{ color: 'var(--text-secondary)' }}>@{p.personal?.usuario ?? '—'}</span>
+              <span style={{ color: 'var(--text-secondary)', fontSize: 12 }}>{p.personal?.email ?? '—'}</span>
               <span
                 style={{
                   fontSize: 11,
@@ -403,6 +404,8 @@ function EditarAsignacionForm({
 }) {
   const [rol, setRol] = useState<RolHotel>(asignacion.rol);
   const [activo, setActivo] = useState(asignacion.activo);
+  const [email, setEmail] = useState(asignacion.personal?.email ?? '');
+  const [password, setPassword] = useState('');
   const [guardando, setGuardando] = useState(false);
 
   async function guardar(e: FormEvent) {
@@ -410,7 +413,10 @@ function EditarAsignacionForm({
     setGuardando(true);
     setError(null);
     try {
-      await api.patch(`/hoteles/${hotelId}/personal/${asignacion.id}`, { rol, activo });
+      const payload: Record<string, unknown> = { rol, activo };
+      if (email && email !== (asignacion.personal?.email ?? '')) payload.email = email;
+      if (password) payload.password = password;
+      await api.patch(`/hoteles/${hotelId}/personal/${asignacion.id}`, payload);
       onGuardado();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'No se pudo guardar');
@@ -431,6 +437,20 @@ function EditarAsignacionForm({
         <input type="checkbox" checked={activo} onChange={(e) => setActivo(e.target.checked)} />
         Activo
       </label>
+      <input
+        type="email"
+        placeholder="Correo"
+        value={email}
+        onChange={(e) => setEmail(e.target.value)}
+        style={{ ...inputStyle, width: 200 }}
+      />
+      <input
+        type="text"
+        placeholder="Nueva contraseña (opcional)"
+        value={password}
+        onChange={(e) => setPassword(e.target.value)}
+        style={{ ...inputStyle, width: 200 }}
+      />
       <button type="submit" disabled={guardando} style={btnPrimary}>
         Guardar
       </button>
