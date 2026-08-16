@@ -29,6 +29,7 @@ interface Habitacion {
   totalPagado: number | null;
   saldo: number | null;
   notas: string | null;
+  notas_operativas: string | null;
 }
 
 interface TipoHabitacionPrecios {
@@ -161,6 +162,19 @@ export function Habitaciones() {
     try {
       await api.patch(`/hoteles/${hotelActual.hotelId}/estadias/${hab.estadiaId}/notas`, { notas });
       setHabitaciones((prev) => prev.map((h) => (h.id === hab.id ? { ...h, notas } : h)));
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'No se pudieron guardar las notas');
+    }
+  }
+
+  // Nota de la habitación en sí (no ligada a la estadía): la única forma de
+  // dejar un aviso operativo ("faltan toallas") cuando está disponible, sin
+  // huésped ni tarea HK en curso.
+  async function guardarNotasHabitacion(hab: Habitacion, notas: string) {
+    if (!hotelActual) return;
+    try {
+      await api.patch(`/hoteles/${hotelActual.hotelId}/habitaciones/${hab.id}/notas`, { notas });
+      setHabitaciones((prev) => prev.map((h) => (h.id === hab.id ? { ...h, notas_operativas: notas || null } : h)));
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'No se pudieron guardar las notas');
     }
@@ -447,7 +461,7 @@ export function Habitaciones() {
                       {h.tareaHkEnProceso.notas}
                     </span>
                   ) : (
-                    ''
+                    <NotasCelda notas={h.notas_operativas ?? ''} onGuardar={(n) => guardarNotasHabitacion(h, n)} />
                   )}
                 </td>
                 <td style={{ ...tdStyle, textAlign: 'center', borderRight: 'none' }}>
@@ -547,6 +561,7 @@ export function Habitaciones() {
             if (hab?.estadiaId) navigate(`/estadias/${hab.estadiaId}`);
           }}
           onGuardarNotas={guardarNotas}
+          onGuardarNotasHabitacion={guardarNotasHabitacion}
         />
       )}
 
@@ -586,12 +601,14 @@ function VistaTarjetas({
   onClickHabitacion,
   onClickCochera,
   onGuardarNotas,
+  onGuardarNotasHabitacion,
 }: {
   habitaciones: Habitacion[];
   cocheras: Cochera[];
   onClickHabitacion: (h: Habitacion) => void;
   onClickCochera: (c: Cochera) => void;
   onGuardarNotas: (h: Habitacion, notas: string) => void;
+  onGuardarNotasHabitacion: (h: Habitacion, notas: string) => void;
 }) {
   return (
     <div>
@@ -649,7 +666,7 @@ function VistaTarjetas({
                   <NotasCelda notas={h.notas ?? ''} onGuardar={(n) => onGuardarNotas(h, n)} tarjeta />
                 </div>
               )}
-              {notasHk && (
+              {!h.huesped && notasHk && (
                 <span
                   style={{
                     fontSize: 11,
@@ -663,6 +680,15 @@ function VistaTarjetas({
                 >
                   {notasHk}
                 </span>
+              )}
+              {!h.huesped && !notasHk && (
+                <div onClick={(e) => e.stopPropagation()}>
+                  <NotasCelda
+                    notas={h.notas_operativas ?? ''}
+                    onGuardar={(n) => onGuardarNotasHabitacion(h, n)}
+                    tarjeta
+                  />
+                </div>
               )}
             </div>
           );

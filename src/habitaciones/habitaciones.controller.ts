@@ -16,6 +16,7 @@ import { SupabaseService } from '../common/supabase/supabase.service';
 import { HabitacionesService } from './habitaciones.service';
 import { ValidarDisponibilidadDto } from './dto/validar-disponibilidad.dto';
 import { AlternarMantenimientoDto } from './dto/alternar-mantenimiento.dto';
+import { ActualizarNotasHabitacionDto } from './dto/actualizar-notas.dto';
 
 @Controller('hoteles/:hotelId/habitaciones')
 @UseGuards(AuthGuard, RolesGuard)
@@ -79,5 +80,17 @@ export class HabitacionesController {
   ) {
     const client = this.supabase.getClientForRequest(user.accessToken);
     return this.habitacionesService.marcarDisponible(client, hotelId, id);
+  }
+
+  @Patch(':id/notas')
+  @Roles('admin', 'recepcion')
+  async actualizarNotas(
+    @Param('hotelId') hotelId: string,
+    @Param('id') id: string,
+    @Body() dto: ActualizarNotasHabitacionDto,
+    @CurrentUser() user: RequestUser,
+  ) {
+    const client = this.supabase.getClientForRequest(user.accessToken);
+    return this.habitacionesService.actualizarNotas(client, hotelId, id, dto.notas);
   }
 }

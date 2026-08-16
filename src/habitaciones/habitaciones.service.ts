@@ -33,7 +33,7 @@ export class HabitacionesService {
       .from('habitaciones')
       .select(
         `
-        id, hab_numero, piso, estado, mantenimiento_planificado,
+        id, hab_numero, piso, estado, mantenimiento_planificado, notas_operativas,
         tipos_habitacion(id, nombre, aforo_max)
       `,
       )
@@ -299,6 +299,32 @@ export class HabitacionesService {
     if (updError) throw updError;
 
     return { estado: 'disponible' };
+  }
+
+  /**
+   * Nota operativa de la habitación (independiente de la estadía o de una
+   * tarea HK en curso): sirve para avisos como "faltan toallas" que
+   * ayudan a recepción a decidir aun con la habitación disponible. A
+   * diferencia de reserva_habitacion.observaciones (ligada al huésped
+   * actual) o tareas_hk.notas (ligada a una tarea puntual), esta vive en
+   * la habitación misma y no se borra sola con el check-in/checkout.
+   */
+  async actualizarNotas(
+    client: SupabaseClient,
+    hotelId: string,
+    habitacionId: string,
+    notas: string,
+  ) {
+    const { data, error } = await client
+      .from('habitaciones')
+      .update({ notas_operativas: notas || null })
+      .eq('id', habitacionId)
+      .eq('hotel_id', hotelId)
+      .select('id, notas_operativas')
+      .maybeSingle();
+    if (error) throw error;
+    if (!data) throw new NotFoundException('La habitación no existe en este hotel');
+    return data;
   }
 
   /**

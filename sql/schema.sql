@@ -124,6 +124,10 @@ create table habitaciones (
     piso int not null,
     estado text not null default 'disponible' check (estado in ('disponible','ocupada','limpieza','mantenimiento','bloqueada')),
     mantenimiento_planificado boolean not null default false,
+    -- Nota operativa persistente de la habitación (independiente de la
+    -- estadía o de una tarea HK en curso): avisos como "faltan toallas"
+    -- que ayudan a recepción a decidir aun con la habitación disponible.
+    notas_operativas text,
     unique (hotel_id, hab_numero)
 );
 
