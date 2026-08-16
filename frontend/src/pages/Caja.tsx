@@ -128,7 +128,12 @@ export function Caja() {
         <p style={{ fontSize: 13, color: 'var(--disponible)', marginBottom: 12 }}>
           Turno cerrado correctamente. Este es el resumen final:
         </p>
-        <ResumenSesion sesion={sesionCerrada} />
+        <ResumenSesion
+          sesion={sesionCerrada}
+          hotelId={hotelActual.hotelId}
+          esAdmin={hotelActual.rol === 'admin'}
+          onActualizado={setSesionCerrada}
+        />
         <div style={{ display: 'flex', gap: 8, marginTop: 16 }}>
           <button
             onClick={() => exportarLiquidacionPDF(sesionCerrada, hotelActual.nombre, personalNombre)}
@@ -202,7 +207,12 @@ export function Caja() {
             </div>
           </div>
 
-          <ResumenSesion sesion={sesion} />
+          <ResumenSesion
+            sesion={sesion}
+            hotelId={hotelActual.hotelId}
+            esAdmin={hotelActual.rol === 'admin'}
+            onActualizado={setSesion}
+          />
 
           <RegistrarMovimientoForm
             hotelId={hotelActual.hotelId}
@@ -299,8 +309,47 @@ function RegistrarMovimientoForm({
   );
 }
 
-function ResumenSesion({ sesion }: { sesion: SesionCaja }) {
+function ResumenSesion({
+  sesion,
+  hotelId,
+  esAdmin,
+  onActualizado,
+}: {
+  sesion: SesionCaja;
+  hotelId: string;
+  esAdmin: boolean;
+  onActualizado: (sesion: SesionCaja) => void;
+}) {
   const saldoFinal = sesion.estado === 'cerrada' && sesion.saldo_final != null ? sesion.saldo_final : sesion.saldoActual;
+  const [editandoId, setEditandoId] = useState<string | null>(null);
+  const [montoEdicion, setMontoEdicion] = useState('');
+  const [guardando, setGuardando] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  function iniciarEdicion(movimientoId: string, montoActual: number) {
+    setEditandoId(movimientoId);
+    setMontoEdicion(String(montoActual));
+    setError(null);
+  }
+
+  async function guardarEdicion(movimientoId: string) {
+    if (montoEdicion === '') return;
+    setGuardando(true);
+    setError(null);
+    try {
+      const actualizada = await api.patch<SesionCaja>(
+        `/hoteles/${hotelId}/caja/sesiones/${sesion.id}/movimientos/${movimientoId}`,
+        { monto: Number(montoEdicion) },
+      );
+      setEditandoId(null);
+      onActualizado(actualizada);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'No se pudo editar el movimiento');
+    } finally {
+      setGuardando(false);
+    }
+  }
+
   return (
     <div>
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, marginBottom: 20 }}>
@@ -309,6 +358,8 @@ function ResumenSesion({ sesion }: { sesion: SesionCaja }) {
         <MetricCard label="Egresos" value={`PEN ${sesion.totalEgresos}`} />
         <MetricCard label={sesion.estado === 'cerrada' ? 'Saldo final' : 'Saldo actual'} value={`PEN ${saldoFinal}`} destacado />
       </div>
+
+      {error && <p style={{ color: 'var(--danger)', fontSize: 12, marginBottom: 8 }}>{error}</p>}
 
       <div style={{ overflowX: 'auto' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, minWidth: 680 }}>
@@ -320,6 +371,7 @@ function ResumenSesion({ sesion }: { sesion: SesionCaja }) {
               <th style={thStyle}>Monto</th>
               <th style={thStyle}>Hora</th>
               <th style={thStyle}>Notas</th>
+              {esAdmin && <th style={thStyle}></th>}
             </tr>
           </thead>
           <tbody>
@@ -332,15 +384,57 @@ function ResumenSesion({ sesion }: { sesion: SesionCaja }) {
                   <td style={{ ...tdStyle, color }}>{m.concepto}</td>
                   <td style={{ ...tdStyle, color }}>{m.metodo_pago}</td>
                   <td style={{ ...tdStyle, color, fontWeight: 600 }}>
-                    {m.monto}
-                    {m.moneda_pago === 'USD' && (
-                      <span style={{ fontSize: 10, fontWeight: 400, display: 'block' }}>
-                        (USD {Number(m.monto_original).toFixed(2)} @ {Number(m.tipo_cambio_aplicado).toFixed(3)})
-                      </span>
+                    {editandoId === m.id ? (
+                      <input
+                        type="number"
+                        step={0.01}
+                        value={montoEdicion}
+                        onChange={(e) => setMontoEdicion(e.target.value)}
+                        style={{ width: 90, padding: '2px 4px', fontSize: 12 }}
+                        autoFocus
+                      />
+                    ) : (
+                      <>
+                        {m.monto}
+                        {m.moneda_pago === 'USD' && (
+                          <span style={{ fontSize: 10, fontWeight: 400, display: 'block' }}>
+                            (USD {Number(m.monto_original).toFixed(2)} @ {Number(m.tipo_cambio_aplicado).toFixed(3)})
+                          </span>
+                        )}
+                      </>
                     )}
                   </td>
                   <td style={{ ...tdStyle, color }}>{new Date(m.created_at).toLocaleTimeString()}</td>
                   <td style={{ ...tdStyle, color }}>{m.notas ?? ''}</td>
+                  {esAdmin && (
+                    <td style={tdStyle}>
+                      {editandoId === m.id ? (
+                        <span style={{ display: 'flex', gap: 8 }}>
+                          <button
+                            onClick={() => guardarEdicion(m.id)}
+                            disabled={guardando}
+                            style={{ border: 'none', background: 'transparent', color: 'var(--brand)', fontSize: 12, textDecoration: 'underline', cursor: 'pointer', padding: 0 }}
+                          >
+                            Guardar
+                          </button>
+                          <button
+                            onClick={() => setEditandoId(null)}
+                            disabled={guardando}
+                            style={{ border: 'none', background: 'transparent', color: 'var(--text-secondary)', fontSize: 12, textDecoration: 'underline', cursor: 'pointer', padding: 0 }}
+                          >
+                            Cancelar
+                          </button>
+                        </span>
+                      ) : (
+                        <button
+                          onClick={() => iniciarEdicion(m.id, Number(m.monto))}
+                          style={{ border: 'none', background: 'transparent', color: 'var(--text-secondary)', fontSize: 12, textDecoration: 'underline', cursor: 'pointer', padding: 0 }}
+                        >
+                          Editar
+                        </button>
+                      )}
+                    </td>
+                  )}
                 </tr>
               );
             })}

@@ -3,6 +3,7 @@ import {
   Controller,
   Get,
   Param,
+  Patch,
   Post,
   Query,
   UseGuards,
@@ -16,6 +17,7 @@ import { SupabaseService } from '../common/supabase/supabase.service';
 import { CajaService } from './caja.service';
 import { AbrirTurnoDto } from './dto/abrir-turno.dto';
 import { RegistrarMovimientoCajaDto } from './dto/registrar-movimiento-caja.dto';
+import { EditarMovimientoCajaDto } from './dto/editar-movimiento-caja.dto';
 
 @Controller('hoteles/:hotelId/caja')
 @UseGuards(AuthGuard, RolesGuard)
@@ -101,6 +103,20 @@ export class CajaController {
   ) {
     const client = this.supabase.getClientForRequest(user.accessToken);
     return this.cajaService.registrarMovimiento(client, hotelId, id, dto, user.personalId);
+  }
+
+  // Solo admin: corrige el monto de un ingreso/egreso ya registrado.
+  @Patch('sesiones/:id/movimientos/:movimientoId')
+  @Roles('admin')
+  async editarMovimiento(
+    @Param('hotelId') hotelId: string,
+    @Param('id') id: string,
+    @Param('movimientoId') movimientoId: string,
+    @Body() dto: EditarMovimientoCajaDto,
+    @CurrentUser() user: RequestUser,
+  ) {
+    const client = this.supabase.getClientForRequest(user.accessToken);
+    return this.cajaService.editarMovimiento(client, hotelId, id, movimientoId, dto, user.personalId);
   }
 
   @Post('sesiones/:id/cerrar')

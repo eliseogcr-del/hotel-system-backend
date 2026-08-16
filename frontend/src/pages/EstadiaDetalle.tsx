@@ -106,6 +106,9 @@ export function EstadiaDetalle() {
   const [checkoutReal, setCheckoutReal] = useState(ahoraLocal());
   const [tipoCambio, setTipoCambio] = useState<TipoCambioVigente | null>(null);
   const [cajaAbierta, setCajaAbierta] = useState(true);
+  const [editandoMovimientoId, setEditandoMovimientoId] = useState<string | null>(null);
+  const [montoEdicion, setMontoEdicion] = useState('');
+  const esAdmin = hotelActual?.rol === 'admin';
 
   useEffect(() => {
     if (!hotelActual) return;
@@ -167,6 +170,29 @@ export function EstadiaDetalle() {
       cargar();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'No se pudo anular el cargo');
+    } finally {
+      setAccionando(false);
+    }
+  }
+
+  function iniciarEdicionMonto(movimientoId: string, montoActual: number) {
+    setEditandoMovimientoId(movimientoId);
+    setMontoEdicion(String(montoActual));
+    setError(null);
+  }
+
+  async function guardarEdicionMonto(movimientoId: string) {
+    if (!hotelActual || !id || montoEdicion === '') return;
+    setAccionando(true);
+    setError(null);
+    try {
+      await api.patch(`/hoteles/${hotelActual.hotelId}/estadias/${id}/movimientos/${movimientoId}`, {
+        monto: Number(montoEdicion),
+      });
+      setEditandoMovimientoId(null);
+      cargar();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'No se pudo editar el movimiento');
     } finally {
       setAccionando(false);
     }
@@ -343,27 +369,70 @@ export function EstadiaDetalle() {
                 <tr key={m.id} style={{ borderTop: '1px solid var(--border)', background: bg }}>
                   <td style={{ ...tdStyle, color }}>{new Date(m.fecha).toLocaleString()}</td>
                   <td style={{ ...tdStyle, color, fontWeight: 500 }}>{TIPO_LABEL[m.tipo] ?? m.tipo}</td>
-                  <td style={{ ...tdStyle, color, fontWeight: 600 }}>{m.monto}</td>
+                  <td style={{ ...tdStyle, color, fontWeight: 600 }}>
+                    {editandoMovimientoId === m.id ? (
+                      <input
+                        type="number"
+                        step={0.01}
+                        value={montoEdicion}
+                        onChange={(e) => setMontoEdicion(e.target.value)}
+                        style={{ width: 90, padding: '2px 4px', fontSize: 12 }}
+                        autoFocus
+                      />
+                    ) : (
+                      m.monto
+                    )}
+                  </td>
                   <td style={{ ...tdStyle, color }}>{m.metodo_pago ?? '—'}</td>
                   <td style={{ ...tdStyle, color }}>{m.personal?.nombre ?? '—'}</td>
                   <td style={{ ...tdStyle, color }}>{m.notas ?? ''}</td>
                   <td style={tdStyle}>
-                    {esCargoAnulable && (
-                      <button
-                        onClick={() => anularMovimiento(m.id)}
-                        disabled={accionando}
-                        style={{
-                          border: 'none',
-                          background: 'transparent',
-                          color: 'var(--danger)',
-                          fontSize: 12,
-                          textDecoration: 'underline',
-                          cursor: 'pointer',
-                          padding: 0,
-                        }}
-                      >
-                        Anular
-                      </button>
+                    {editandoMovimientoId === m.id ? (
+                      <span style={{ display: 'flex', gap: 8 }}>
+                        <button
+                          onClick={() => guardarEdicionMonto(m.id)}
+                          disabled={accionando}
+                          style={{ border: 'none', background: 'transparent', color: 'var(--brand)', fontSize: 12, textDecoration: 'underline', cursor: 'pointer', padding: 0 }}
+                        >
+                          Guardar
+                        </button>
+                        <button
+                          onClick={() => setEditandoMovimientoId(null)}
+                          disabled={accionando}
+                          style={{ border: 'none', background: 'transparent', color: 'var(--text-secondary)', fontSize: 12, textDecoration: 'underline', cursor: 'pointer', padding: 0 }}
+                        >
+                          Cancelar
+                        </button>
+                      </span>
+                    ) : (
+                      <span style={{ display: 'flex', gap: 8 }}>
+                        {esCargoAnulable && (
+                          <button
+                            onClick={() => anularMovimiento(m.id)}
+                            disabled={accionando}
+                            style={{
+                              border: 'none',
+                              background: 'transparent',
+                              color: 'var(--danger)',
+                              fontSize: 12,
+                              textDecoration: 'underline',
+                              cursor: 'pointer',
+                              padding: 0,
+                            }}
+                          >
+                            Anular
+                          </button>
+                        )}
+                        {esAdmin && (
+                          <button
+                            onClick={() => iniciarEdicionMonto(m.id, Number(m.monto))}
+                            disabled={accionando}
+                            style={{ border: 'none', background: 'transparent', color: 'var(--text-secondary)', fontSize: 12, textDecoration: 'underline', cursor: 'pointer', padding: 0 }}
+                          >
+                            Editar
+                          </button>
+                        )}
+                      </span>
                     )}
                   </td>
                 </tr>

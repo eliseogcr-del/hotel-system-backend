@@ -17,6 +17,7 @@ import {
 import { ListarEstadiasQueryDto } from './dto/listar-estadias-query.dto';
 import { ActualizarNotasDto } from './dto/actualizar-notas.dto';
 import { ActualizarEstadiaDto } from './dto/actualizar-estadia.dto';
+import { EditarMovimientoDto } from './dto/editar-movimiento.dto';
 import { ReservasService } from '../reservas/reservas.service';
 import { CrearReservaDto } from '../reservas/dto/crear-reserva.dto';
 import { TipoCambioService } from '../tipo-cambio/tipo-cambio.service';
@@ -42,6 +43,16 @@ function comoRelojLima(fecha: Date): Date {
 
 function desdeRelojLima(relojLima: Date): Date {
   return new Date(relojLima.getTime() + PERU_UTC_OFFSET_MS);
+}
+
+function fechaHoraLimaTexto(fecha: Date): string {
+  const lima = comoRelojLima(fecha);
+  const dd = String(lima.getUTCDate()).padStart(2, '0');
+  const mm = String(lima.getUTCMonth() + 1).padStart(2, '0');
+  const yyyy = lima.getUTCFullYear();
+  const hh = String(lima.getUTCHours()).padStart(2, '0');
+  const min = String(lima.getUTCMinutes()).padStart(2, '0');
+  return `${dd}/${mm}/${yyyy} ${hh}:${min}`;
 }
 
 interface EstadiaConReserva {
@@ -675,6 +686,58 @@ export class EstadiasService {
     const { error: updError } = await client
       .from('movimientos_cuenta')
       .update({ monto: 0, notas: notasNuevas })
+      .eq('id', movimientoId);
+    if (updError) throw updError;
+
+    await this.recalcularSaldo(client, estadiaId);
+
+    return this.obtenerDetalle(client, hotelId, estadiaId);
+  }
+
+  /**
+   * Edición directa del monto de un movimiento (cargo o pago), reservada a
+   * administradores -- a diferencia de `anularMovimiento()` (que solo pone
+   * el monto en 0), esto permite corregirlo a cualquier valor. Deja
+   * constancia en notas de quién lo modificó, el monto anterior y cuándo,
+   * sin restricción por estado de la estadía (es la herramienta de
+   * corrección para cuando algo se cobró o se registró mal, incluso
+   * después de finalizada).
+   */
+  async editarMovimiento(
+    client: SupabaseClient,
+    hotelId: string,
+    estadiaId: string,
+    movimientoId: string,
+    dto: EditarMovimientoDto,
+    personalId: string,
+  ) {
+    await this.cargarEstadiaHotel(client, hotelId, estadiaId);
+
+    const { data: movimiento, error: movError } = await client
+      .from('movimientos_cuenta')
+      .select('id, monto, notas')
+      .eq('id', movimientoId)
+      .eq('estadia_id', estadiaId)
+      .maybeSingle();
+    if (movError) throw movError;
+    if (!movimiento) {
+      throw new NotFoundException('Movimiento no encontrado en esta estadía');
+    }
+
+    const { data: personal, error: personalError } = await client
+      .from('personal')
+      .select('nombre')
+      .eq('id', personalId)
+      .maybeSingle();
+    if (personalError) throw personalError;
+    const nombreAdmin = personal?.nombre ?? 'usuario desconocido';
+
+    const notaCambio = `Modificado por el administrador ${nombreAdmin} (monto anterior: ${Number(movimiento.monto).toFixed(2)}) el ${fechaHoraLimaTexto(new Date())}`;
+    const notasNuevas = movimiento.notas ? `${movimiento.notas} — ${notaCambio}` : notaCambio;
+
+    const { error: updError } = await client
+      .from('movimientos_cuenta')
+      .update({ monto: dto.monto, notas: notasNuevas })
       .eq('id', movimientoId);
     if (updError) throw updError;
 

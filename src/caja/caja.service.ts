@@ -9,6 +9,7 @@ import { SupabaseClient } from '@supabase/supabase-js';
 import { SupabaseService } from '../common/supabase/supabase.service';
 import { AbrirTurnoDto } from './dto/abrir-turno.dto';
 import { RegistrarMovimientoCajaDto } from './dto/registrar-movimiento-caja.dto';
+import { EditarMovimientoCajaDto } from './dto/editar-movimiento-caja.dto';
 
 interface SesionConHotel {
   id: string;
@@ -219,6 +220,73 @@ export class CajaService {
     return this.obtenerDetalle(client, hotelId, sesionId);
   }
 
+  /**
+   * Solo admin: corrige el monto de un ingreso/egreso de caja de CUALQUIER
+   * sesión (no solo la propia), a diferencia de registrarMovimiento() que
+   * solo deja tocar la sesión de uno mismo mientras está abierta. Deja
+   * constancia en notas de quién lo modificó, el monto anterior y cuándo.
+   * `movimientos_caja` no tiene policy de UPDATE (solo select/insert) y
+   * `sesiones_turno` solo permite UPDATE al dueño de la sesión -- por eso
+   * el ajuste en sí se hace con el cliente de servicio, a propósito: el
+   * controller ya exige rol admin antes de llegar aquí.
+   */
+  async editarMovimiento(
+    client: SupabaseClient,
+    hotelId: string,
+    sesionId: string,
+    movimientoId: string,
+    dto: EditarMovimientoCajaDto,
+    personalId: string,
+  ) {
+    const sesion = await this.cargarSesionHotel(client, hotelId, sesionId);
+
+    const { data: movimiento, error: movError } = await client
+      .from('movimientos_caja')
+      .select('id, monto, notas')
+      .eq('id', movimientoId)
+      .eq('sesion_turno_id', sesionId)
+      .maybeSingle();
+    if (movError) throw movError;
+    if (!movimiento) {
+      throw new NotFoundException('Movimiento no encontrado en esta sesión');
+    }
+
+    const { data: personal, error: personalError } = await client
+      .from('personal')
+      .select('nombre')
+      .eq('id', personalId)
+      .maybeSingle();
+    if (personalError) throw personalError;
+    const nombreAdmin = personal?.nombre ?? 'usuario desconocido';
+
+    const notaCambio = `Modificado por el administrador ${nombreAdmin} (monto anterior: ${Number(movimiento.monto).toFixed(2)}) el ${this.fechaHoraLimaTexto()}`;
+    const notasNuevas = movimiento.notas ? `${movimiento.notas} — ${notaCambio}` : notaCambio;
+
+    const service = this.supabase.getServiceClient();
+    const { error: updError } = await service
+      .from('movimientos_caja')
+      .update({ monto: dto.monto, notas: notasNuevas })
+      .eq('id', movimientoId);
+    if (updError) throw updError;
+
+    // Si la sesión ya se cerró, su saldo_final quedó fijo al momento del
+    // cierre -- hay que recalcularlo para que refleje el ajuste.
+    if (sesion.estado === 'cerrada') {
+      const { totalIngresosEfectivo, totalEgresosEfectivo } = await this.sumarMovimientos(
+        service,
+        sesionId,
+      );
+      const saldoFinal = Number(sesion.saldo_inicial) + totalIngresosEfectivo - totalEgresosEfectivo;
+      const { error: sesError } = await service
+        .from('sesiones_turno')
+        .update({ saldo_final: saldoFinal })
+        .eq('id', sesionId);
+      if (sesError) throw sesError;
+    }
+
+    return this.obtenerDetalle(client, hotelId, sesionId);
+  }
+
   async listarSesiones(client: SupabaseClient, hotelId: string, estado?: string) {
     let query = client
       .from('sesiones_turno')
@@ -338,6 +406,14 @@ export class CajaService {
   private horaActualLimaTexto(): string {
     const ahoraLima = comoRelojLima(new Date());
     return `${String(ahoraLima.getUTCHours()).padStart(2, '0')}:${String(ahoraLima.getUTCMinutes()).padStart(2, '0')}`;
+  }
+
+  private fechaHoraLimaTexto(): string {
+    const ahoraLima = comoRelojLima(new Date());
+    const dd = String(ahoraLima.getUTCDate()).padStart(2, '0');
+    const mm = String(ahoraLima.getUTCMonth() + 1).padStart(2, '0');
+    const yyyy = ahoraLima.getUTCFullYear();
+    return `${dd}/${mm}/${yyyy} ${this.horaActualLimaTexto()}`;
   }
 
   async obtenerDetalle(client: SupabaseClient, hotelId: string, sesionId: string) {

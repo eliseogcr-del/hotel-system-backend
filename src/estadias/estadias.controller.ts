@@ -22,6 +22,7 @@ import { RegistrarMovimientoDto } from './dto/registrar-movimiento.dto';
 import { ListarEstadiasQueryDto } from './dto/listar-estadias-query.dto';
 import { ActualizarNotasDto } from './dto/actualizar-notas.dto';
 import { ActualizarEstadiaDto } from './dto/actualizar-estadia.dto';
+import { EditarMovimientoDto } from './dto/editar-movimiento.dto';
 
 @Controller('hoteles/:hotelId/estadias')
 @UseGuards(AuthGuard, RolesGuard)
@@ -93,6 +94,23 @@ export class EstadiasController {
   ) {
     const client = this.supabase.getClientForRequest(user.accessToken);
     return this.estadiasService.anularMovimiento(client, hotelId, id, movimientoId, user.personalId);
+  }
+
+  // Solo admin: corrige el monto de cualquier movimiento (cargo o pago),
+  // sin la restricción de "solo cargos" ni el bloqueo por estadía
+  // finalizada que tiene anularMovimiento() -- es la herramienta de
+  // corrección de errores, no la operación normal del día a día.
+  @Patch(':id/movimientos/:movimientoId')
+  @Roles('admin')
+  async editarMovimiento(
+    @Param('hotelId') hotelId: string,
+    @Param('id') id: string,
+    @Param('movimientoId') movimientoId: string,
+    @Body() dto: EditarMovimientoDto,
+    @CurrentUser() user: RequestUser,
+  ) {
+    const client = this.supabase.getClientForRequest(user.accessToken);
+    return this.estadiasService.editarMovimiento(client, hotelId, id, movimientoId, dto, user.personalId);
   }
 
   // Sin cron real en el backend (Render free tier se duerme): esto lo
