@@ -18,6 +18,16 @@ interface TurnoDisponible {
   hora_fin: string;
 }
 
+interface SesionActualResponse {
+  turnos: { nombre: string; hora_inicio: string; hora_fin: string } | null;
+}
+
+interface TurnoInfo {
+  nombre: string;
+  horaInicio: string;
+  horaFin: string;
+}
+
 interface EstadoTurno {
   sesionAbierta: boolean;
   avisoCierre: boolean;
@@ -102,21 +112,39 @@ export function Layout() {
   // abierto sesión de caja. null = todavía verificando (no se sabe si
   // mostrar el gate o el sistema normal); admin/HK nunca lo ven.
   const [sesionCajaAbierta, setSesionCajaAbierta] = useState<boolean | null>(null);
+  // Turno de la sesión de caja en curso (nombre + horario), para mostrarlo
+  // en el header junto al nombre del recepcionista -- así queda claro con
+  // qué turno está trabajando en todo momento.
+  const [turnoInfo, setTurnoInfo] = useState<TurnoInfo | null>(null);
+
+  function aplicarSesion(sesion: SesionActualResponse) {
+    setTurnoInfo(
+      sesion.turnos
+        ? { nombre: sesion.turnos.nombre, horaInicio: sesion.turnos.hora_inicio, horaFin: sesion.turnos.hora_fin }
+        : null,
+    );
+  }
 
   useEffect(() => {
     if (!hotelActual) {
       setSesionCajaAbierta(null);
+      setTurnoInfo(null);
       return;
     }
     if (hotelActual.rol !== 'recepcion') {
       setSesionCajaAbierta(true);
+      setTurnoInfo(null);
       return;
     }
     setSesionCajaAbierta(null);
     api
-      .get(`/hoteles/${hotelActual.hotelId}/caja/actual`)
-      .then(() => setSesionCajaAbierta(true))
+      .get<SesionActualResponse>(`/hoteles/${hotelActual.hotelId}/caja/actual`)
+      .then((sesion) => {
+        aplicarSesion(sesion);
+        setSesionCajaAbierta(true);
+      })
       .catch((err) => {
+        setTurnoInfo(null);
         if (err instanceof ApiError && err.status === 404) setSesionCajaAbierta(false);
         else setSesionCajaAbierta(true); // ante un error inesperado, no se bloquea el acceso
       });
@@ -190,7 +218,16 @@ export function Layout() {
   }
 
   if (hotelActual?.rol === 'recepcion' && sesionCajaAbierta === false) {
-    return <AbrirTurnoGate hotelId={hotelActual.hotelId} hotelNombre={hotelActual.nombre} onAbierto={() => setSesionCajaAbierta(true)} />;
+    return (
+      <AbrirTurnoGate
+        hotelId={hotelActual.hotelId}
+        hotelNombre={hotelActual.nombre}
+        onAbierto={(sesion) => {
+          aplicarSesion(sesion);
+          setSesionCajaAbierta(true);
+        }}
+      />
+    );
   }
 
   // Que un rol no vea un módulo en el menú no alcanza: si alguien tipea la
@@ -357,6 +394,8 @@ export function Layout() {
                 {hotelActual && (
                   <div style={{ fontSize: 11, color: 'var(--chrome-text-muted)' }}>
                     {ROL_LABEL[hotelActual.rol] ?? hotelActual.rol}
+                    {turnoInfo &&
+                      ` · Turno ${turnoInfo.nombre} (${turnoInfo.horaInicio.slice(0, 5)}–${turnoInfo.horaFin.slice(0, 5)})`}
                   </div>
                 )}
               </div>
@@ -432,7 +471,7 @@ function AbrirTurnoGate({
 }: {
   hotelId: string;
   hotelNombre: string;
-  onAbierto: () => void;
+  onAbierto: (sesion: SesionActualResponse) => void;
 }) {
   const { signOut } = useAuth();
   const [turnos, setTurnos] = useState<TurnoDisponible[]>([]);
@@ -450,8 +489,8 @@ function AbrirTurnoGate({
     setEnviando(true);
     setError(null);
     try {
-      await api.post(`/hoteles/${hotelId}/caja/abrir`, { turnoId });
-      onAbierto();
+      const sesion = await api.post<SesionActualResponse>(`/hoteles/${hotelId}/caja/abrir`, { turnoId });
+      onAbierto(sesion);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'No se pudo abrir el turno');
     } finally {

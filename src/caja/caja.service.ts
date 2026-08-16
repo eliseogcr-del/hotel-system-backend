@@ -23,7 +23,7 @@ interface SesionConHotel {
   cerrada_en: string | null;
   cerrada_automaticamente: boolean;
   personal_hotel: { hotel_id: string };
-  turnos: { nombre: string } | null;
+  turnos: { nombre: string; hora_inicio: string; hora_fin: string } | null;
 }
 
 // Mismo criterio de zona horaria que estadias.service.ts: el servidor
@@ -497,7 +497,7 @@ export class CajaService {
         id, personal_hotel_id, turno_id, fecha, saldo_inicial, saldo_final,
         estado, abierta_en, cerrada_en, cerrada_automaticamente,
         personal_hotel!inner(hotel_id),
-        turnos(nombre)
+        turnos(nombre, hora_inicio, hora_fin)
       `,
       )
       .eq('id', sesionId)
