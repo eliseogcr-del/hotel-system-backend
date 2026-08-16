@@ -6,10 +6,20 @@ import { useHotel } from '../contexts/HotelContext';
 interface FilaEstadia {
   id: string;
   tipo_alquiler: string;
+  incluye_desayuno: boolean;
   fecha_hora_checkin_prevista: string;
   fecha_hora_checkout_prevista: string;
   habitaciones: { hab_numero: number; piso: number } | null;
-  reservas: { huespedes: { nombres: string; apellidos: string } | null } | null;
+  reservas: {
+    huespedes: {
+      nombres: string;
+      apellidos: string;
+      tipo_doc: string;
+      nro_doc: string;
+      ruc: string | null;
+      razon_social: string | null;
+    } | null;
+  } | null;
   estadias: {
     id: string;
     estado_actual: string;
@@ -36,19 +46,29 @@ export function Estadias() {
   const navigate = useNavigate();
   const [filas, setFilas] = useState<FilaEstadia[]>([]);
   const [filtroEstado, setFiltroEstado] = useState('en_curso');
+  const [busqueda, setBusqueda] = useState('');
+  const [busquedaAplicada, setBusquedaAplicada] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    const t = setTimeout(() => setBusquedaAplicada(busqueda.trim()), 300);
+    return () => clearTimeout(t);
+  }, [busqueda]);
+
+  useEffect(() => {
     if (!hotelActual) return;
     setLoading(true);
-    const query = filtroEstado ? `?estado=${filtroEstado}` : '';
+    const params = new URLSearchParams();
+    if (filtroEstado) params.set('estado', filtroEstado);
+    if (busquedaAplicada) params.set('busqueda', busquedaAplicada);
+    const query = params.toString() ? `?${params.toString()}` : '';
     api
       .get<FilaEstadia[]>(`/hoteles/${hotelActual.hotelId}/estadias${query}`)
       .then(setFilas)
       .catch((err) => setError(err instanceof ApiError ? err.message : 'Error al cargar'))
       .finally(() => setLoading(false));
-  }, [hotelActual, filtroEstado]);
+  }, [hotelActual, filtroEstado, busquedaAplicada]);
 
   const filasOrdenadas = useMemo(
     () =>
@@ -64,25 +84,34 @@ export function Estadias() {
     <div>
       <h1 style={{ fontSize: 20, marginBottom: 16 }}>Estadías</h1>
 
-      <select
-        value={filtroEstado}
-        onChange={(e) => setFiltroEstado(e.target.value)}
-        style={{ padding: '8px 10px', border: '1px solid var(--border)', borderRadius: 'var(--radius)', fontSize: 13, marginBottom: 16 }}
-      >
-        <option value="">Todos los estados</option>
-        {ESTADOS.map((e) => (
-          <option key={e} value={e}>
-            {ESTADO_LABEL[e] ?? e}
-          </option>
-        ))}
-      </select>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 16 }}>
+        <select
+          value={filtroEstado}
+          onChange={(e) => setFiltroEstado(e.target.value)}
+          style={{ padding: '8px 10px', border: '1px solid var(--border)', borderRadius: 'var(--radius)', fontSize: 13 }}
+        >
+          <option value="">Todos los estados</option>
+          {ESTADOS.map((e) => (
+            <option key={e} value={e}>
+              {ESTADO_LABEL[e] ?? e}
+            </option>
+          ))}
+        </select>
+        <input
+          type="text"
+          value={busqueda}
+          onChange={(e) => setBusqueda(e.target.value)}
+          placeholder="Buscar por DNI, RUC, empresa, nombre o apellido"
+          style={{ padding: '8px 10px', border: '1px solid var(--border)', borderRadius: 'var(--radius)', fontSize: 13, minWidth: 280 }}
+        />
+      </div>
 
       {loading && <p style={{ color: 'var(--text-muted)' }}>Cargando...</p>}
       {error && <p style={{ color: 'var(--danger)' }}>{error}</p>}
 
       {!loading && !error && (
         <div style={{ overflowX: 'auto', border: '1px solid var(--border)', borderRadius: 12 }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, minWidth: 720 }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, minWidth: 980 }}>
             <thead>
               <tr
                 style={{
@@ -96,8 +125,12 @@ export function Estadias() {
               >
                 <th style={thStyle}>Habitación</th>
                 <th style={thStyle}>Huésped</th>
+                <th style={thStyle}>DNI</th>
+                <th style={thStyle}>RUC</th>
+                <th style={thStyle}>Empresa</th>
                 <th style={thStyle}>Check-in</th>
                 <th style={thStyle}>Check-out</th>
+                <th style={thStyle}>Desayuno</th>
                 <th style={{ ...thStyle, textAlign: 'right' }}>Saldo</th>
                 <th style={{ ...thStyle, borderRight: 'none' }}>Estado</th>
               </tr>
@@ -119,8 +152,12 @@ export function Estadias() {
                   <td style={tdStyle}>
                     {f.reservas?.huespedes ? `${f.reservas.huespedes.nombres} ${f.reservas.huespedes.apellidos}` : '—'}
                   </td>
+                  <td style={tdStyle}>{f.reservas?.huespedes?.nro_doc ?? '—'}</td>
+                  <td style={tdStyle}>{f.reservas?.huespedes?.ruc || '—'}</td>
+                  <td style={tdStyle}>{f.reservas?.huespedes?.razon_social || '—'}</td>
                   <td style={tdStyle}>{formatoFecha(f.fecha_hora_checkin_prevista)}</td>
                   <td style={tdStyle}>{formatoFecha(f.fecha_hora_checkout_prevista)}</td>
+                  <td style={tdStyle}>{f.incluye_desayuno ? 'Sí' : 'No'}</td>
                   <td
                     style={{
                       ...tdStyle,

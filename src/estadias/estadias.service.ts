@@ -595,14 +595,30 @@ export class EstadiasService {
   }
 
   async listar(client: SupabaseClient, hotelId: string, filtros: ListarEstadiasQueryDto) {
+    const busqueda = filtros.busqueda?.trim().replace(/[,()%]/g, '');
+    let idsHuespedes: string[] | null = null;
+    if (busqueda) {
+      const { data: huespedes, error: huespedesError } = await client
+        .from('huespedes')
+        .select('id')
+        .eq('hotel_id', hotelId)
+        .or(
+          `nombres.ilike.%${busqueda}%,apellidos.ilike.%${busqueda}%,nro_doc.ilike.%${busqueda}%,ruc.ilike.%${busqueda}%,razon_social.ilike.%${busqueda}%`,
+        );
+      if (huespedesError) throw huespedesError;
+      if (!huespedes?.length) return [];
+
+      idsHuespedes = huespedes.map((h) => h.id);
+    }
+
     let query = client
       .from('reserva_habitacion')
       .select(
         `
-        id, habitacion_id, tipo_alquiler,
+        id, habitacion_id, tipo_alquiler, incluye_desayuno,
         fecha_hora_checkin_prevista, fecha_hora_checkout_prevista,
         habitaciones(hab_numero, piso),
-        reservas!inner(hotel_id, huespedes(nombres, apellidos)),
+        reservas!inner(hotel_id, huesped_id, huespedes(nombres, apellidos, tipo_doc, nro_doc, ruc, razon_social)),
         estadias!inner(id, estado_actual, saldo, checkin_real, checkout_real)
       `,
       )
@@ -610,6 +626,9 @@ export class EstadiasService {
 
     if (filtros.estado) {
       query = query.eq('estadias.estado_actual', filtros.estado);
+    }
+    if (idsHuespedes) {
+      query = query.in('reservas.huesped_id', idsHuespedes);
     }
 
     const { data, error } = await query;
