@@ -7,6 +7,7 @@ interface FilaEstadia {
   id: string;
   tipo_alquiler: string;
   incluye_desayuno: boolean;
+  tarifa_dia: number;
   fecha_hora_checkin_prevista: string;
   fecha_hora_checkout_prevista: string;
   habitaciones: { hab_numero: number; piso: number } | null;
@@ -111,7 +112,7 @@ export function Estadias() {
 
       {!loading && !error && (
         <div style={{ overflowX: 'auto', border: '1px solid var(--border)', borderRadius: 12 }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, minWidth: 980 }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, minWidth: 1080 }}>
             <thead>
               <tr
                 style={{
@@ -131,6 +132,7 @@ export function Estadias() {
                 <th style={thStyle}>Check-in</th>
                 <th style={thStyle}>Check-out</th>
                 <th style={thStyle}>Desayuno</th>
+                <th style={{ ...thStyle, textAlign: 'right' }}>Tarifa/día</th>
                 <th style={{ ...thStyle, textAlign: 'right' }}>Saldo</th>
                 <th style={{ ...thStyle, borderRight: 'none' }}>Estado</th>
               </tr>
@@ -158,6 +160,7 @@ export function Estadias() {
                   <td style={tdStyle}>{formatoFecha(f.fecha_hora_checkin_prevista)}</td>
                   <td style={tdStyle}>{formatoFecha(f.fecha_hora_checkout_prevista)}</td>
                   <td style={tdStyle}>{f.incluye_desayuno ? 'Sí' : 'No'}</td>
+                  <td style={{ ...tdStyle, textAlign: 'right' }}>PEN {Number(f.tarifa_dia).toFixed(2)}</td>
                   <td
                     style={{
                       ...tdStyle,

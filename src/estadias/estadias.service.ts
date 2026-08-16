@@ -615,7 +615,7 @@ export class EstadiasService {
       .from('reserva_habitacion')
       .select(
         `
-        id, habitacion_id, tipo_alquiler, incluye_desayuno,
+        id, habitacion_id, tipo_alquiler, incluye_desayuno, tarifa_dia,
         fecha_hora_checkin_prevista, fecha_hora_checkout_prevista,
         habitaciones(hab_numero, piso),
         reservas!inner(hotel_id, huesped_id, huespedes(nombres, apellidos, tipo_doc, nro_doc, ruc, razon_social)),
