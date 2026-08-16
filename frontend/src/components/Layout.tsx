@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
-import { Navigate, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
+import { Navigate, NavLink, Outlet, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { useHotel } from '../contexts/HotelContext';
 import { useIsMobile } from '../hooks/useIsMobile';
@@ -21,15 +21,17 @@ interface TurnoDisponible {
 interface EstadoTurno {
   sesionAbierta: boolean;
   avisoCierre: boolean;
-  cerradaAutomaticamente: boolean;
   minutosParaFin?: number;
 }
 
 // Cada cuánto se consulta el estado del turno (ver caja/estado-turno en el
 // backend): no hay cron real posible en Render free tier, así que el aviso
-// de "tu turno está por terminar" y el cierre automático de caja se
-// disparan aquí, con la app abierta, igual que la sincronización del tipo
-// de cambio más abajo.
+// de "tu turno está por terminar" se dispara aquí, con la app abierta,
+// igual que la sincronización del tipo de cambio más abajo. Es solo un
+// recordatorio -- cada recepcionista decide cuándo cerrar su turno; el
+// sistema ya no la cierra sola por vencimiento (si acaso, se cierra sola
+// al hacer logout sin haberla cerrado a mano, ver cerrarSesion() más
+// abajo).
 const POLL_ESTADO_TURNO_MS = 60_000;
 
 // Única fuente de verdad de qué rol ve qué: de acá salen tanto el menú
@@ -91,7 +93,6 @@ export function Layout() {
       .catch(() => {});
   }, [hotelActual]);
 
-  const navigate = useNavigate();
   const location = useLocation();
   const [estadoTurno, setEstadoTurno] = useState<EstadoTurno | null>(null);
   const avisoMostradoRef = useRef(false);
@@ -138,16 +139,6 @@ export function Layout() {
         if (cancelado) return;
         setEstadoTurno(estado);
 
-        if (estado.cerradaAutomaticamente) {
-          alert(
-            'Tu turno terminó hace más de 5 minutos y tu caja fue cerrada automáticamente. ' +
-              'El sistema va a cerrar tu sesión: vuelve a iniciar sesión para abrir una nueva caja.',
-          );
-          await signOut();
-          navigate('/login', { replace: true });
-          return;
-        }
-
         if (estado.avisoCierre && !avisoMostradoRef.current) {
           avisoMostradoRef.current = true;
           alert(
@@ -169,11 +160,28 @@ export function Layout() {
       cancelado = true;
       clearInterval(intervalo);
     };
-  }, [hotelActual, signOut, navigate]);
+  }, [hotelActual]);
 
   const navItems = hotelActual ? NAV_ITEMS.filter((item) => item.roles.includes(hotelActual.rol)) : [];
 
   const sidebarVisible = !isMobile || navAbierto;
+
+  // Cada quien decide cuándo cerrar su turno mientras trabaja, pero no
+  // puede quedarse abierto "colgado" si se va del sistema: al cerrar
+  // sesión, si tiene una caja abierta se cierra sola antes (mismo criterio
+  // que un cierre manual desde Caja.tsx -- calcula el saldo final de
+  // verdad, no es un abandono silencioso).
+  async function cerrarSesion() {
+    if (hotelActual) {
+      try {
+        const sesion = await api.get<{ id: string }>(`/hoteles/${hotelActual.hotelId}/caja/actual`);
+        await api.post(`/hoteles/${hotelActual.hotelId}/caja/sesiones/${sesion.id}/cerrar`);
+      } catch {
+        // Sin sesión abierta (404) o error de red: no bloquea el cierre de sesión.
+      }
+    }
+    await signOut();
+  }
 
   if (hotelActual?.rol === 'recepcion' && sesionCajaAbierta === null) {
     // Evita el parpadeo de mostrar el menú normal un instante antes de
@@ -354,7 +362,7 @@ export function Layout() {
               </div>
             )}
             <button
-              onClick={() => signOut()}
+              onClick={() => cerrarSesion()}
               style={{
                 border: '1px solid var(--chrome-border)',
                 borderRadius: 'var(--radius)',

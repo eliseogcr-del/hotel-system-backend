@@ -36,10 +36,12 @@ function comoRelojLima(fecha: Date): Date {
 }
 
 // Cuántos minutos antes de que termine el turno se avisa al recepcionista
-// que debe cerrar su caja, y cuántos minutos de gracia después del fin del
-// turno se le dan antes de que el sistema la cierre solo.
+// que debe cerrar su caja. Es solo un recordatorio -- cada recepcionista
+// es autónoma para decidir cuándo cerrar su turno, el sistema ya no la
+// cierra sola por vencimiento (ver obtenerEstadoTurno()); lo que sí se
+// cierra sola es la caja al hacer logout sin haberla cerrado a mano, ver
+// el botón "Cerrar sesión" del frontend (Layout.tsx).
 const AVISO_CIERRE_MINUTOS_ANTES = 10;
-const GRACIA_CIERRE_MINUTOS = 5;
 
 @Injectable()
 export class CajaService {
@@ -253,32 +255,22 @@ export class CajaService {
       .maybeSingle();
     if (error) throw error;
     if (!sesion) {
-      return { sesionAbierta: false, avisoCierre: false, cerradaAutomaticamente: false };
+      return { sesionAbierta: false, avisoCierre: false };
     }
 
     const turno = (sesion as unknown as { turnos: { hora_inicio: string; hora_fin: string } | null })
       .turnos;
     if (!turno) {
-      return { sesionAbierta: true, avisoCierre: false, cerradaAutomaticamente: false };
+      return { sesionAbierta: true, avisoCierre: false };
     }
 
     const finTurnoLima = this.calcularFinTurnoLima(sesion.fecha, turno.hora_inicio, turno.hora_fin);
     const ahoraLima = comoRelojLima(new Date());
     const minutosParaFin = Math.round((finTurnoLima.getTime() - ahoraLima.getTime()) / 60000);
 
-    if (minutosParaFin <= -GRACIA_CIERRE_MINUTOS) {
-      // Se usa el cliente de servicio a propósito: es el sistema quien
-      // cierra la caja, no el usuario, y no debe depender de que su sesión
-      // siga teniendo permisos de UPDATE en ese instante.
-      const service = this.supabase.getServiceClient();
-      await this.cerrarTurnoAutomaticamente(service, hotelId, sesion.id);
-      return { sesionAbierta: false, avisoCierre: false, cerradaAutomaticamente: true };
-    }
-
     return {
       sesionAbierta: true,
       avisoCierre: minutosParaFin <= AVISO_CIERRE_MINUTOS_ANTES,
-      cerradaAutomaticamente: false,
       minutosParaFin,
     };
   }
@@ -296,32 +288,6 @@ export class CajaService {
     const finLima = new Date(Date.UTC(anio, mes - 1, dia + (cruzaMedianoche ? 1 : 0)));
     finLima.setUTCHours(hFin, mFin, sFin || 0, 0);
     return finLima;
-  }
-
-  private async cerrarTurnoAutomaticamente(
-    service: SupabaseClient,
-    hotelId: string,
-    sesionId: string,
-  ) {
-    const sesion = await this.cargarSesionHotel(service, hotelId, sesionId);
-    if (sesion.estado !== 'abierta') return;
-
-    const { totalIngresosEfectivo, totalEgresosEfectivo } = await this.sumarMovimientos(
-      service,
-      sesionId,
-    );
-    const saldoFinal = Number(sesion.saldo_inicial) + totalIngresosEfectivo - totalEgresosEfectivo;
-
-    const { error } = await service
-      .from('sesiones_turno')
-      .update({
-        estado: 'cerrada',
-        saldo_final: saldoFinal,
-        cerrada_en: new Date().toISOString(),
-        cerrada_automaticamente: true,
-      })
-      .eq('id', sesionId);
-    if (error) throw error;
   }
 
   async obtenerDetalle(client: SupabaseClient, hotelId: string, sesionId: string) {
