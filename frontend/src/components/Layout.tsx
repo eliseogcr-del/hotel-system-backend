@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
-import { NavLink, Outlet, useNavigate } from 'react-router-dom';
+import { Navigate, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { useHotel } from '../contexts/HotelContext';
 import { useIsMobile } from '../hooks/useIsMobile';
@@ -32,14 +32,29 @@ interface EstadoTurno {
 // de cambio más abajo.
 const POLL_ESTADO_TURNO_MS = 60_000;
 
-const NAV_ITEMS = [
-  { to: '/habitaciones', label: 'Habitaciones', icon: '⊞' },
-  { to: '/reservas', label: 'Reservas', icon: '📅' },
-  { to: '/estadias', label: 'Estadías', icon: '🚪' },
-  { to: '/caja', label: 'Caja', icon: '💵' },
-  { to: '/tareas-hk', label: 'Tareas HK', icon: '🧹' },
-  { to: '/cotizaciones', label: 'Cotizaciones', icon: '📄' },
+// Única fuente de verdad de qué rol ve qué: de acá salen tanto el menú
+// lateral como qué rutas puede visitar cada rol (rutaPermitida más abajo)
+// -- así nunca quedan desincronizados un ítem de menú oculto con una ruta
+// que igual se puede visitar tipeando la URL a mano.
+type Rol = 'admin' | 'recepcion' | 'hk';
+
+const NAV_ITEMS: { to: string; label: string; icon: string; roles: Rol[] }[] = [
+  { to: '/habitaciones', label: 'Habitaciones', icon: '⊞', roles: ['admin', 'recepcion'] },
+  { to: '/huespedes', label: 'Huéspedes', icon: '🧑', roles: ['admin', 'recepcion'] },
+  { to: '/reservas', label: 'Reservas', icon: '📅', roles: ['admin', 'recepcion'] },
+  { to: '/estadias', label: 'Estadías', icon: '🚪', roles: ['admin', 'recepcion'] },
+  { to: '/caja', label: 'Caja', icon: '💵', roles: ['admin', 'recepcion'] },
+  { to: '/tareas-hk', label: 'Tareas HK', icon: '🧹', roles: ['admin', 'hk'] },
+  { to: '/cotizaciones', label: 'Cotizaciones', icon: '📄', roles: ['admin', 'recepcion'] },
+  { to: '/configuracion', label: 'Configuración', icon: '⚙', roles: ['admin'] },
 ];
+
+function rutaPermitida(rol: Rol, pathname: string): boolean {
+  if (rol === 'admin') return true;
+  return NAV_ITEMS.some(
+    (item) => item.roles.includes(rol) && (pathname === item.to || pathname.startsWith(`${item.to}/`)),
+  );
+}
 
 const ROL_LABEL: Record<string, string> = {
   admin: 'Administrador',
@@ -77,6 +92,7 @@ export function Layout() {
   }, [hotelActual]);
 
   const navigate = useNavigate();
+  const location = useLocation();
   const [estadoTurno, setEstadoTurno] = useState<EstadoTurno | null>(null);
   const avisoMostradoRef = useRef(false);
 
@@ -155,13 +171,7 @@ export function Layout() {
     };
   }, [hotelActual, signOut, navigate]);
 
-  const navItems = [...NAV_ITEMS];
-  if (hotelActual?.rol === 'admin' || hotelActual?.rol === 'recepcion') {
-    navItems.splice(1, 0, { to: '/huespedes', label: 'Huéspedes', icon: '🧑' });
-  }
-  if (hotelActual?.rol === 'admin') {
-    navItems.push({ to: '/configuracion', label: 'Configuración', icon: '⚙' });
-  }
+  const navItems = hotelActual ? NAV_ITEMS.filter((item) => item.roles.includes(hotelActual.rol)) : [];
 
   const sidebarVisible = !isMobile || navAbierto;
 
@@ -173,6 +183,15 @@ export function Layout() {
 
   if (hotelActual?.rol === 'recepcion' && sesionCajaAbierta === false) {
     return <AbrirTurnoGate hotelId={hotelActual.hotelId} hotelNombre={hotelActual.nombre} onAbierto={() => setSesionCajaAbierta(true)} />;
+  }
+
+  // Que un rol no vea un módulo en el menú no alcanza: si alguien tipea la
+  // URL a mano igual queda bloqueado -- se manda al primer módulo que sí
+  // le corresponde (para admin/recepción es Habitaciones, para HK es
+  // Tareas HK, por el orden de NAV_ITEMS).
+  if (hotelActual && location.pathname !== '/' && !rutaPermitida(hotelActual.rol, location.pathname)) {
+    const home = navItems[0]?.to ?? '/habitaciones';
+    return <Navigate to={home} replace />;
   }
 
   return (
