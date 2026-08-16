@@ -353,10 +353,10 @@ function ResumenSesion({
   return (
     <div>
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, marginBottom: 20 }}>
-        <MetricCard label="Saldo inicial" value={`PEN ${sesion.saldo_inicial}`} />
-        <MetricCard label="Ingresos" value={`PEN ${sesion.totalIngresos}`} />
-        <MetricCard label="Egresos" value={`PEN ${sesion.totalEgresos}`} />
-        <MetricCard label={sesion.estado === 'cerrada' ? 'Saldo final' : 'Saldo actual'} value={`PEN ${saldoFinal}`} destacado />
+        <MetricCard label="Saldo inicial" value={`PEN ${Number(sesion.saldo_inicial).toFixed(2)}`} />
+        <MetricCard label="Ingresos" value={`PEN ${Number(sesion.totalIngresos).toFixed(2)}`} />
+        <MetricCard label="Egresos" value={`PEN ${Number(sesion.totalEgresos).toFixed(2)}`} />
+        <MetricCard label={sesion.estado === 'cerrada' ? 'Saldo final' : 'Saldo actual'} value={`PEN ${Number(saldoFinal).toFixed(2)}`} destacado />
       </div>
 
       {error && <p style={{ color: 'var(--danger)', fontSize: 12, marginBottom: 8 }}>{error}</p>}
@@ -395,7 +395,7 @@ function ResumenSesion({
                       />
                     ) : (
                       <>
-                        {m.monto}
+                        {Number(m.monto).toFixed(2)}
                         {m.moneda_pago === 'USD' && (
                           <span style={{ fontSize: 10, fontWeight: 400, display: 'block' }}>
                             (USD {Number(m.monto_original).toFixed(2)} @ {Number(m.tipo_cambio_aplicado).toFixed(3)})
