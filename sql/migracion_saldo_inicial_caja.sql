@@ -1,0 +1,13 @@
+-- Saldo inicial de caja para el arranque en producción: como no se migran
+-- los movimientos históricos de caja, el hotel necesita declarar cuánto
+-- efectivo hay físicamente en caja el día que el sistema empieza a operar
+-- de verdad. Ese valor se usa UNA sola vez, como saldo_inicial de la
+-- primerísima sesión de turno del hotel (ver CajaService.abrirTurno());
+-- de ahí en adelante el saldo se hereda normalmente del cierre anterior y
+-- este campo queda inerte.
+--
+-- Se bloquea su edición en cuanto exista al menos una sesiones_turno para
+-- el hotel (ver ConfiguracionService.actualizarHotel()), para que nadie
+-- pueda "inyectar" saldo después de que la caja ya empezó a operar sin que
+-- quede en el rastro de movimientos.
+alter table hoteles add column if not exists saldo_inicial_caja numeric(10,2) not null default 0;

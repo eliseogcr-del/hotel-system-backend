@@ -28,7 +28,12 @@ create table hoteles (
     modo_24h boolean not null default false,
     -- Cobro por mascota, por día (igual criterio que la tarifa de
     -- habitación); 0 = sin cobro configurado todavía.
-    precio_mascota numeric(10,2) not null default 0
+    precio_mascota numeric(10,2) not null default 0,
+    -- Saldo inicial de caja al arrancar en producción (no se migran
+    -- movimientos históricos): se usa una sola vez, como saldo_inicial de
+    -- la primera sesión de turno del hotel; después queda inerte y su
+    -- edición se bloquea en cuanto exista alguna sesiones_turno.
+    saldo_inicial_caja numeric(10,2) not null default 0
 );
 
 -- ============================================================================

@@ -18,4 +18,11 @@ export class ActualizarHotelDto {
   @IsNumber()
   @Min(0)
   precioMascota?: number;
+
+  // Solo editable mientras el hotel no tenga ninguna sesión de caja
+  // todavía (ver ConfiguracionService.actualizarHotel()).
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  saldoInicialCaja?: number;
 }

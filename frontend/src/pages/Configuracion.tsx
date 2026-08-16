@@ -67,6 +67,8 @@ interface HotelConfig {
   hora_checkout: string;
   modo_24h: boolean;
   precio_mascota: number;
+  saldo_inicial_caja: number;
+  saldo_inicial_caja_bloqueado: boolean;
 }
 
 type RolHotel = 'admin' | 'recepcion' | 'hk';
@@ -161,6 +163,7 @@ function SeccionHotel({
   const [horaCheckout, setHoraCheckout] = useState(hotel.hora_checkout.slice(0, 5));
   const [modo24h, setModo24h] = useState(hotel.modo_24h);
   const [precioMascota, setPrecioMascota] = useState(hotel.precio_mascota);
+  const [saldoInicialCaja, setSaldoInicialCaja] = useState(hotel.saldo_inicial_caja);
   const [guardando, setGuardando] = useState(false);
 
   async function guardar(e: FormEvent) {
@@ -173,6 +176,7 @@ function SeccionHotel({
         horaCheckout,
         modo24h,
         precioMascota,
+        ...(hotel.saldo_inicial_caja_bloqueado ? {} : { saldoInicialCaja }),
       });
       onCambio();
     } catch (err) {
@@ -229,10 +233,27 @@ function SeccionHotel({
             style={{ ...inputStyle, width: 100 }}
           />
         </label>
+        <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13 }}>
+          Saldo inicial de caja (S/.)
+          <input
+            type="number"
+            min={0}
+            step={0.01}
+            value={saldoInicialCaja}
+            onChange={(e) => setSaldoInicialCaja(Number(e.target.value))}
+            disabled={hotel.saldo_inicial_caja_bloqueado}
+            style={{ ...inputStyle, width: 100 }}
+          />
+        </label>
         <button type="submit" disabled={guardando} style={btnPrimary}>
           Guardar
         </button>
       </form>
+      <p style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 8 }}>
+        {hotel.saldo_inicial_caja_bloqueado
+          ? 'El saldo inicial de caja ya no se puede editar: este hotel ya tiene turnos registrados.'
+          : 'Efectivo físico con el que arranca la caja al empezar a operar en producción (no se migran movimientos históricos). Se usa una sola vez, en la primera sesión de turno que se abra; después este campo queda bloqueado.'}
+      </p>
     </section>
   );
 }

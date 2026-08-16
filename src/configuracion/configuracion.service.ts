@@ -1,5 +1,6 @@
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { SupabaseClient } from '@supabase/supabase-js';
+import { SupabaseService } from '../common/supabase/supabase.service';
 import { CrearTipoHabitacionDto } from './dto/crear-tipo-habitacion.dto';
 import { ActualizarTipoHabitacionDto } from './dto/actualizar-tipo-habitacion.dto';
 import { CrearHabitacionDto } from './dto/crear-habitacion.dto';
@@ -11,19 +12,23 @@ import { ActualizarHotelDto } from './dto/actualizar-hotel.dto';
 const CODIGO_UNIQUE_VIOLATION = '23505';
 const CODIGO_FOREIGN_KEY_VIOLATION = '23503';
 
+const HOTEL_SELECT = 'id, nombre, hora_checkin, hora_checkout, modo_24h, precio_mascota, saldo_inicial_caja';
+
 @Injectable()
 export class ConfiguracionService {
+  constructor(private readonly supabase: SupabaseService) {}
+
   // ---------- Hotel (horas de check-in/checkout) ----------
 
   async obtenerHotel(client: SupabaseClient, hotelId: string) {
     const { data, error } = await client
       .from('hoteles')
-      .select('id, nombre, hora_checkin, hora_checkout, modo_24h, precio_mascota')
+      .select(HOTEL_SELECT)
       .eq('id', hotelId)
       .maybeSingle();
     if (error) throw error;
     if (!data) throw new NotFoundException('Hotel no encontrado');
-    return data;
+    return { ...data, saldo_inicial_caja_bloqueado: await this.yaOperoCaja(hotelId) };
   }
 
   async actualizarHotel(client: SupabaseClient, hotelId: string, dto: ActualizarHotelDto) {
@@ -33,15 +38,39 @@ export class ConfiguracionService {
     if (dto.modo24h !== undefined) cambios.modo_24h = dto.modo24h;
     if (dto.precioMascota !== undefined) cambios.precio_mascota = dto.precioMascota;
 
+    if (dto.saldoInicialCaja !== undefined) {
+      if (await this.yaOperoCaja(hotelId)) {
+        throw new BadRequestException(
+          'El saldo inicial de caja ya no se puede modificar: este hotel ya tiene al menos una sesión de turno registrada.',
+        );
+      }
+      cambios.saldo_inicial_caja = dto.saldoInicialCaja;
+    }
+
     const { data, error } = await client
       .from('hoteles')
       .update(cambios)
       .eq('id', hotelId)
-      .select('id, nombre, hora_checkin, hora_checkout, modo_24h, precio_mascota')
+      .select(HOTEL_SELECT)
       .maybeSingle();
     if (error) throw error;
     if (!data) throw new NotFoundException('Hotel no encontrado');
-    return data;
+    return { ...data, saldo_inicial_caja_bloqueado: await this.yaOperoCaja(hotelId) };
+  }
+
+  // Se usa el cliente de servicio (salta RLS) para que la respuesta sea la
+  // misma sin importar el rol de quien pregunta -- si se usara el cliente
+  // de la request, un recepcionista con RLS restringida a "mis sesiones"
+  // podría ver 0 sesiones aunque OTRO recepcionista ya haya abierto la
+  // primera, reportando el campo como editable cuando ya no debería.
+  private async yaOperoCaja(hotelId: string): Promise<boolean> {
+    const service = this.supabase.getServiceClient();
+    const { count, error } = await service
+      .from('sesiones_turno')
+      .select('id, personal_hotel!inner(hotel_id)', { count: 'exact', head: true })
+      .eq('personal_hotel.hotel_id', hotelId);
+    if (error) throw error;
+    return (count ?? 0) > 0;
   }
 
   // ---------- Tipos de habitación ----------

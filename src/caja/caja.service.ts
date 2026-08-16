@@ -136,13 +136,28 @@ export class CajaService {
       .maybeSingle();
     if (anteriorError) throw anteriorError;
 
+    // Si nunca hubo una sesión cerrada antes (arranque en producción, sin
+    // historial migrado), el saldo inicial sale del que el admin configuró
+    // una sola vez en Configuración (ver ConfiguracionService.actualizarHotel,
+    // que bloquea ese campo en cuanto exista alguna sesiones_turno).
+    let saldoInicial = anterior?.saldo_final;
+    if (saldoInicial === undefined) {
+      const { data: hotel, error: hotelError } = await service
+        .from('hoteles')
+        .select('saldo_inicial_caja')
+        .eq('id', hotelId)
+        .maybeSingle();
+      if (hotelError) throw hotelError;
+      saldoInicial = Number(hotel?.saldo_inicial_caja ?? 0);
+    }
+
     const { data: creada, error: insError } = await client
       .from('sesiones_turno')
       .insert({
         personal_hotel_id: personalHotel.id,
         turno_id: dto.turnoId,
         sesion_anterior_id: anterior?.id ?? null,
-        saldo_inicial: anterior?.saldo_final ?? 0,
+        saldo_inicial: saldoInicial,
         estado: 'abierta',
       })
       .select('id')
