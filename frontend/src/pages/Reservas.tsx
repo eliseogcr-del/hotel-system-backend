@@ -500,7 +500,7 @@ function CalendarioReservas({
       {error && <p style={{ color: 'var(--danger)' }}>{error}</p>}
 
       {!loading && !error && (
-        <div style={{ overflowX: 'auto', border: '1px solid var(--border)', borderRadius: 'var(--radius)' }}>
+        <div style={{ overflowX: 'auto', border: `2px solid ${CAL_BORDE}`, borderRadius: 'var(--radius)' }}>
           <table style={{ borderCollapse: 'collapse', fontSize: 12, width: '100%' }}>
             <thead>
               <tr>
@@ -511,44 +511,72 @@ function CalendarioReservas({
                     position: 'sticky',
                     left: 0,
                     zIndex: 2,
-                    background: 'var(--surface-2)',
+                    background: 'var(--chrome-bg)',
+                    color: '#fff',
                     width: 108,
                     maxWidth: 108,
                     padding: '6px 6px',
                     textAlign: 'left',
+                    borderRight: `2px solid ${CAL_BORDE}`,
                   }}
                 >
                   Habitación
                 </th>
                 {gruposMes.map((g, i) => (
-                  <th key={i} colSpan={g.span} style={thCalStyle}>
+                  <th
+                    key={i}
+                    colSpan={g.span}
+                    style={{
+                      ...thCalStyle,
+                      background: 'var(--chrome-bg)',
+                      color: '#fff',
+                      textTransform: 'uppercase',
+                      letterSpacing: 0.6,
+                      borderRight: `2px solid ${CAL_BORDE}`,
+                      borderBottom: `2px solid ${CAL_BORDE}`,
+                    }}
+                  >
                     {g.etiqueta}
                   </th>
                 ))}
               </tr>
               <tr>
-                {dias.map((d, i) => (
-                  <th key={i} style={{ ...thCalStyle, minWidth: 34 }}>
-                    {d.getDate()}
-                  </th>
-                ))}
+                {dias.map((d, i) => {
+                  const finde = d.getDay() === 0 || d.getDay() === 6;
+                  return (
+                    <th
+                      key={i}
+                      style={{
+                        ...thCalStyle,
+                        minWidth: 34,
+                        background: finde ? 'var(--brand)' : CAL_HEADER_DIA,
+                        color: '#fff',
+                        fontSize: 13,
+                      }}
+                    >
+                      {d.getDate()}
+                    </th>
+                  );
+                })}
               </tr>
             </thead>
             <tbody>
-              {habitacionesOrdenadas.map((h) => (
-                <tr key={h.id}>
+              {habitacionesOrdenadas.map((h, idxFila) => (
+                <tr key={h.id} style={{ background: idxFila % 2 === 1 ? 'var(--surface-0)' : 'transparent' }}>
                   <td
                     title={`${h.hab_numero} · ${h.tipos_habitacion?.nombre ?? ''}`}
                     style={{
                       ...tdCalStyle,
                       position: 'sticky',
                       left: 0,
-                      background: 'var(--surface-1)',
+                      background: idxFila % 2 === 1 ? 'var(--surface-0)' : 'var(--surface-1)',
                       textAlign: 'left',
                       width: 108,
                       maxWidth: 108,
                       padding: '6px 6px',
                       overflow: 'hidden',
+                      borderRight: `2px solid ${CAL_BORDE}`,
+                      fontWeight: 700,
                     }}
                   >
                     <span style={{ fontWeight: 500 }}>{h.hab_numero}</span>
@@ -608,7 +636,7 @@ function CalendarioReservas({
                               flex: 1,
                               background: c.derecha.ocupado ? 'var(--brand)' : 'transparent',
                               opacity: c.derecha.ocupado ? 0.6 : 1,
-                              borderLeft: '1px dashed var(--surface-0)',
+                              borderLeft: `1.5px dashed ${CAL_BORDE}`,
                               cursor: 'pointer',
                             }}
                           />
@@ -957,20 +985,27 @@ const btnToggleActivo: CSSProperties = {
   borderColor: 'var(--brand)',
 };
 
+// Grilla del calendario: líneas más oscuras y gruesas que el resto de la
+// app (a propósito, para que se lea como un calendario "de verdad" y no
+// como una tabla más) y una banda de encabezado con color, distinta para
+// el mes, los días de semana y el fin de semana.
+const CAL_BORDE = '#9a978c';
+const CAL_HEADER_DIA = '#2f5fa8';
+
 const thCalStyle: CSSProperties = {
   padding: '6px 8px',
-  borderBottom: '1px solid var(--border)',
-  borderRight: '1px solid var(--border)',
+  borderBottom: `2px solid ${CAL_BORDE}`,
+  borderRight: `1.5px solid ${CAL_BORDE}`,
   textAlign: 'center',
-  fontWeight: 600,
+  fontWeight: 700,
   color: 'var(--text-secondary)',
   whiteSpace: 'nowrap',
 };
 
 const tdCalStyle: CSSProperties = {
   padding: '6px 8px',
-  borderBottom: '1px solid var(--border)',
-  borderRight: '1px solid var(--border)',
+  borderBottom: `1.5px solid ${CAL_BORDE}`,
+  borderRight: `1.5px solid ${CAL_BORDE}`,
   textAlign: 'center',
   fontSize: 11,
 };
