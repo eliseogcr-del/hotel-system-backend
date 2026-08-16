@@ -248,12 +248,16 @@ export function CheckinRapidoModal({
                   setMensajeBusqueda(null);
                   setResultados([]);
                 }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    buscar();
+                  }
+                }}
                 placeholder="DNI, nombre, apellido, RUC o razón social"
                 style={{ ...inputStyle, flex: 1, minWidth: 220 }}
               />
-              <button type="button" onClick={buscar} disabled={buscando || !busqueda.trim()} style={btnSecondary}>
-                {buscando ? 'Buscando...' : 'Buscar'}
-              </button>
+              {buscando && <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>Buscando...</span>}
             </div>
             {mensajeBusqueda && (
               <p
