@@ -1,7 +1,7 @@
 import { useEffect, useState, type CSSProperties, type FormEvent } from 'react';
 import { api, ApiError } from '../lib/api';
 import { useIsMobile } from '../hooks/useIsMobile';
-import { buscarHuespedPorDni } from '../lib/huespedes';
+import { buscarHuespedPorDni, buscarHuespedPorRuc, buscarHuespedesPorTexto, type Huesped } from '../lib/huespedes';
 
 const TIPOS_DOC = [
   { value: 'dni', label: 'DNI' },
@@ -63,10 +63,12 @@ export function CheckinRapidoModal({
   onCreado,
 }: Props) {
   const isMobile = useIsMobile();
-  const [nroDoc, setNroDoc] = useState('');
+  const [busqueda, setBusqueda] = useState('');
   const [buscando, setBuscando] = useState(false);
-  const [huespedEncontrado, setHuespedEncontrado] = useState<boolean | null>(null);
+  const [mensajeBusqueda, setMensajeBusqueda] = useState<{ texto: string; encontrado: boolean } | null>(null);
+  const [resultados, setResultados] = useState<Huesped[]>([]);
 
+  const [nroDoc, setNroDoc] = useState('');
   const [tipoDoc, setTipoDoc] = useState('dni');
   const [nombres, setNombres] = useState('');
   const [apellidos, setApellidos] = useState('');
@@ -109,26 +111,55 @@ export function CheckinRapidoModal({
     setTarifaDia(precioSegunTipoCliente(precios, valor));
   }
 
+  function seleccionarHuesped(h: Huesped) {
+    setTipoDoc(h.tipo_doc);
+    setNroDoc(h.nro_doc);
+    setNombres(h.nombres);
+    setApellidos(h.apellidos);
+    setTelefono(h.telefono ?? '');
+    setCorreo(h.correo ?? '');
+    setNacionalidad(h.nacionalidad ?? '');
+    setOrigen(h.origen ?? '');
+    setFechaNacimiento(h.fecha_nacimiento ?? '');
+    setRuc(h.ruc ?? '');
+    setRazonSocial(h.razon_social ?? '');
+    setResultados([]);
+    setMensajeBusqueda({ texto: 'Huésped encontrado — datos autocompletados.', encontrado: true });
+  }
+
+  // Búsqueda general por cualquiera de: DNI/documento exacto, RUC exacto
+  // (11 dígitos), o nombre/apellido/razón social parcial -- mismo criterio
+  // que ReservaFormModal.buscarCliente(). Si hay un único resultado se
+  // autocompleta directo; si hay varios se listan para elegir; si no hay
+  // ninguno, se limpian los campos y el recepcionista lo registra a mano.
   async function buscar() {
-    if (!nroDoc.trim()) return;
+    const q = busqueda.trim();
+    if (!q) return;
     setBuscando(true);
     setError(null);
+    setResultados([]);
+    setMensajeBusqueda(null);
     try {
-      const huesped = await buscarHuespedPorDni(hotelId, nroDoc.trim());
-      if (huesped) {
-        setHuespedEncontrado(true);
-        setTipoDoc(huesped.tipo_doc);
-        setNombres(huesped.nombres);
-        setApellidos(huesped.apellidos);
-        setTelefono(huesped.telefono ?? '');
-        setCorreo(huesped.correo ?? '');
-        setNacionalidad(huesped.nacionalidad ?? '');
-        setOrigen(huesped.origen ?? '');
-        setFechaNacimiento(huesped.fecha_nacimiento ?? '');
-        setRuc(huesped.ruc ?? '');
-        setRazonSocial(huesped.razon_social ?? '');
+      if (/^\d{11}$/.test(q)) {
+        const porRuc = await buscarHuespedPorRuc(hotelId, q);
+        if (porRuc) {
+          seleccionarHuesped(porRuc);
+          return;
+        }
+      }
+
+      const porDoc = await buscarHuespedPorDni(hotelId, q);
+      if (porDoc) {
+        seleccionarHuesped(porDoc);
+        return;
+      }
+
+      const varios = await buscarHuespedesPorTexto(hotelId, q);
+      if (varios.length === 1) {
+        seleccionarHuesped(varios[0]);
+      } else if (varios.length > 1) {
+        setResultados(varios);
       } else {
-        setHuespedEncontrado(false);
         setNombres('');
         setApellidos('');
         setTelefono('');
@@ -138,6 +169,10 @@ export function CheckinRapidoModal({
         setFechaNacimiento('');
         setRuc('');
         setRazonSocial('');
+        setMensajeBusqueda({
+          texto: 'No se encontró ese huésped en la base de datos: complete los datos abajo para registrarlo.',
+          encontrado: false,
+        });
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'No se pudo buscar el huésped');
@@ -197,40 +232,64 @@ export function CheckinRapidoModal({
         {error && <p style={{ color: 'var(--danger)', fontSize: 13, marginBottom: 12 }}>{error}</p>}
 
         <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-          {/* ---------- Documento ---------- */}
+          {/* ---------- Búsqueda ---------- */}
           <div style={cardStyle}>
-            <p style={cardTitleStyle}>Documento del huésped</p>
+            <p style={cardTitleStyle}>Buscar huésped</p>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-              <select value={tipoDoc} onChange={(e) => setTipoDoc(e.target.value)} style={{ ...inputStyle, width: 160 }}>
-                {TIPOS_DOC.map((t) => (
-                  <option key={t.value} value={t.value}>
-                    {t.label}
-                  </option>
-                ))}
-              </select>
               <input
-                value={nroDoc}
+                value={busqueda}
                 onChange={(e) => {
-                  setNroDoc(e.target.value);
-                  setHuespedEncontrado(null);
+                  setBusqueda(e.target.value);
+                  setMensajeBusqueda(null);
+                  setResultados([]);
                 }}
-                placeholder="Número de documento"
-                style={{ ...inputStyle, flex: 1, minWidth: 140 }}
-                required
+                placeholder="DNI, nombre, apellido, RUC o razón social"
+                style={{ ...inputStyle, flex: 1, minWidth: 220 }}
               />
-              <button type="button" onClick={buscar} disabled={buscando || !nroDoc.trim()} style={btnSecondary}>
+              <button type="button" onClick={buscar} disabled={buscando || !busqueda.trim()} style={btnSecondary}>
                 {buscando ? 'Buscando...' : 'Buscar'}
               </button>
             </div>
-            {huespedEncontrado === true && (
-              <p style={{ fontSize: 11, color: 'var(--disponible)', margin: '6px 0 0' }}>
-                Huésped ya registrado — datos autocompletados.
+            {mensajeBusqueda && (
+              <p
+                style={{
+                  fontSize: 11,
+                  color: mensajeBusqueda.encontrado ? 'var(--disponible)' : 'var(--text-muted)',
+                  margin: '6px 0 0',
+                }}
+              >
+                {mensajeBusqueda.texto}
               </p>
             )}
-            {huespedEncontrado === false && (
-              <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: '6px 0 0' }}>
-                No se encontró: complete los datos para registrarlo.
-              </p>
+            {resultados.length > 0 && (
+              <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 4 }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                  <p style={{ fontSize: 11, color: 'var(--text-secondary)', margin: 0 }}>
+                    Se encontró más de un huésped, elige uno:
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setResultados([]);
+                      setMensajeBusqueda(null);
+                    }}
+                    style={{ ...btnSecondary, padding: '2px 8px', fontSize: 11 }}
+                  >
+                    Cancelar (registrar manualmente)
+                  </button>
+                </div>
+                {resultados.map((h) => (
+                  <button
+                    key={h.id}
+                    type="button"
+                    onClick={() => seleccionarHuesped(h)}
+                    style={{ ...btnSecondary, textAlign: 'left' }}
+                  >
+                    {h.apellidos}, {h.nombres} — {h.tipo_doc.toUpperCase()} {h.nro_doc}
+                    {h.razon_social ? ` — ${h.razon_social}` : ''}
+                  </button>
+                ))}
+              </div>
             )}
           </div>
 
@@ -238,6 +297,22 @@ export function CheckinRapidoModal({
           <div style={gridRowStyle}>
             <div style={cardStyle}>
               <p style={cardTitleStyle}>Datos personales</p>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 8 }}>
+                <div style={{ width: 150 }}>
+                  <label style={labelStyle}>Tipo de documento</label>
+                  <select value={tipoDoc} onChange={(e) => setTipoDoc(e.target.value)} style={inputStyle}>
+                    {TIPOS_DOC.map((t) => (
+                      <option key={t.value} value={t.value}>
+                        {t.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div style={{ flex: 1, minWidth: 140 }}>
+                  <label style={labelStyle}>Número de documento</label>
+                  <input value={nroDoc} onChange={(e) => setNroDoc(e.target.value)} style={inputStyle} required />
+                </div>
+              </div>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 8 }}>
                 <div style={{ flex: 1, minWidth: 140 }}>
                   <label style={labelStyle}>Nombres</label>

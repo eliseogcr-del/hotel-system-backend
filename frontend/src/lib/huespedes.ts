@@ -91,6 +91,23 @@ export async function buscarHuespedPorRuc(hotelId: string, ruc: string): Promise
 // parcial sobre nombres/apellidos, puede devolver varias coincidencias
 // (ej. "RIOS" matchea a cualquier huésped que tenga eso en cualquiera de
 // los dos campos) para que el recepcionista elija cuál es.
+// Búsqueda general (check-in rápido): a diferencia de buscarHuespedesPorNombre,
+// también matchea contra razón social -- a veces la reserva/estadía queda
+// identificada por el nombre de la empresa que paga, no por la persona.
+export async function buscarHuespedesPorTexto(hotelId: string, texto: string): Promise<Huesped[]> {
+  const q = texto.trim();
+  if (!q) return [];
+  const { data, error } = await supabase
+    .from('huespedes')
+    .select(HUESPED_SELECT)
+    .eq('hotel_id', hotelId)
+    .or(`nombres.ilike.%${q}%,apellidos.ilike.%${q}%,razon_social.ilike.%${q}%`)
+    .order('apellidos', { ascending: true })
+    .limit(10);
+  if (error) throw error;
+  return data ?? [];
+}
+
 export async function buscarHuespedesPorNombre(hotelId: string, texto: string): Promise<Huesped[]> {
   const q = texto.trim();
   if (!q) return [];
