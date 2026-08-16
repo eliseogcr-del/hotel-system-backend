@@ -94,10 +94,23 @@ export function Habitaciones() {
   const [vista, setVista] = useState<Vista>(
     () => (localStorage.getItem('habitaciones_vista') as Vista | null) ?? 'tabla',
   );
+  // Cada check-in/reserva/marcar-disponible recarga toda la tabla por
+  // defecto (ver cargarSiAutomatico) -- en jornadas con muchas acciones
+  // seguidas eso interrumpe seguido lo que se está haciendo, así que queda
+  // configurable y persistido; el botón "Refrescar" siempre está disponible
+  // para pedirlo a mano sin importar este valor.
+  const [actualizacionAutomatica, setActualizacionAutomatica] = useState<boolean>(
+    () => localStorage.getItem('habitaciones_auto_refresh') !== 'false',
+  );
 
   function cambiarVista(v: Vista) {
     setVista(v);
     localStorage.setItem('habitaciones_vista', v);
+  }
+
+  function cambiarActualizacionAutomatica(v: boolean) {
+    setActualizacionAutomatica(v);
+    localStorage.setItem('habitaciones_auto_refresh', String(v));
   }
 
   useEffect(() => {
@@ -139,6 +152,10 @@ export function Habitaciones() {
     cargar();
   }, [hotelActual]);
 
+  function cargarSiAutomatico() {
+    if (actualizacionAutomatica) cargar();
+  }
+
   async function guardarNotas(hab: Habitacion, notas: string) {
     if (!hotelActual || !hab.estadiaId) return;
     try {
@@ -168,7 +185,7 @@ export function Habitaciones() {
     if (!hotelActual) return;
     try {
       await api.patch(`/hoteles/${hotelActual.hotelId}/habitaciones/${hab.id}/marcar-disponible`);
-      cargar();
+      cargarSiAutomatico();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'No se pudo marcar disponible');
     }
@@ -194,7 +211,13 @@ export function Habitaciones() {
   }
 
   if (!hotelActual) return <p style={{ color: 'var(--text-muted)' }}>Cargando hotel...</p>;
-  if (loading) return <p style={{ color: 'var(--text-muted)' }}>Cargando habitaciones...</p>;
+  // Solo la carga inicial reemplaza toda la pantalla; las recargas
+  // posteriores (acciones, botón Refrescar) mantienen la tabla visible y
+  // solo muestran el aviso "Actualizando..." de abajo -- antes cualquier
+  // recarga la blanqueaba entera, cortando lo que se estaba haciendo.
+  if (loading && habitaciones.length === 0) {
+    return <p style={{ color: 'var(--text-muted)' }}>Cargando habitaciones...</p>;
+  }
   if (error && habitaciones.length === 0) return <p style={{ color: 'var(--danger)' }}>{error}</p>;
 
   return (
@@ -257,6 +280,34 @@ export function Habitaciones() {
             />
             Reservada (hay que pasar a estadía)
           </span>
+        </div>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 12, color: 'var(--text-secondary)' }}>
+            <input
+              type="checkbox"
+              checked={actualizacionAutomatica}
+              onChange={(e) => cambiarActualizacionAutomatica(e.target.checked)}
+            />
+            Actualizar automáticamente
+          </label>
+          <button
+            type="button"
+            onClick={cargar}
+            disabled={loading}
+            title="Volver a cargar la lista de habitaciones"
+            style={{
+              padding: '6px 10px',
+              fontSize: 12,
+              border: '1px solid var(--border)',
+              borderRadius: 'var(--radius)',
+              background: 'var(--surface-1)',
+              color: 'var(--text-secondary)',
+              cursor: loading ? 'default' : 'pointer',
+            }}
+          >
+            {loading ? 'Actualizando...' : '🔄 Refrescar'}
+          </button>
         </div>
 
         <div style={{ display: 'flex', border: '1px solid var(--border)', borderRadius: 'var(--radius)', overflow: 'hidden' }}>
@@ -506,7 +557,7 @@ export function Habitaciones() {
           habNumero={checkinHab.hab_numero}
           precios={preciosDe(checkinHab.tipos_habitacion?.id)}
           onClose={() => setCheckinHab(null)}
-          onCreado={cargar}
+          onCreado={cargarSiAutomatico}
         />
       )}
 
@@ -522,7 +573,7 @@ export function Habitaciones() {
           reservaId={reservaModal.reservaHoy.reservaId}
           lineaId={reservaModal.reservaHoy.lineaId}
           onClose={() => setReservaModal(null)}
-          onGuardado={cargar}
+          onGuardado={cargarSiAutomatico}
         />
       )}
     </div>
