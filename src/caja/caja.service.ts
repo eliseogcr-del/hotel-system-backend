@@ -81,7 +81,7 @@ export class CajaService {
 
     const { data: turno, error: turnoError } = await client
       .from('turnos')
-      .select('id')
+      .select('id, nombre, hora_inicio, hora_fin')
       .eq('id', dto.turnoId)
       .eq('hotel_id', hotelId)
       .eq('activo', true)
@@ -91,14 +91,40 @@ export class CajaService {
       throw new NotFoundException('El turno no existe o no está activo en este hotel');
     }
 
+    // No se puede abrir un turno fuera de su propio horario (ej. abrir
+    // "Tarde" a las 10am si dice 15:00-21:00) -- cada turno solo se puede
+    // abrir mientras la hora actual cae dentro de su rango.
+    if (!this.estaEnHorarioDelTurno(turno.hora_inicio, turno.hora_fin)) {
+      throw new BadRequestException(
+        `No puedes abrir el turno '${turno.nombre}' (${turno.hora_inicio.slice(0, 5)}–${turno.hora_fin.slice(0, 5)}) fuera de su horario; ahora mismo son las ${this.horaActualLimaTexto()}.`,
+      );
+    }
+
     // Herencia de saldo entre sesiones (CLAUDE.md 3.4): el saldo pasa de una
     // caja a la siguiente aunque las trabajen recepcionistas distintos, pero
     // cada quien solo ve sus propios movimientos (RLS restringe
-    // sesiones_turno a "mis sesiones" para un no-admin). Por eso esta única
-    // lectura del saldo_final del cierre anterior se hace con el cliente de
-    // servicio (salta RLS): no se expone nada más de esa sesión ajena, solo
-    // se usa su saldo_final como saldo_inicial de la nueva.
+    // sesiones_turno a "mis sesiones" para un no-admin). Por eso esta
+    // lectura del saldo_final del cierre anterior, y la de abajo que revisa
+    // si ALGUIEN MÁS ya tiene este mismo turno abierto, se hacen con el
+    // cliente de servicio (salta RLS) -- de la sesión ajena solo se expone
+    // el nombre de quien la tiene abierta, a propósito, para el mensaje.
     const service = this.supabase.getServiceClient();
+
+    const { data: otraAbierta, error: otraAbiertaError } = await service
+      .from('sesiones_turno')
+      .select('id, personal_hotel(personal(nombre))')
+      .eq('turno_id', dto.turnoId)
+      .eq('estado', 'abierta')
+      .maybeSingle();
+    if (otraAbiertaError) throw otraAbiertaError;
+    if (otraAbierta) {
+      const nombreOtro =
+        (otraAbierta as any).personal_hotel?.personal?.nombre ?? 'otro colaborador';
+      throw new ConflictException(
+        `Ya hay una sesión abierta en el turno '${turno.nombre}' con ${nombreOtro}. Debe cerrar su sesión antes de que puedas abrir este turno.`,
+      );
+    }
+
     const { data: anterior, error: anteriorError } = await service
       .from('sesiones_turno')
       .select('id, saldo_final, personal_hotel!inner(hotel_id)')
@@ -288,6 +314,30 @@ export class CajaService {
     const finLima = new Date(Date.UTC(anio, mes - 1, dia + (cruzaMedianoche ? 1 : 0)));
     finLima.setUTCHours(hFin, mFin, sFin || 0, 0);
     return finLima;
+  }
+
+  // Compara solo la hora del reloj (sin fecha) contra el rango [inicio, fin)
+  // del turno, en hora Lima. Si hora_fin <= hora_inicio se asume turno
+  // nocturno que cruza la medianoche (ej. 22:00-06:00): "ahora" cae dentro
+  // si es >= inicio O < fin.
+  private estaEnHorarioDelTurno(horaInicio: string, horaFin: string): boolean {
+    const ahoraLima = comoRelojLima(new Date());
+    const minutosAhora = ahoraLima.getUTCHours() * 60 + ahoraLima.getUTCMinutes();
+
+    const [hIni, mIni] = horaInicio.split(':').map(Number);
+    const [hFin, mFin] = horaFin.split(':').map(Number);
+    const minutosIni = hIni * 60 + mIni;
+    const minutosFin = hFin * 60 + mFin;
+
+    if (minutosFin <= minutosIni) {
+      return minutosAhora >= minutosIni || minutosAhora < minutosFin;
+    }
+    return minutosAhora >= minutosIni && minutosAhora < minutosFin;
+  }
+
+  private horaActualLimaTexto(): string {
+    const ahoraLima = comoRelojLima(new Date());
+    return `${String(ahoraLima.getUTCHours()).padStart(2, '0')}:${String(ahoraLima.getUTCMinutes()).padStart(2, '0')}`;
   }
 
   async obtenerDetalle(client: SupabaseClient, hotelId: string, sesionId: string) {
