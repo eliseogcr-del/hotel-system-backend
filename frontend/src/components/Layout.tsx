@@ -1,14 +1,21 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { useHotel } from '../contexts/HotelContext';
 import { useIsMobile } from '../hooks/useIsMobile';
-import { api } from '../lib/api';
+import { api, ApiError } from '../lib/api';
 
 interface TipoCambioVigente {
   fecha: string;
   valor_compra: number;
   valor_venta: number;
+}
+
+interface TurnoDisponible {
+  id: string;
+  nombre: string;
+  hora_inicio: string;
+  hora_fin: string;
 }
 
 interface EstadoTurno {
@@ -73,6 +80,31 @@ export function Layout() {
   const [estadoTurno, setEstadoTurno] = useState<EstadoTurno | null>(null);
   const avisoMostradoRef = useRef(false);
 
+  // Gate obligatorio: un recepcionista es responsable de su caja desde que
+  // entra, así que no puede usar el sistema sin haber elegido turno y
+  // abierto sesión de caja. null = todavía verificando (no se sabe si
+  // mostrar el gate o el sistema normal); admin/HK nunca lo ven.
+  const [sesionCajaAbierta, setSesionCajaAbierta] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    if (!hotelActual) {
+      setSesionCajaAbierta(null);
+      return;
+    }
+    if (hotelActual.rol !== 'recepcion') {
+      setSesionCajaAbierta(true);
+      return;
+    }
+    setSesionCajaAbierta(null);
+    api
+      .get(`/hoteles/${hotelActual.hotelId}/caja/actual`)
+      .then(() => setSesionCajaAbierta(true))
+      .catch((err) => {
+        if (err instanceof ApiError && err.status === 404) setSesionCajaAbierta(false);
+        else setSesionCajaAbierta(true); // ante un error inesperado, no se bloquea el acceso
+      });
+  }, [hotelActual]);
+
   useEffect(() => {
     // Solo admin/recepción pueden tener caja abierta (mismos roles que
     // habilitan el módulo Caja); HK no necesita este poll.
@@ -132,6 +164,16 @@ export function Layout() {
   }
 
   const sidebarVisible = !isMobile || navAbierto;
+
+  if (hotelActual?.rol === 'recepcion' && sesionCajaAbierta === null) {
+    // Evita el parpadeo de mostrar el menú normal un instante antes de
+    // saber si hace falta el gate de turno.
+    return <p style={{ padding: 20, color: 'var(--text-muted)' }}>Cargando...</p>;
+  }
+
+  if (hotelActual?.rol === 'recepcion' && sesionCajaAbierta === false) {
+    return <AbrirTurnoGate hotelId={hotelActual.hotelId} hotelNombre={hotelActual.nombre} onAbierto={() => setSesionCajaAbierta(true)} />;
+  }
 
   return (
     <div style={{ display: 'flex', minHeight: '100vh' }}>
@@ -348,6 +390,128 @@ export function Layout() {
           <Outlet />
         </main>
       </div>
+    </div>
+  );
+}
+
+// Pantalla obligatoria justo después de loguearse (solo rol recepción):
+// nadie entra al resto del sistema sin elegir turno, que abre la caja de
+// una vez (mismo POST /caja/abrir que usa Caja.tsx -- el saldo inicial se
+// hereda del cierre del turno anterior, ver CajaService.abrirTurno()).
+function AbrirTurnoGate({
+  hotelId,
+  hotelNombre,
+  onAbierto,
+}: {
+  hotelId: string;
+  hotelNombre: string;
+  onAbierto: () => void;
+}) {
+  const { signOut } = useAuth();
+  const [turnos, setTurnos] = useState<TurnoDisponible[]>([]);
+  const [turnoId, setTurnoId] = useState('');
+  const [enviando, setEnviando] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    api.get<TurnoDisponible[]>(`/hoteles/${hotelId}/caja/turnos`).then(setTurnos).catch(() => {});
+  }, [hotelId]);
+
+  async function abrir(e: FormEvent) {
+    e.preventDefault();
+    if (!turnoId) return;
+    setEnviando(true);
+    setError(null);
+    try {
+      await api.post(`/hoteles/${hotelId}/caja/abrir`, { turnoId });
+      onAbierto();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'No se pudo abrir el turno');
+    } finally {
+      setEnviando(false);
+    }
+  }
+
+  return (
+    <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16, boxSizing: 'border-box' }}>
+      <form
+        onSubmit={abrir}
+        style={{
+          width: '100%',
+          maxWidth: 360,
+          background: 'var(--surface-1)',
+          border: '1px solid var(--border)',
+          borderRadius: 12,
+          padding: 28,
+          boxSizing: 'border-box',
+        }}
+      >
+        <p style={{ fontWeight: 600, fontSize: 16, margin: '0 0 4px' }}>Elige tu turno</p>
+        <p style={{ fontSize: 12, color: 'var(--text-secondary)', margin: '0 0 20px' }}>
+          {hotelNombre} — antes de entrar al sistema, abre tu caja. El saldo inicial se hereda del
+          cierre del turno anterior.
+        </p>
+
+        <label style={{ fontSize: 12, color: 'var(--text-secondary)', display: 'block', marginBottom: 4 }}>
+          Turno
+        </label>
+        <select
+          value={turnoId}
+          onChange={(e) => setTurnoId(e.target.value)}
+          required
+          style={{
+            width: '100%',
+            padding: '9px 10px',
+            border: '1px solid var(--border)',
+            borderRadius: 'var(--radius)',
+            fontSize: 14,
+            boxSizing: 'border-box',
+          }}
+        >
+          <option value="">Selecciona...</option>
+          {turnos.map((t) => (
+            <option key={t.id} value={t.id}>
+              {t.nombre} ({t.hora_inicio}–{t.hora_fin})
+            </option>
+          ))}
+        </select>
+
+        {error && <p style={{ color: 'var(--danger)', fontSize: 12, marginTop: 12 }}>{error}</p>}
+
+        <button
+          type="submit"
+          disabled={enviando || !turnoId}
+          style={{
+            width: '100%',
+            marginTop: 20,
+            padding: '10px',
+            background: 'var(--brand)',
+            color: '#fff',
+            border: 'none',
+            borderRadius: 'var(--radius)',
+            fontSize: 14,
+            fontWeight: 500,
+          }}
+        >
+          {enviando ? 'Abriendo...' : 'Iniciar turno y entrar'}
+        </button>
+        <button
+          type="button"
+          onClick={() => signOut()}
+          style={{
+            width: '100%',
+            marginTop: 10,
+            padding: '8px',
+            background: 'transparent',
+            border: '1px solid var(--border)',
+            borderRadius: 'var(--radius)',
+            fontSize: 13,
+            color: 'var(--text-secondary)',
+          }}
+        >
+          Cerrar sesión
+        </button>
+      </form>
     </div>
   );
 }
