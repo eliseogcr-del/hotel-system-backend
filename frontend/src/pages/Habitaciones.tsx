@@ -570,6 +570,7 @@ export function Habitaciones() {
           hotelId={hotelActual.hotelId}
           habitacionId={checkinHab.id}
           habNumero={checkinHab.hab_numero}
+          habTipo={checkinHab.tipos_habitacion?.nombre}
           precios={preciosDe(checkinHab.tipos_habitacion?.id)}
           onClose={() => setCheckinHab(null)}
           onCreado={cargarSiAutomatico}

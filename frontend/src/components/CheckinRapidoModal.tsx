@@ -42,6 +42,7 @@ interface Props {
   hotelId: string;
   habitacionId: string;
   habNumero: number;
+  habTipo?: string | null;
   precios: TipoHabitacionPrecios | null;
   onClose: () => void;
   onCreado: () => void;
@@ -58,6 +59,7 @@ export function CheckinRapidoModal({
   hotelId,
   habitacionId,
   habNumero,
+  habTipo,
   precios,
   onClose,
   onCreado,
@@ -228,7 +230,10 @@ export function CheckinRapidoModal({
   return (
     <div style={overlayStyle}>
       <div style={{ ...modalStyle, maxWidth: isMobile ? 560 : 960 }}>
-        <h2 style={{ fontSize: 17, marginBottom: 16 }}>Check-in · Habitación {habNumero}</h2>
+        <h2 style={{ fontSize: 17, marginBottom: 16 }}>
+          Check-in · Habitación {habNumero}
+          {habTipo ? <span style={{ fontWeight: 400, color: 'var(--text-secondary)' }}> ({habTipo})</span> : null}
+        </h2>
         {error && <p style={{ color: 'var(--danger)', fontSize: 13, marginBottom: 12 }}>{error}</p>}
 
         <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
