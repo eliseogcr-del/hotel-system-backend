@@ -344,6 +344,13 @@ interface SegmentoCelda {
   fechaInicio: string;
 }
 
+// Una celda de un día "partido" (checkout de una reserva con margen para
+// otra el mismo día) nunca se fusiona con las vecinas, así que sus dos
+// mitades siempre tienen span=1 -- no hace falta cargar ese campo aparte.
+type CeldaRender =
+  | { tipo: 'simple'; segmento: SegmentoCelda }
+  | { tipo: 'partida'; saliente: SegmentoCelda; derecha: SegmentoCelda };
+
 function CalendarioReservas({
   habitaciones,
   calendario,
@@ -383,52 +390,97 @@ function CalendarioReservas({
     [habitaciones],
   );
 
-  function segmentosHabitacion(habId: string): SegmentoCelda[] {
-    const items = calendario.filter((c) => c.habitacionId === habId);
-    const estadoDias = dias.map((d) => {
-      const ymd = fechaYMD(d);
-      const match = items.find(
-        (it) => ymd >= fechaYMD(new Date(it.checkinPrevisto)) && ymd <= fechaYMD(new Date(it.checkoutPrevisto)),
-      );
-      return match
-        ? {
-            ocupado: true as const,
-            key: match.id,
-            huesped: match.huesped,
-            reservaId: match.reservaId,
-            lineaId: match.id,
-            estadiaId: match.estadiaId,
-            estadoEstadia: match.estadoEstadia,
-            fechaInicio: ymd,
-          }
-        : {
-            ocupado: false as const,
-            key: null as string | null,
-            huesped: '',
-            reservaId: null,
-            lineaId: null,
-            estadiaId: null,
-            estadoEstadia: null,
-            fechaInicio: ymd,
-          };
-    });
+  function segmentoDesde(item: ReservaCalendario, fechaInicio: string): SegmentoCelda {
+    return {
+      span: 1,
+      ocupado: true,
+      huesped: item.huesped,
+      key: item.id,
+      reservaId: item.reservaId,
+      lineaId: item.id,
+      estadiaId: item.estadiaId,
+      estadoEstadia: item.estadoEstadia,
+      fechaInicio,
+    };
+  }
 
-    // Solo se fusionan días OCUPADOS consecutivos de la misma reserva (para
-    // pintar la barra tipo Gantt). Los días vacíos nunca se fusionan entre
-    // sí -- cada uno queda como su propia celda clickeable, para que el
-    // click abra el formulario con la fecha exacta que se tocó (si se
-    // fusionaran, el click siempre tomaría el primer día del bloque en vez
-    // del día bajo el cursor).
-    const segmentos: SegmentoCelda[] = [];
-    for (const e of estadoDias) {
-      const ultimo = segmentos[segmentos.length - 1];
-      if (ultimo && ultimo.ocupado && e.ocupado && ultimo.key === e.key) {
-        ultimo.span += 1;
+  function segmentoLibre(fechaInicio: string): SegmentoCelda {
+    return {
+      span: 1,
+      ocupado: false,
+      huesped: '',
+      key: null,
+      reservaId: null,
+      lineaId: null,
+      estadiaId: null,
+      estadoEstadia: null,
+      fechaInicio,
+    };
+  }
+
+  // El día en que un huésped hace checkout queda con margen (según el
+  // tiempo de limpieza del tipo de habitación) para que otro huésped haga
+  // checkin ESE MISMO día más tarde -- CajaService/DisponibilidadService ya
+  // lo permite del lado del backend, pero antes el calendario pintaba todo
+  // ese día como "ocupado" por la reserva saliente y el click siempre
+  // abría su edición, sin dejar crear la reserva entrante. Ahora ese día
+  // se parte en dos mitades: la que sale (izquierda) y la que entra o
+  // queda libre para crear (derecha).
+  function celdasHabitacion(habId: string): CeldaRender[] {
+    const items = calendario.filter((c) => c.habitacionId === habId);
+
+    function entranteDeDia(ymd: string): ReservaCalendario | undefined {
+      return items.find((it) => {
+        const ci = fechaYMD(new Date(it.checkinPrevisto));
+        const co = fechaYMD(new Date(it.checkoutPrevisto));
+        return ci === co ? ymd === ci : ymd >= ci && ymd < co;
+      });
+    }
+
+    function salienteDeDia(ymd: string): ReservaCalendario | undefined {
+      return items.find((it) => {
+        const ci = fechaYMD(new Date(it.checkinPrevisto));
+        const co = fechaYMD(new Date(it.checkoutPrevisto));
+        // Reservas de un solo día (por horas) no cuentan como "salientes":
+        // ya quedan cubiertas enteras por entranteDeDia.
+        return ci !== co && ymd === co;
+      });
+    }
+
+    const celdas: CeldaRender[] = [];
+    for (const d of dias) {
+      const ymd = fechaYMD(d);
+      const saliente = salienteDeDia(ymd);
+      const entrante = entranteDeDia(ymd);
+
+      if (saliente) {
+        celdas.push({
+          tipo: 'partida',
+          saliente: segmentoDesde(saliente, ymd),
+          derecha: entrante ? segmentoDesde(entrante, ymd) : segmentoLibre(ymd),
+        });
+        continue;
+      }
+
+      const simple = entrante ? segmentoDesde(entrante, ymd) : segmentoLibre(ymd);
+      const ultima = celdas[celdas.length - 1];
+      // Solo se fusionan días OCUPADOS consecutivos de la misma reserva
+      // (para pintar la barra tipo Gantt) y solo si ninguno es un día
+      // partido. Los días vacíos nunca se fusionan entre sí -- cada uno
+      // queda como su propia celda clickeable, para que el click abra el
+      // formulario con la fecha exacta que se tocó.
+      if (
+        ultima?.tipo === 'simple' &&
+        ultima.segmento.ocupado &&
+        simple.ocupado &&
+        ultima.segmento.key === simple.key
+      ) {
+        ultima.segmento.span += 1;
       } else {
-        segmentos.push({ span: 1, ...e });
+        celdas.push({ tipo: 'simple', segmento: simple });
       }
     }
-    return segmentos;
+    return celdas;
   }
 
   return (
@@ -516,27 +568,54 @@ function CalendarioReservas({
                       </span>
                     )}
                   </td>
-                  {segmentosHabitacion(h.id).map((s, i) => (
-                    <td
-                      key={i}
-                      colSpan={s.span}
-                      title={s.ocupado ? s.huesped : 'Crear reserva'}
-                      onClick={() => onCellClick(h, s)}
-                      style={{
-                        ...tdCalStyle,
-                        background: s.ocupado ? 'var(--brand)' : 'transparent',
-                        color: s.ocupado ? '#fff' : 'var(--text-muted)',
-                        fontWeight: s.ocupado ? 500 : 400,
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
-                        whiteSpace: 'nowrap',
-                        maxWidth: 0,
-                        cursor: 'pointer',
-                      }}
-                    >
-                      {s.ocupado ? s.huesped : ''}
-                    </td>
-                  ))}
+                  {celdasHabitacion(h.id).map((c, i) =>
+                    c.tipo === 'simple' ? (
+                      <td
+                        key={i}
+                        colSpan={c.segmento.span}
+                        title={c.segmento.ocupado ? c.segmento.huesped : 'Crear reserva'}
+                        onClick={() => onCellClick(h, c.segmento)}
+                        style={{
+                          ...tdCalStyle,
+                          background: c.segmento.ocupado ? 'var(--brand)' : 'transparent',
+                          color: c.segmento.ocupado ? '#fff' : 'var(--text-muted)',
+                          fontWeight: c.segmento.ocupado ? 500 : 400,
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          whiteSpace: 'nowrap',
+                          maxWidth: 0,
+                          cursor: 'pointer',
+                        }}
+                      >
+                        {c.segmento.ocupado ? c.segmento.huesped : ''}
+                      </td>
+                    ) : (
+                      <td key={i} style={{ ...tdCalStyle, padding: 0, maxWidth: 0, overflow: 'hidden' }}>
+                        <div style={{ display: 'flex', height: '100%', minHeight: 20 }}>
+                          <div
+                            onClick={() => onCellClick(h, c.saliente)}
+                            title={`Sale: ${c.saliente.huesped}`}
+                            style={{
+                              flex: 1,
+                              background: 'var(--brand)',
+                              cursor: 'pointer',
+                            }}
+                          />
+                          <div
+                            onClick={() => onCellClick(h, c.derecha)}
+                            title={c.derecha.ocupado ? `Entra: ${c.derecha.huesped}` : 'Crear reserva (desde el checkout)'}
+                            style={{
+                              flex: 1,
+                              background: c.derecha.ocupado ? 'var(--brand)' : 'transparent',
+                              opacity: c.derecha.ocupado ? 0.6 : 1,
+                              borderLeft: '1px dashed var(--surface-0)',
+                              cursor: 'pointer',
+                            }}
+                          />
+                        </div>
+                      </td>
+                    ),
+                  )}
                 </tr>
               ))}
               {habitacionesOrdenadas.length === 0 && (
