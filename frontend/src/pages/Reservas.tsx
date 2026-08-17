@@ -13,6 +13,7 @@ interface Habitacion {
 
 interface TipoHabitacionPrecios {
   id: string;
+  nombre: string;
   precio_normal: number;
   precio_corporativo: number;
   precio_web: number;
@@ -239,6 +240,7 @@ export function Reservas() {
       {vista === 'calendario' && (
         <CalendarioReservas
           habitaciones={habitaciones}
+          tiposHabitacion={tiposHabitacion}
           calendario={calendario}
           loading={calendarioLoading}
           error={calendarioError}
@@ -353,6 +355,7 @@ type CeldaRender =
 
 function CalendarioReservas({
   habitaciones,
+  tiposHabitacion,
   calendario,
   loading,
   error,
@@ -363,6 +366,7 @@ function CalendarioReservas({
   onCellClick,
 }: {
   habitaciones: Habitacion[];
+  tiposHabitacion: TipoHabitacionPrecios[];
   calendario: ReservaCalendario[];
   loading: boolean;
   error: string | null;
@@ -485,7 +489,7 @@ function CalendarioReservas({
 
   return (
     <div>
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'flex-end', marginBottom: 12 }}>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16, alignItems: 'flex-end', marginBottom: 12 }}>
         <div>
           <label style={labelStyle}>Desde</label>
           <input type="date" value={desde} onChange={(e) => onDesdeChange(e.target.value)} style={inputStyle} />
@@ -494,6 +498,7 @@ function CalendarioReservas({
           <label style={labelStyle}>Hasta</label>
           <input type="date" value={hasta} onChange={(e) => onHastaChange(e.target.value)} style={inputStyle} />
         </div>
+        <TarifasReferencia tiposHabitacion={tiposHabitacion} />
       </div>
 
       {loading && <p style={{ color: 'var(--text-muted)' }}>Cargando...</p>}
@@ -655,6 +660,57 @@ function CalendarioReservas({
           </table>
         </div>
       )}
+    </div>
+  );
+}
+
+// Panel de solo consulta con la tarifa por noche de cada tipo de
+// habitación según el tipo de cliente -- útil para no tener que ir a
+// Configuración cada vez que se arma una reserva y hay que decidir/
+// verificar el precio a cobrar.
+function TarifasReferencia({ tiposHabitacion }: { tiposHabitacion: TipoHabitacionPrecios[] }) {
+  if (tiposHabitacion.length === 0) return null;
+  const hayPorHora = tiposHabitacion.some((t) => t.precio_por_hora != null && Number(t.precio_por_hora) > 0);
+  return (
+    <div
+      style={{
+        border: '1px solid var(--border)',
+        borderRadius: 'var(--radius)',
+        background: 'var(--surface-1)',
+        padding: '6px 10px',
+        maxHeight: 150,
+        overflowY: 'auto',
+      }}
+    >
+      <p style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-secondary)', margin: '0 0 4px', textTransform: 'uppercase', letterSpacing: 0.4 }}>
+        Tarifas por tipo (S/., referencia)
+      </p>
+      <table style={{ borderCollapse: 'collapse', fontSize: 11 }}>
+        <thead>
+          <tr style={{ color: 'var(--text-muted)' }}>
+            <th style={thTarifaStyle}>Tipo</th>
+            <th style={thTarifaStyle}>Normal</th>
+            <th style={thTarifaStyle}>Corp.</th>
+            <th style={thTarifaStyle}>Web</th>
+            {hayPorHora && <th style={thTarifaStyle}>Hora</th>}
+          </tr>
+        </thead>
+        <tbody>
+          {tiposHabitacion.map((t) => (
+            <tr key={t.id}>
+              <td style={{ ...tdTarifaStyle, textAlign: 'left', fontWeight: 500 }}>{t.nombre}</td>
+              <td style={tdTarifaStyle}>{Number(t.precio_normal).toFixed(2)}</td>
+              <td style={tdTarifaStyle}>{Number(t.precio_corporativo).toFixed(2)}</td>
+              <td style={tdTarifaStyle}>{Number(t.precio_web).toFixed(2)}</td>
+              {hayPorHora && (
+                <td style={tdTarifaStyle}>
+                  {t.precio_por_hora != null ? Number(t.precio_por_hora).toFixed(2) : '—'}
+                </td>
+              )}
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   );
 }
@@ -1008,4 +1064,17 @@ const tdCalStyle: CSSProperties = {
   borderRight: `1.5px solid ${CAL_BORDE}`,
   textAlign: 'center',
   fontSize: 11,
+};
+
+const thTarifaStyle: CSSProperties = {
+  padding: '1px 8px 3px',
+  textAlign: 'right',
+  fontWeight: 500,
+  whiteSpace: 'nowrap',
+};
+
+const tdTarifaStyle: CSSProperties = {
+  padding: '1px 8px',
+  textAlign: 'right',
+  whiteSpace: 'nowrap',
 };
