@@ -3,6 +3,7 @@ import { Link, useParams } from 'react-router-dom';
 import { api, ApiError } from '../lib/api';
 import { useHotel } from '../contexts/HotelContext';
 import { useIsMobile } from '../hooks/useIsMobile';
+import { buscarHuespedPorDni, buscarHuespedPorRuc, buscarHuespedesPorTexto, type Huesped } from '../lib/huespedes';
 
 interface MovimientoCuenta {
   id: string;
@@ -538,6 +539,13 @@ function EditarEstadiaModal({
 }) {
   const isMobile = useIsMobile();
 
+  const [huespedIdActivo, setHuespedIdActivo] = useState(huespedId);
+  const [busqueda, setBusqueda] = useState('');
+  const [buscando, setBuscando] = useState(false);
+  const [mensajeBusqueda, setMensajeBusqueda] = useState<string | null>(null);
+  const [resultados, setResultados] = useState<Huesped[]>([]);
+  const reasignando = huespedIdActivo !== huespedId;
+
   const [nombres, setNombres] = useState(huesped?.nombres ?? '');
   const [apellidos, setApellidos] = useState(huesped?.apellidos ?? '');
   const [tipoDoc, setTipoDoc] = useState(huesped?.tipo_doc ?? 'dni');
@@ -579,24 +587,81 @@ function EditarEstadiaModal({
     setTarifaDiaNueva(String(precioSegunTipoCliente(precios, valor)));
   }
 
+  function seleccionarHuesped(h: Huesped) {
+    setHuespedIdActivo(h.id);
+    setNombres(h.nombres);
+    setApellidos(h.apellidos);
+    setTipoDoc(h.tipo_doc);
+    setNroDoc(h.nro_doc);
+    setTelefono(h.telefono ?? '');
+    setCorreo(h.correo ?? '');
+    setNacionalidad(h.nacionalidad ?? '');
+    setOrigen(h.origen ?? '');
+    setFechaNacimiento(h.fecha_nacimiento ?? '');
+    setRuc(h.ruc ?? '');
+    setRazonSocial(h.razon_social ?? '');
+    setResultados([]);
+    setMensajeBusqueda('Huésped encontrado — se reasignará esta habitación a esta persona al guardar.');
+  }
+
+  function cancelarReasignacion() {
+    setHuespedIdActivo(huespedId);
+    setNombres(huesped?.nombres ?? '');
+    setApellidos(huesped?.apellidos ?? '');
+    setTipoDoc(huesped?.tipo_doc ?? 'dni');
+    setNroDoc(huesped?.nro_doc ?? '');
+    setTelefono(huesped?.telefono ?? '');
+    setCorreo(huesped?.correo ?? '');
+    setNacionalidad(huesped?.nacionalidad ?? '');
+    setOrigen(huesped?.origen ?? '');
+    setFechaNacimiento(huesped?.fecha_nacimiento ?? '');
+    setRuc(huesped?.ruc ?? '');
+    setRazonSocial(huesped?.razon_social ?? '');
+    setBusqueda('');
+    setMensajeBusqueda(null);
+    setResultados([]);
+  }
+
+  async function buscar() {
+    const q = busqueda.trim();
+    if (!q) return;
+    setBuscando(true);
+    setError(null);
+    setResultados([]);
+    setMensajeBusqueda(null);
+    try {
+      if (/^\d{11}$/.test(q)) {
+        const porRuc = await buscarHuespedPorRuc(hotelId, q);
+        if (porRuc) {
+          seleccionarHuesped(porRuc);
+          return;
+        }
+      }
+      const porDoc = await buscarHuespedPorDni(hotelId, q);
+      if (porDoc) {
+        seleccionarHuesped(porDoc);
+        return;
+      }
+      const varios = await buscarHuespedesPorTexto(hotelId, q);
+      if (varios.length === 1) {
+        seleccionarHuesped(varios[0]);
+      } else if (varios.length > 1) {
+        setResultados(varios);
+      } else {
+        setMensajeBusqueda('No se encontró ningún huésped con ese dato.');
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'No se pudo buscar el huésped');
+    } finally {
+      setBuscando(false);
+    }
+  }
+
   async function guardar(e: FormEvent) {
     e.preventDefault();
     setEnviando(true);
     setError(null);
     try {
-      const cambiosHuesped: Record<string, string> = {};
-      if (nombres !== huesped?.nombres) cambiosHuesped.nombres = nombres;
-      if (apellidos !== huesped?.apellidos) cambiosHuesped.apellidos = apellidos;
-      if (tipoDoc !== huesped?.tipo_doc) cambiosHuesped.tipoDoc = tipoDoc;
-      if (nroDoc !== huesped?.nro_doc) cambiosHuesped.nroDoc = nroDoc;
-      if (telefono !== (huesped?.telefono ?? '')) cambiosHuesped.telefono = telefono;
-      if (correo !== (huesped?.correo ?? '')) cambiosHuesped.correo = correo;
-      if (nacionalidad !== (huesped?.nacionalidad ?? '')) cambiosHuesped.nacionalidad = nacionalidad;
-      if (nacionalidad === 'extranjero' && origen !== (huesped?.origen ?? '')) cambiosHuesped.origen = origen;
-      if (fechaNacimiento !== (huesped?.fecha_nacimiento ?? '')) cambiosHuesped.fechaNacimiento = fechaNacimiento;
-      if (ruc !== (huesped?.ruc ?? '')) cambiosHuesped.ruc = ruc;
-      if (razonSocial !== (huesped?.razon_social ?? '')) cambiosHuesped.razonSocial = razonSocial;
-
       const cambiosEstadia: Record<string, string | number | boolean> = {};
       const tarifaNum = Number(tarifaDiaNueva);
       if (tarifaNum !== tarifaActual) cambiosEstadia.tarifaDiaNueva = tarifaNum;
@@ -610,6 +675,27 @@ function EditarEstadiaModal({
         if (cocheraId && cocheraId !== cocheraActualId) cambiosEstadia.cocheraId = cocheraId;
       } else if (cocheraActualId) {
         cambiosEstadia.quitarCochera = true;
+      }
+      if (reasignando) cambiosEstadia.nuevoHuespedId = huespedIdActivo;
+
+      // Reasignar a un huésped ya existente NUNCA edita sus datos en el
+      // mismo paso: ese registro puede estar compartido por otras
+      // habitaciones (ej. el contacto de un grupo), así que tocar sus
+      // campos aquí corrompería esas otras reservas también. Editar datos
+      // en línea solo aplica cuando se sigue apuntando al huésped original.
+      const cambiosHuesped: Record<string, string> = {};
+      if (!reasignando) {
+        if (nombres !== huesped?.nombres) cambiosHuesped.nombres = nombres;
+        if (apellidos !== huesped?.apellidos) cambiosHuesped.apellidos = apellidos;
+        if (tipoDoc !== huesped?.tipo_doc) cambiosHuesped.tipoDoc = tipoDoc;
+        if (nroDoc !== huesped?.nro_doc) cambiosHuesped.nroDoc = nroDoc;
+        if (telefono !== (huesped?.telefono ?? '')) cambiosHuesped.telefono = telefono;
+        if (correo !== (huesped?.correo ?? '')) cambiosHuesped.correo = correo;
+        if (nacionalidad !== (huesped?.nacionalidad ?? '')) cambiosHuesped.nacionalidad = nacionalidad;
+        if (nacionalidad === 'extranjero' && origen !== (huesped?.origen ?? '')) cambiosHuesped.origen = origen;
+        if (fechaNacimiento !== (huesped?.fecha_nacimiento ?? '')) cambiosHuesped.fechaNacimiento = fechaNacimiento;
+        if (ruc !== (huesped?.ruc ?? '')) cambiosHuesped.ruc = ruc;
+        if (razonSocial !== (huesped?.razon_social ?? '')) cambiosHuesped.razonSocial = razonSocial;
       }
 
       if (Object.keys(cambiosHuesped).length === 0 && Object.keys(cambiosEstadia).length === 0) {
@@ -626,7 +712,13 @@ function EditarEstadiaModal({
       }
       onGuardado();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'No se pudo guardar');
+      if (err instanceof ApiError && err.status === 409) {
+        setError(
+          `${err.message} — si es una persona distinta, usa "Buscar huésped" arriba para reasignar la habitación en vez de editar estos datos.`,
+        );
+      } else {
+        setError(err instanceof ApiError ? err.message : 'No se pudo guardar');
+      }
     } finally {
       setEnviando(false);
     }
@@ -645,14 +737,85 @@ function EditarEstadiaModal({
         {error && <p style={{ color: 'var(--danger)', fontSize: 13, marginBottom: 12 }}>{error}</p>}
 
         <form onSubmit={guardar} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          {/* ---------- Buscar/reasignar huésped ---------- */}
+          <div style={cardStyle}>
+            <p style={cardTitleStyle}>Buscar huésped</p>
+            <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: '0 0 8px' }}>
+              Usa esto solo si la habitación quedó asignada al huésped equivocado (ej. se registró bajo el
+              contacto de un grupo) y quieres reasignarla a otra persona que ya existe en el sistema. Para
+              corregir un dato del huésped actual (typo en el nombre, teléfono, etc.), edítalo directamente
+              abajo sin buscar.
+            </p>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+              <input
+                value={busqueda}
+                onChange={(e) => {
+                  setBusqueda(e.target.value);
+                  setMensajeBusqueda(null);
+                  setResultados([]);
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    buscar();
+                  }
+                }}
+                placeholder="DNI, nombre, apellido, RUC o razón social"
+                style={{ ...inputStyle, flex: 1, minWidth: 220 }}
+              />
+              <button type="button" onClick={buscar} disabled={buscando} style={btnSecondary}>
+                {buscando ? 'Buscando...' : 'Buscar'}
+              </button>
+              {reasignando && (
+                <button type="button" onClick={cancelarReasignacion} style={btnSecondary}>
+                  Cancelar reasignación
+                </button>
+              )}
+            </div>
+            {mensajeBusqueda && (
+              <p
+                style={{
+                  fontSize: 11,
+                  color: reasignando ? 'var(--disponible)' : 'var(--text-muted)',
+                  margin: '6px 0 0',
+                }}
+              >
+                {mensajeBusqueda}
+              </p>
+            )}
+            {resultados.length > 0 && (
+              <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 4 }}>
+                <p style={{ fontSize: 11, color: 'var(--text-secondary)', margin: 0 }}>
+                  Se encontró más de un huésped, elige uno:
+                </p>
+                {resultados.map((h) => (
+                  <button
+                    key={h.id}
+                    type="button"
+                    onClick={() => seleccionarHuesped(h)}
+                    style={{ ...btnSecondary, textAlign: 'left' }}
+                  >
+                    {h.apellidos}, {h.nombres} — {h.tipo_doc.toUpperCase()} {h.nro_doc}
+                    {h.razon_social ? ` — ${h.razon_social}` : ''}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
           {/* ---------- Datos personales + Nacionalidad/facturación ---------- */}
           <div style={gridRowStyle}>
             <div style={cardStyle}>
               <p style={cardTitleStyle}>Datos personales</p>
+              {reasignando && (
+                <p style={{ fontSize: 11, color: 'var(--disponible)', margin: '0 0 8px' }}>
+                  Mostrando los datos del huésped que se va a asignar a esta habitación (de solo lectura).
+                </p>
+              )}
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 8 }}>
                 <div style={{ width: 150 }}>
                   <label style={labelStyle}>Tipo de documento</label>
-                  <select value={tipoDoc} onChange={(e) => setTipoDoc(e.target.value)} style={inputStyle}>
+                  <select value={tipoDoc} onChange={(e) => setTipoDoc(e.target.value)} style={inputStyle} disabled={reasignando}>
                     <option value="dni">DNI</option>
                     <option value="pasaporte">Pasaporte</option>
                     <option value="carnet_extranjeria">Carnet de extranjería</option>
@@ -662,27 +825,27 @@ function EditarEstadiaModal({
                 </div>
                 <div style={{ flex: 1, minWidth: 140 }}>
                   <label style={labelStyle}>Número de documento</label>
-                  <input value={nroDoc} onChange={(e) => setNroDoc(e.target.value)} style={inputStyle} required />
+                  <input value={nroDoc} onChange={(e) => setNroDoc(e.target.value)} style={inputStyle} required disabled={reasignando} />
                 </div>
               </div>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 8 }}>
                 <div style={{ flex: 1, minWidth: 140 }}>
                   <label style={labelStyle}>Nombres</label>
-                  <input value={nombres} onChange={(e) => setNombres(e.target.value)} style={inputStyle} required />
+                  <input value={nombres} onChange={(e) => setNombres(e.target.value)} style={inputStyle} required disabled={reasignando} />
                 </div>
                 <div style={{ flex: 1, minWidth: 140 }}>
                   <label style={labelStyle}>Apellidos</label>
-                  <input value={apellidos} onChange={(e) => setApellidos(e.target.value)} style={inputStyle} required />
+                  <input value={apellidos} onChange={(e) => setApellidos(e.target.value)} style={inputStyle} required disabled={reasignando} />
                 </div>
               </div>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
                 <div style={{ flex: 1, minWidth: 140 }}>
                   <label style={labelStyle}>Teléfono</label>
-                  <input value={telefono} onChange={(e) => setTelefono(e.target.value)} style={inputStyle} />
+                  <input value={telefono} onChange={(e) => setTelefono(e.target.value)} style={inputStyle} disabled={reasignando} />
                 </div>
                 <div style={{ flex: 1, minWidth: 140 }}>
                   <label style={labelStyle}>Correo</label>
-                  <input type="email" value={correo} onChange={(e) => setCorreo(e.target.value)} style={inputStyle} />
+                  <input type="email" value={correo} onChange={(e) => setCorreo(e.target.value)} style={inputStyle} disabled={reasignando} />
                 </div>
               </div>
             </div>
@@ -692,7 +855,7 @@ function EditarEstadiaModal({
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 8 }}>
                 <div style={{ width: 150 }}>
                   <label style={labelStyle}>Nacionalidad</label>
-                  <select value={nacionalidad} onChange={(e) => setNacionalidad(e.target.value)} style={inputStyle}>
+                  <select value={nacionalidad} onChange={(e) => setNacionalidad(e.target.value)} style={inputStyle} disabled={reasignando}>
                     <option value="">Sin especificar</option>
                     <option value="peruano">Peruano</option>
                     <option value="extranjero">Extranjero</option>
@@ -701,7 +864,7 @@ function EditarEstadiaModal({
                 {nacionalidad === 'extranjero' && (
                   <div style={{ flex: 1, minWidth: 120 }}>
                     <label style={labelStyle}>País de origen</label>
-                    <input value={origen} onChange={(e) => setOrigen(e.target.value)} placeholder="Ej. Colombia" style={inputStyle} />
+                    <input value={origen} onChange={(e) => setOrigen(e.target.value)} placeholder="Ej. Colombia" style={inputStyle} disabled={reasignando} />
                   </div>
                 )}
                 <div style={{ flex: 1, minWidth: 140 }}>
@@ -711,17 +874,18 @@ function EditarEstadiaModal({
                     value={fechaNacimiento}
                     onChange={(e) => setFechaNacimiento(e.target.value)}
                     style={inputStyle}
+                    disabled={reasignando}
                   />
                 </div>
               </div>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
                 <div style={{ width: 150 }}>
                   <label style={labelStyle}>RUC</label>
-                  <input value={ruc} onChange={(e) => setRuc(e.target.value)} placeholder="11 dígitos" maxLength={11} style={inputStyle} />
+                  <input value={ruc} onChange={(e) => setRuc(e.target.value)} placeholder="11 dígitos" maxLength={11} style={inputStyle} disabled={reasignando} />
                 </div>
                 <div style={{ flex: 1, minWidth: 140 }}>
                   <label style={labelStyle}>Razón social</label>
-                  <input value={razonSocial} onChange={(e) => setRazonSocial(e.target.value)} style={inputStyle} />
+                  <input value={razonSocial} onChange={(e) => setRazonSocial(e.target.value)} style={inputStyle} disabled={reasignando} />
                 </div>
               </div>
               <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: '6px 0 0' }}>

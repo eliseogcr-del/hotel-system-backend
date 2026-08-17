@@ -50,4 +50,15 @@ export class ActualizarEstadiaDto {
   @IsOptional()
   @IsBoolean()
   incluyeDesayuno?: boolean;
+
+  // Reasigna esta reserva a otro huésped YA EXISTENTE en el hotel (ej. el
+  // recepcionista se equivocó y dejó la habitación bajo el contacto de un
+  // grupo en vez de la persona real que se hospeda). A diferencia de editar
+  // los datos del huésped actual (PATCH /huespedes/:id, que modifica ESE
+  // registro y por tanto afectaría a TODAS las reservas que lo compartan),
+  // esto solo cambia a quién apunta esta reserva puntual -- el huésped
+  // original queda intacto.
+  @IsOptional()
+  @IsUUID()
+  nuevoHuespedId?: string;
 }

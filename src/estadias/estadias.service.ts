@@ -72,6 +72,7 @@ interface EstadiaConReserva {
     cochera_id: string | null;
     habitaciones: { hab_numero: number; piso: number; tipo_id: string } | null;
     reservas: {
+      id: string;
       hotel_id: string;
       estado: string;
       huesped_id: string;
@@ -824,7 +825,8 @@ export class EstadiasService {
       dto.vehiculoTipo === undefined &&
       dto.vehiculoPlaca === undefined &&
       dto.nroPersonas === undefined &&
-      dto.incluyeDesayuno === undefined
+      dto.incluyeDesayuno === undefined &&
+      dto.nuevoHuespedId === undefined
     ) {
       throw new BadRequestException('No se enviaron cambios');
     }
@@ -834,6 +836,23 @@ export class EstadiasService {
       throw new BadRequestException(
         `No se puede editar: la estadía está en estado '${estadia.estado_actual}'`,
       );
+    }
+
+    if (dto.nuevoHuespedId && dto.nuevoHuespedId !== estadia.reserva_habitacion.reservas.huesped_id) {
+      const { data: huespedNuevo, error: huespedError } = await client
+        .from('huespedes')
+        .select('id, hotel_id')
+        .eq('id', dto.nuevoHuespedId)
+        .maybeSingle();
+      if (huespedError) throw huespedError;
+      if (!huespedNuevo || huespedNuevo.hotel_id !== hotelId) {
+        throw new NotFoundException('Huésped no encontrado en este hotel');
+      }
+      const { error: reasignarError } = await client
+        .from('reservas')
+        .update({ huesped_id: dto.nuevoHuespedId })
+        .eq('id', estadia.reserva_habitacion.reservas.id);
+      if (reasignarError) throw reasignarError;
     }
 
     const tarifaFinal = dto.tarifaDiaNueva ?? Number(estadia.reserva_habitacion.tarifa_dia);
@@ -1039,7 +1058,7 @@ export class EstadiasService {
           id, habitacion_id, subtotal, tarifa_dia, dias, nro_personas, incluye_desayuno, cochera_id,
           habitaciones(hab_numero, piso, tipo_id),
           reservas!inner(
-            hotel_id, estado, huesped_id,
+            id, hotel_id, estado, huesped_id,
             huespedes(nombres, apellidos, tipo_doc, nro_doc, telefono, correo, nacionalidad, origen, fecha_nacimiento, ruc, razon_social)
           ),
           vehiculos(id, marca, tipo, placa)
