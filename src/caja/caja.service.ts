@@ -157,6 +157,7 @@ export class CajaService {
         personal_hotel_id: personalHotel.id,
         turno_id: dto.turnoId,
         sesion_anterior_id: anterior?.id ?? null,
+        fecha: this.fechaHoyLima(),
         saldo_inicial: saldoInicial,
         estado: 'abierta',
       })
@@ -429,6 +430,20 @@ export class CajaService {
     const mm = String(ahoraLima.getUTCMonth() + 1).padStart(2, '0');
     const yyyy = ahoraLima.getUTCFullYear();
     return `${dd}/${mm}/${yyyy} ${this.horaActualLimaTexto()}`;
+  }
+
+  // La columna sesiones_turno.fecha tiene "default current_date" en la
+  // base, pero eso usa el reloj UTC del servidor de Postgres -- después de
+  // las 19:00 hora Lima ya es "mañana" en UTC, así que un turno Noche
+  // abierto a esa hora quedaba fechado un día adelantado y desaparecía de
+  // Reportes (que filtra por la fecha de Lima). Se calcula acá explícito,
+  // igual que el resto de fechas de este archivo.
+  private fechaHoyLima(): string {
+    const ahoraLima = comoRelojLima(new Date());
+    const yyyy = ahoraLima.getUTCFullYear();
+    const mm = String(ahoraLima.getUTCMonth() + 1).padStart(2, '0');
+    const dd = String(ahoraLima.getUTCDate()).padStart(2, '0');
+    return `${yyyy}-${mm}-${dd}`;
   }
 
   async obtenerDetalle(client: SupabaseClient, hotelId: string, sesionId: string) {
