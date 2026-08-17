@@ -30,6 +30,8 @@ interface Habitacion {
   saldo: number | null;
   notas: string | null;
   notas_operativas: string | null;
+  cocheraNumero: string | null;
+  vehiculoTipo: string | null;
 }
 
 interface TipoHabitacionPrecios {
@@ -648,7 +650,17 @@ function VistaTarjetas({
               title={clickable ? tituloClick : undefined}
             >
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
-                <span style={{ fontSize: 20, fontWeight: 700, color: 'var(--text-primary)' }}>{h.hab_numero}</span>
+                <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                  {h.vehiculoTipo && (
+                    <span
+                      title={`Vehículo: ${h.vehiculoTipo}`}
+                      style={{ fontSize: 16, lineHeight: 1 }}
+                    >
+                      {h.vehiculoTipo === 'moto' ? '🏍️' : '🚗'}
+                    </span>
+                  )}
+                  <span style={{ fontSize: 20, fontWeight: 700, color: 'var(--text-primary)' }}>{h.hab_numero}</span>
+                </span>
                 <span style={{ fontSize: 10, fontWeight: 700, color: ESTADO_COLOR_INTENSO[color].text }}>{etiqueta}</span>
               </div>
               <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{h.tipos_habitacion?.nombre ?? '—'}</span>
@@ -675,6 +687,11 @@ function VistaTarjetas({
                   }}
                 >
                   Saldo: {h.saldo != null ? `S/. ${h.saldo.toFixed(2)}` : '—'}
+                </span>
+              )}
+              {h.cocheraNumero && (
+                <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--nota-texto)' }}>
+                  {h.vehiculoTipo === 'moto' ? '🏍️' : '🚗'} Cochera {h.cocheraNumero}
                 </span>
               )}
               {h.huesped && (

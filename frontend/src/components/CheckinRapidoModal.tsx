@@ -11,6 +11,13 @@ const TIPOS_DOC = [
   { value: 'otro', label: 'Otro' },
 ];
 
+const TIPOS_VEHICULO = [
+  { value: 'auto', label: 'Auto' },
+  { value: 'camioneta', label: 'Camioneta' },
+  { value: 'moto', label: 'Moto' },
+  { value: 'otro', label: 'Otro' },
+];
+
 function ahoraLocal(): string {
   const d = new Date();
   d.setSeconds(0, 0);
@@ -505,12 +512,14 @@ export function CheckinRapidoModal({
                 </div>
                 <div style={{ width: 140 }}>
                   <label style={labelStyle}>Tipo</label>
-                  <input
-                    value={vehiculoTipo}
-                    onChange={(e) => setVehiculoTipo(e.target.value)}
-                    placeholder="Auto, camioneta..."
-                    style={inputStyle}
-                  />
+                  <select value={vehiculoTipo} onChange={(e) => setVehiculoTipo(e.target.value)} style={inputStyle}>
+                    <option value="">Sin especificar</option>
+                    {TIPOS_VEHICULO.map((t) => (
+                      <option key={t.value} value={t.value}>
+                        {t.label}
+                      </option>
+                    ))}
+                  </select>
                 </div>
                 <div style={{ width: 140 }}>
                   <label style={labelStyle}>Placa</label>

@@ -56,6 +56,12 @@ interface Cochera {
 
 const TIPOS_MOVIMIENTO = ['pago', 'consumo_bazar', 'desayuno', 'ajuste', 'early', 'late', 'cochera'];
 const METODOS = ['efectivo', 'transferencia', 'yape', 'tarjeta'];
+const TIPOS_VEHICULO = [
+  { value: 'auto', label: 'Auto' },
+  { value: 'camioneta', label: 'Camioneta' },
+  { value: 'moto', label: 'Moto' },
+  { value: 'otro', label: 'Otro' },
+];
 
 const TIPO_LABEL: Record<string, string> = {
   alquiler: 'Alquiler',
@@ -644,12 +650,14 @@ function EditarEstadiaForm({
             </div>
             <div style={{ width: 140 }}>
               <label style={labelStyle}>Tipo</label>
-              <input
-                value={vehiculoTipo}
-                onChange={(e) => setVehiculoTipo(e.target.value)}
-                placeholder="Auto, camioneta..."
-                style={inputStyle}
-              />
+              <select value={vehiculoTipo} onChange={(e) => setVehiculoTipo(e.target.value)} style={inputStyle}>
+                <option value="">Sin especificar</option>
+                {TIPOS_VEHICULO.map((t) => (
+                  <option key={t.value} value={t.value}>
+                    {t.label}
+                  </option>
+                ))}
+              </select>
             </div>
             <div style={{ width: 140 }}>
               <label style={labelStyle}>Placa</label>

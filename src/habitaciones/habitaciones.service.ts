@@ -63,7 +63,9 @@ export class HabitacionesService {
         `
         habitacion_id, tarifa_dia, fecha_hora_checkout_prevista, observaciones,
         reservas!inner(hotel_id, huespedes(nombres, apellidos)),
-        estadias!inner(id, checkin_real, estado_actual)
+        estadias!inner(id, checkin_real, estado_actual),
+        cocheras(numero, tipo_vehiculo_permitido),
+        vehiculos(tipo, placa)
       `,
       )
       .eq('reservas.hotel_id', hotelId)
@@ -151,6 +153,8 @@ export class HabitacionesService {
         totalPagado,
         saldo: totalAlquiler + totalOtrosServicios - totalPagado,
         notas: linea.observaciones,
+        cocheraNumero: linea.cocheras?.numero ?? null,
+        vehiculoTipo: linea.vehiculos?.tipo ?? null,
       });
     }
 
@@ -172,6 +176,8 @@ export class HabitacionesService {
         totalPagado: null,
         saldo: null,
         notas: null,
+        cocheraNumero: null,
+        vehiculoTipo: null,
       }),
     }));
   }
