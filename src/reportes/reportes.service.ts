@@ -96,12 +96,25 @@ export class ReportesService {
     // saldo se hereda de sesión en sesión, ver CajaService.abrirTurno).
     const saldoInicialDia = sesionesConDetalle.length > 0 ? sesionesConDetalle[0].saldoInicial : null;
 
+    // Igual que el saldoActual de cada sesión: solo efectivo, porque es lo
+    // único que se traspasa físicamente de una caja a la siguiente (ver
+    // comentario en CajaService.cerrarTurno). Si hay más de una sesión en
+    // el rango filtrado, este es el saldo con el que queda la caja al final
+    // de la última.
+    const saldoActualDia =
+      saldoInicialDia !== null
+        ? saldoInicialDia +
+          this.sumar(todosIngresos.filter((m) => m.metodo_pago === 'efectivo')) -
+          this.sumar(todosEgresos.filter((m) => m.metodo_pago === 'efectivo'))
+        : null;
+
     return {
       fecha,
       turnoId: turnoId ?? null,
       sesiones: sesionesConDetalle,
       resumen: {
         saldoInicialDia,
+        saldoActualDia,
         totalIngresos: this.sumar(todosIngresos),
         totalEgresos: this.sumar(todosEgresos),
         ingresosPorConcepto: this.agruparPorConcepto(todosIngresos),

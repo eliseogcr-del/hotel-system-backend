@@ -47,6 +47,7 @@ interface ReporteCaja {
   sesiones: SesionReporte[];
   resumen: {
     saldoInicialDia: number | null;
+    saldoActualDia: number | null;
     totalIngresos: number;
     totalEgresos: number;
     ingresosPorConcepto: ConceptoMonto[];
@@ -156,6 +157,10 @@ export function Reportes() {
               <MetricCard
                 label="Neto del día"
                 value={`PEN ${(reporte.resumen.totalIngresos - reporte.resumen.totalEgresos).toFixed(2)}`}
+              />
+              <MetricCard
+                label="Saldo actual"
+                value={reporte.resumen.saldoActualDia !== null ? `PEN ${reporte.resumen.saldoActualDia.toFixed(2)}` : '—'}
                 destacado
               />
             </div>
