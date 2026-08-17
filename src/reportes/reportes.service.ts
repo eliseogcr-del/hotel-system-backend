@@ -91,11 +91,17 @@ export class ReportesService {
     const todosIngresos = movimientos.filter((m) => m.tipo === 'ingreso');
     const todosEgresos = movimientos.filter((m) => m.tipo === 'egreso');
 
+    // sesionesConDetalle ya viene ordenada por abierta_en ascendente: la
+    // primera sesión del día es con la que se abrió la caja esa fecha (el
+    // saldo se hereda de sesión en sesión, ver CajaService.abrirTurno).
+    const saldoInicialDia = sesionesConDetalle.length > 0 ? sesionesConDetalle[0].saldoInicial : null;
+
     return {
       fecha,
       turnoId: turnoId ?? null,
       sesiones: sesionesConDetalle,
       resumen: {
+        saldoInicialDia,
         totalIngresos: this.sumar(todosIngresos),
         totalEgresos: this.sumar(todosEgresos),
         ingresosPorConcepto: this.agruparPorConcepto(todosIngresos),

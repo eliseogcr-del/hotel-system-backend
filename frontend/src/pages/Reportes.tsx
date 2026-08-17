@@ -46,6 +46,7 @@ interface ReporteCaja {
   turnoId: string | null;
   sesiones: SesionReporte[];
   resumen: {
+    saldoInicialDia: number | null;
     totalIngresos: number;
     totalEgresos: number;
     ingresosPorConcepto: ConceptoMonto[];
@@ -146,6 +147,10 @@ export function Reportes() {
         {!loading && reporte && (
           <>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, marginBottom: 20 }}>
+              <MetricCard
+                label="Saldo inicial del día"
+                value={reporte.resumen.saldoInicialDia !== null ? `PEN ${reporte.resumen.saldoInicialDia.toFixed(2)}` : '—'}
+              />
               <MetricCard label="Total ingresos" value={`PEN ${reporte.resumen.totalIngresos.toFixed(2)}`} />
               <MetricCard label="Total egresos" value={`PEN ${reporte.resumen.totalEgresos.toFixed(2)}`} />
               <MetricCard
