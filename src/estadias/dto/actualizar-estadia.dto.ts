@@ -40,4 +40,14 @@ export class ActualizarEstadiaDto {
   @IsOptional()
   @IsString()
   vehiculoPlaca?: string;
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  nroPersonas?: number;
+
+  // Desayuno de cortesía incluido en la tarifa (no genera ningún cargo).
+  @IsOptional()
+  @IsBoolean()
+  incluyeDesayuno?: boolean;
 }

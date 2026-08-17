@@ -66,8 +66,11 @@ interface EstadiaConReserva {
     habitacion_id: string;
     subtotal: number;
     tarifa_dia: number;
+    dias: number;
+    nro_personas: number;
+    incluye_desayuno: boolean;
     cochera_id: string | null;
-    habitaciones: { hab_numero: number; piso: number } | null;
+    habitaciones: { hab_numero: number; piso: number; tipo_id: string } | null;
     reservas: {
       hotel_id: string;
       estado: string;
@@ -79,6 +82,11 @@ interface EstadiaConReserva {
         nro_doc: string;
         telefono: string | null;
         correo: string | null;
+        nacionalidad: string | null;
+        origen: string | null;
+        fecha_nacimiento: string | null;
+        ruc: string | null;
+        razon_social: string | null;
       } | null;
     };
     vehiculos: { id: string; marca: string | null; tipo: string | null; placa: string | null } | null;
@@ -814,7 +822,9 @@ export class EstadiasService {
       !dto.quitarCochera &&
       dto.vehiculoMarca === undefined &&
       dto.vehiculoTipo === undefined &&
-      dto.vehiculoPlaca === undefined
+      dto.vehiculoPlaca === undefined &&
+      dto.nroPersonas === undefined &&
+      dto.incluyeDesayuno === undefined
     ) {
       throw new BadRequestException('No se enviaron cambios');
     }
@@ -842,6 +852,8 @@ export class EstadiasService {
 
     const cambiosLinea: Record<string, unknown> = {};
     if (dto.tarifaDiaNueva !== undefined) cambiosLinea.tarifa_dia = dto.tarifaDiaNueva;
+    if (dto.nroPersonas !== undefined) cambiosLinea.nro_personas = dto.nroPersonas;
+    if (dto.incluyeDesayuno !== undefined) cambiosLinea.incluye_desayuno = dto.incluyeDesayuno;
 
     if (dto.diasAdicionales) {
       const { data: rhActual, error: rhError } = await client
@@ -1024,11 +1036,11 @@ export class EstadiasService {
         `
         id, estado_actual, saldo, checkin_real, checkout_real,
         reserva_habitacion!inner(
-          id, habitacion_id, subtotal, tarifa_dia, cochera_id,
-          habitaciones(hab_numero, piso),
+          id, habitacion_id, subtotal, tarifa_dia, dias, nro_personas, incluye_desayuno, cochera_id,
+          habitaciones(hab_numero, piso, tipo_id),
           reservas!inner(
             hotel_id, estado, huesped_id,
-            huespedes(nombres, apellidos, tipo_doc, nro_doc, telefono, correo)
+            huespedes(nombres, apellidos, tipo_doc, nro_doc, telefono, correo, nacionalidad, origen, fecha_nacimiento, ruc, razon_social)
           ),
           vehiculos(id, marca, tipo, placa)
         )

@@ -2,6 +2,7 @@ import { useEffect, useState, type CSSProperties, type FormEvent } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { api, ApiError } from '../lib/api';
 import { useHotel } from '../contexts/HotelContext';
+import { useIsMobile } from '../hooks/useIsMobile';
 
 interface MovimientoCuenta {
   id: string;
@@ -20,6 +21,11 @@ interface HuespedInfo {
   nro_doc: string;
   telefono: string | null;
   correo: string | null;
+  nacionalidad: string | null;
+  origen: string | null;
+  fecha_nacimiento: string | null;
+  ruc: string | null;
+  razon_social: string | null;
 }
 
 interface VehiculoInfo {
@@ -38,11 +44,32 @@ interface EstadiaDetalleData {
   movimientos: MovimientoCuenta[];
   reserva_habitacion: {
     tarifa_dia: number;
+    dias: number;
+    nro_personas: number;
+    incluye_desayuno: boolean;
     cochera_id: string | null;
-    habitaciones: { hab_numero: number; piso: number } | null;
+    habitaciones: { hab_numero: number; piso: number; tipo_id: string } | null;
     reservas: { huesped_id: string; huespedes: HuespedInfo | null } | null;
     vehiculos: VehiculoInfo | null;
   };
+}
+
+interface TipoHabitacionPrecios {
+  id: string;
+  precio_normal: number;
+  precio_corporativo: number;
+  precio_web: number;
+  precio_por_hora: number | null;
+  precio_costo: number;
+}
+
+type TipoCliente = 'normal' | 'corporativo' | 'web';
+
+function precioSegunTipoCliente(precios: TipoHabitacionPrecios | null, tipoCliente: TipoCliente): number {
+  if (!precios) return 0;
+  if (tipoCliente === 'corporativo') return Number(precios.precio_corporativo);
+  if (tipoCliente === 'web') return Number(precios.precio_web);
+  return Number(precios.precio_normal);
 }
 
 interface Cochera {
@@ -114,6 +141,8 @@ export function EstadiaDetalle() {
   const [cajaAbierta, setCajaAbierta] = useState(true);
   const [editandoMovimientoId, setEditandoMovimientoId] = useState<string | null>(null);
   const [montoEdicion, setMontoEdicion] = useState('');
+  const [mostrarEditar, setMostrarEditar] = useState(false);
+  const [tiposHabitacion, setTiposHabitacion] = useState<TipoHabitacionPrecios[]>([]);
   const esAdmin = hotelActual?.rol === 'admin';
 
   useEffect(() => {
@@ -121,6 +150,14 @@ export function EstadiaDetalle() {
     api
       .get<TipoCambioVigente | null>(`/hoteles/${hotelActual.hotelId}/tipo-cambio/vigente`)
       .then(setTipoCambio)
+      .catch(() => {});
+  }, [hotelActual]);
+
+  useEffect(() => {
+    if (!hotelActual) return;
+    api
+      .get<TipoHabitacionPrecios[]>(`/hoteles/${hotelActual.hotelId}/tipos-habitacion`)
+      .then(setTiposHabitacion)
       .catch(() => {});
   }, [hotelActual]);
 
@@ -262,15 +299,31 @@ export function EstadiaDetalle() {
       {error && <p style={{ color: 'var(--danger)', fontSize: 13, marginBottom: 12 }}>{error}</p>}
 
       {estadia.estado_actual === 'en_curso' && (
-        <EditarEstadiaForm
+        <button onClick={() => setMostrarEditar(true)} style={{ ...btnSecondary, marginBottom: 20 }}>
+          Editar estadía
+        </button>
+      )}
+
+      {mostrarEditar && (
+        <EditarEstadiaModal
           hotelId={hotelActual.hotelId}
           estadiaId={estadia.id}
+          checkinReal={estadia.checkin_real}
           tarifaActual={estadia.reserva_habitacion.tarifa_dia}
+          diasActuales={estadia.reserva_habitacion.dias}
+          nroPersonasActual={estadia.reserva_habitacion.nro_personas}
+          incluyeDesayunoActual={estadia.reserva_habitacion.incluye_desayuno}
+          tipoHabitacionId={estadia.reserva_habitacion.habitaciones?.tipo_id}
+          precios={tiposHabitacion.find((t) => t.id === estadia.reserva_habitacion.habitaciones?.tipo_id) ?? null}
           huespedId={estadia.reserva_habitacion.reservas?.huesped_id ?? ''}
           huesped={estadia.reserva_habitacion.reservas?.huespedes ?? null}
           cocheraActualId={estadia.reserva_habitacion.cochera_id}
           vehiculoActual={estadia.reserva_habitacion.vehiculos}
-          onGuardado={cargar}
+          onClose={() => setMostrarEditar(false)}
+          onGuardado={() => {
+            setMostrarEditar(false);
+            cargar();
+          }}
         />
       )}
 
@@ -451,28 +504,39 @@ export function EstadiaDetalle() {
   );
 }
 
-function EditarEstadiaForm({
+function EditarEstadiaModal({
   hotelId,
   estadiaId,
+  checkinReal,
   tarifaActual,
+  diasActuales,
+  nroPersonasActual,
+  incluyeDesayunoActual,
+  precios,
   huespedId,
   huesped,
   cocheraActualId,
   vehiculoActual,
+  onClose,
   onGuardado,
 }: {
   hotelId: string;
   estadiaId: string;
+  checkinReal: string | null;
   tarifaActual: number;
+  diasActuales: number;
+  nroPersonasActual: number;
+  incluyeDesayunoActual: boolean;
+  tipoHabitacionId?: string;
+  precios: TipoHabitacionPrecios | null;
   huespedId: string;
   huesped: HuespedInfo | null;
   cocheraActualId: string | null;
   vehiculoActual: VehiculoInfo | null;
+  onClose: () => void;
   onGuardado: () => void;
 }) {
-  const [mostrar, setMostrar] = useState(false);
-  const [tarifaDiaNueva, setTarifaDiaNueva] = useState(String(tarifaActual));
-  const [diasAdicionales, setDiasAdicionales] = useState('');
+  const isMobile = useIsMobile();
 
   const [nombres, setNombres] = useState(huesped?.nombres ?? '');
   const [apellidos, setApellidos] = useState(huesped?.apellidos ?? '');
@@ -480,6 +544,17 @@ function EditarEstadiaForm({
   const [nroDoc, setNroDoc] = useState(huesped?.nro_doc ?? '');
   const [telefono, setTelefono] = useState(huesped?.telefono ?? '');
   const [correo, setCorreo] = useState(huesped?.correo ?? '');
+  const [nacionalidad, setNacionalidad] = useState(huesped?.nacionalidad ?? '');
+  const [origen, setOrigen] = useState(huesped?.origen ?? '');
+  const [fechaNacimiento, setFechaNacimiento] = useState(huesped?.fecha_nacimiento ?? '');
+  const [ruc, setRuc] = useState(huesped?.ruc ?? '');
+  const [razonSocial, setRazonSocial] = useState(huesped?.razon_social ?? '');
+
+  const [nroPersonas, setNroPersonas] = useState(nroPersonasActual);
+  const [tipoCliente, setTipoCliente] = useState<TipoCliente>('normal');
+  const [tarifaDiaNueva, setTarifaDiaNueva] = useState(String(tarifaActual));
+  const [diasAdicionales, setDiasAdicionales] = useState('');
+  const [incluyeDesayuno, setIncluyeDesayuno] = useState(incluyeDesayunoActual);
 
   const [tieneVehiculo, setTieneVehiculo] = useState(!!vehiculoActual);
   const [vehiculoMarca, setVehiculoMarca] = useState(vehiculoActual?.marca ?? '');
@@ -492,13 +567,20 @@ function EditarEstadiaForm({
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!mostrar) return;
     api.get<Cochera[]>(`/hoteles/${hotelId}/cocheras`).then(setCocheras).catch(() => {});
-  }, [mostrar, hotelId]);
+  }, [hotelId]);
 
   const cocherasSeleccionables = cocheras.filter((c) => c.estado === 'disponible' || c.id === cocheraActualId);
+  const precioCosto = precios ? Number(precios.precio_costo) : 0;
+  const tarifaBajoCosto = precioCosto > 0 && Number(tarifaDiaNueva) < precioCosto;
 
-  async function guardar() {
+  function cambiarTipoCliente(valor: TipoCliente) {
+    setTipoCliente(valor);
+    setTarifaDiaNueva(String(precioSegunTipoCliente(precios, valor)));
+  }
+
+  async function guardar(e: FormEvent) {
+    e.preventDefault();
     setEnviando(true);
     setError(null);
     try {
@@ -509,11 +591,18 @@ function EditarEstadiaForm({
       if (nroDoc !== huesped?.nro_doc) cambiosHuesped.nroDoc = nroDoc;
       if (telefono !== (huesped?.telefono ?? '')) cambiosHuesped.telefono = telefono;
       if (correo !== (huesped?.correo ?? '')) cambiosHuesped.correo = correo;
+      if (nacionalidad !== (huesped?.nacionalidad ?? '')) cambiosHuesped.nacionalidad = nacionalidad;
+      if (nacionalidad === 'extranjero' && origen !== (huesped?.origen ?? '')) cambiosHuesped.origen = origen;
+      if (fechaNacimiento !== (huesped?.fecha_nacimiento ?? '')) cambiosHuesped.fechaNacimiento = fechaNacimiento;
+      if (ruc !== (huesped?.ruc ?? '')) cambiosHuesped.ruc = ruc;
+      if (razonSocial !== (huesped?.razon_social ?? '')) cambiosHuesped.razonSocial = razonSocial;
 
       const cambiosEstadia: Record<string, string | number | boolean> = {};
       const tarifaNum = Number(tarifaDiaNueva);
       if (tarifaNum !== tarifaActual) cambiosEstadia.tarifaDiaNueva = tarifaNum;
       if (diasAdicionales) cambiosEstadia.diasAdicionales = Number(diasAdicionales);
+      if (nroPersonas !== nroPersonasActual) cambiosEstadia.nroPersonas = nroPersonas;
+      if (incluyeDesayuno !== incluyeDesayunoActual) cambiosEstadia.incluyeDesayuno = incluyeDesayuno;
       if (tieneVehiculo) {
         if (vehiculoMarca !== (vehiculoActual?.marca ?? '')) cambiosEstadia.vehiculoMarca = vehiculoMarca;
         if (vehiculoTipo !== (vehiculoActual?.tipo ?? '')) cambiosEstadia.vehiculoTipo = vehiculoTipo;
@@ -535,8 +624,6 @@ function EditarEstadiaForm({
       if (Object.keys(cambiosEstadia).length > 0) {
         await api.patch(`/hoteles/${hotelId}/estadias/${estadiaId}`, cambiosEstadia);
       }
-      setDiasAdicionales('');
-      setMostrar(false);
       onGuardado();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'No se pudo guardar');
@@ -545,164 +632,254 @@ function EditarEstadiaForm({
     }
   }
 
-  if (!mostrar) {
-    return (
-      <button onClick={() => setMostrar(true)} style={{ ...btnSecondary, marginBottom: 20 }}>
-        Editar estadía
-      </button>
-    );
-  }
+  const gridRowStyle: CSSProperties = {
+    display: 'grid',
+    gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr',
+    gap: 16,
+  };
 
   return (
-    <div
-      style={{
-        background: 'var(--surface-1)',
-        border: '1px solid var(--border)',
-        borderRadius: 12,
-        padding: 16,
-        marginBottom: 20,
-        display: 'flex',
-        flexDirection: 'column',
-        gap: 14,
-      }}
-    >
-      <div>
-        <p style={{ fontSize: 12, fontWeight: 500, color: 'var(--text-secondary)', margin: '0 0 8px' }}>
-          Datos del huésped
-        </p>
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-          <div style={{ flex: 1, minWidth: 140 }}>
-            <label style={labelStyle}>Nombres</label>
-            <input value={nombres} onChange={(e) => setNombres(e.target.value)} style={inputStyle} />
-          </div>
-          <div style={{ flex: 1, minWidth: 140 }}>
-            <label style={labelStyle}>Apellidos</label>
-            <input value={apellidos} onChange={(e) => setApellidos(e.target.value)} style={inputStyle} />
-          </div>
-          <div style={{ width: 160 }}>
-            <label style={labelStyle}>Tipo de documento</label>
-            <select value={tipoDoc} onChange={(e) => setTipoDoc(e.target.value)} style={inputStyle}>
-              <option value="dni">DNI</option>
-              <option value="pasaporte">Pasaporte</option>
-              <option value="carnet_extranjeria">Carnet de extranjería</option>
-              <option value="cedula">Cédula</option>
-              <option value="otro">Otro</option>
-            </select>
-          </div>
-          <div style={{ width: 150 }}>
-            <label style={labelStyle}>N° documento</label>
-            <input value={nroDoc} onChange={(e) => setNroDoc(e.target.value)} style={inputStyle} />
-          </div>
-          <div style={{ flex: 1, minWidth: 140 }}>
-            <label style={labelStyle}>Teléfono</label>
-            <input value={telefono} onChange={(e) => setTelefono(e.target.value)} style={inputStyle} />
-          </div>
-          <div style={{ flex: 1, minWidth: 140 }}>
-            <label style={labelStyle}>Correo</label>
-            <input type="email" value={correo} onChange={(e) => setCorreo(e.target.value)} style={inputStyle} />
-          </div>
-        </div>
-      </div>
+    <div style={overlayStyle}>
+      <div style={{ ...modalStyle, maxWidth: isMobile ? 560 : 960 }}>
+        <h2 style={{ fontSize: 17, marginBottom: 16 }}>Editar estadía</h2>
+        {error && <p style={{ color: 'var(--danger)', fontSize: 13, marginBottom: 12 }}>{error}</p>}
 
-      <div>
-        <p style={{ fontSize: 12, fontWeight: 500, color: 'var(--text-secondary)', margin: '0 0 8px' }}>
-          Estadía
-        </p>
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'flex-end' }}>
-          <div style={{ width: 150 }}>
-            <label style={labelStyle}>Tarifa/día (S/.)</label>
-            <input
-              type="number"
-              min={0}
-              step={0.01}
-              value={tarifaDiaNueva}
-              onChange={(e) => setTarifaDiaNueva(e.target.value)}
-              style={inputStyle}
-            />
-          </div>
-          <div style={{ width: 150 }}>
-            <label style={labelStyle}>Días adicionales</label>
-            <input
-              type="number"
-              min={1}
-              placeholder="0"
-              value={diasAdicionales}
-              onChange={(e) => setDiasAdicionales(e.target.value)}
-              style={inputStyle}
-            />
-          </div>
-        </div>
-        <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: '4px 0 0' }}>
-          Los días adicionales extienden la salida programada y generan el cargo de alquiler correspondiente.
-        </p>
-      </div>
+        <form onSubmit={guardar} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          {/* ---------- Datos personales + Nacionalidad/facturación ---------- */}
+          <div style={gridRowStyle}>
+            <div style={cardStyle}>
+              <p style={cardTitleStyle}>Datos personales</p>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 8 }}>
+                <div style={{ width: 150 }}>
+                  <label style={labelStyle}>Tipo de documento</label>
+                  <select value={tipoDoc} onChange={(e) => setTipoDoc(e.target.value)} style={inputStyle}>
+                    <option value="dni">DNI</option>
+                    <option value="pasaporte">Pasaporte</option>
+                    <option value="carnet_extranjeria">Carnet de extranjería</option>
+                    <option value="cedula">Cédula</option>
+                    <option value="otro">Otro</option>
+                  </select>
+                </div>
+                <div style={{ flex: 1, minWidth: 140 }}>
+                  <label style={labelStyle}>Número de documento</label>
+                  <input value={nroDoc} onChange={(e) => setNroDoc(e.target.value)} style={inputStyle} required />
+                </div>
+              </div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 8 }}>
+                <div style={{ flex: 1, minWidth: 140 }}>
+                  <label style={labelStyle}>Nombres</label>
+                  <input value={nombres} onChange={(e) => setNombres(e.target.value)} style={inputStyle} required />
+                </div>
+                <div style={{ flex: 1, minWidth: 140 }}>
+                  <label style={labelStyle}>Apellidos</label>
+                  <input value={apellidos} onChange={(e) => setApellidos(e.target.value)} style={inputStyle} required />
+                </div>
+              </div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                <div style={{ flex: 1, minWidth: 140 }}>
+                  <label style={labelStyle}>Teléfono</label>
+                  <input value={telefono} onChange={(e) => setTelefono(e.target.value)} style={inputStyle} />
+                </div>
+                <div style={{ flex: 1, minWidth: 140 }}>
+                  <label style={labelStyle}>Correo</label>
+                  <input type="email" value={correo} onChange={(e) => setCorreo(e.target.value)} style={inputStyle} />
+                </div>
+              </div>
+            </div>
 
-      <div>
-        <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, marginBottom: 8 }}>
-          <input type="checkbox" checked={tieneVehiculo} onChange={(e) => setTieneVehiculo(e.target.checked)} />
-          El huésped tiene vehículo
-        </label>
-        {tieneVehiculo && (
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-            <div style={{ width: 160 }}>
-              <label style={labelStyle}>Marca</label>
-              <input value={vehiculoMarca} onChange={(e) => setVehiculoMarca(e.target.value)} style={inputStyle} />
+            <div style={cardStyle}>
+              <p style={cardTitleStyle}>Nacionalidad y facturación</p>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 8 }}>
+                <div style={{ width: 150 }}>
+                  <label style={labelStyle}>Nacionalidad</label>
+                  <select value={nacionalidad} onChange={(e) => setNacionalidad(e.target.value)} style={inputStyle}>
+                    <option value="">Sin especificar</option>
+                    <option value="peruano">Peruano</option>
+                    <option value="extranjero">Extranjero</option>
+                  </select>
+                </div>
+                {nacionalidad === 'extranjero' && (
+                  <div style={{ flex: 1, minWidth: 120 }}>
+                    <label style={labelStyle}>País de origen</label>
+                    <input value={origen} onChange={(e) => setOrigen(e.target.value)} placeholder="Ej. Colombia" style={inputStyle} />
+                  </div>
+                )}
+                <div style={{ flex: 1, minWidth: 140 }}>
+                  <label style={labelStyle}>Fecha de nacimiento</label>
+                  <input
+                    type="date"
+                    value={fechaNacimiento}
+                    onChange={(e) => setFechaNacimiento(e.target.value)}
+                    style={inputStyle}
+                  />
+                </div>
+              </div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                <div style={{ width: 150 }}>
+                  <label style={labelStyle}>RUC</label>
+                  <input value={ruc} onChange={(e) => setRuc(e.target.value)} placeholder="11 dígitos" maxLength={11} style={inputStyle} />
+                </div>
+                <div style={{ flex: 1, minWidth: 140 }}>
+                  <label style={labelStyle}>Razón social</label>
+                  <input value={razonSocial} onChange={(e) => setRazonSocial(e.target.value)} style={inputStyle} />
+                </div>
+              </div>
+              <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: '6px 0 0' }}>
+                RUC y razón social: del propio huésped si pidió factura a su nombre, o de la empresa que paga su
+                estadía. Déjalo vacío si no aplica.
+              </p>
             </div>
-            <div style={{ width: 140 }}>
-              <label style={labelStyle}>Tipo</label>
-              <select value={vehiculoTipo} onChange={(e) => setVehiculoTipo(e.target.value)} style={inputStyle}>
-                <option value="">Sin especificar</option>
-                {TIPOS_VEHICULO.map((t) => (
-                  <option key={t.value} value={t.value}>
-                    {t.label}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div style={{ width: 140 }}>
-              <label style={labelStyle}>Placa</label>
-              <input value={vehiculoPlaca} onChange={(e) => setVehiculoPlaca(e.target.value)} style={inputStyle} />
-            </div>
-            <div style={{ flex: 1, minWidth: 180 }}>
-              <label style={labelStyle}>Cochera</label>
-              <select value={cocheraId} onChange={(e) => setCocheraId(e.target.value)} style={inputStyle}>
-                <option value="">Sin asignar</option>
-                {cocherasSeleccionables.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.numero} ({c.tamano}
-                    {c.tipo_vehiculo_permitido ? ` · ${c.tipo_vehiculo_permitido}` : ''}
-                    {c.es_externa ? ' · externa' : ''})
-                  </option>
-                ))}
-              </select>
-              {cocherasSeleccionables.length === 0 && (
+          </div>
+
+          {/* ---------- Estancia + Tarifa ---------- */}
+          <div style={gridRowStyle}>
+            <div style={cardStyle}>
+              <p style={cardTitleStyle}>Estancia</p>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 8 }}>
+                <div style={{ width: 110 }}>
+                  <label style={labelStyle}>N° personas</label>
+                  <input
+                    type="number"
+                    min={1}
+                    value={nroPersonas}
+                    onChange={(e) => setNroPersonas(Number(e.target.value))}
+                    style={inputStyle}
+                    required
+                  />
+                </div>
+                <div style={{ flex: 1, minWidth: 130 }}>
+                  <label style={labelStyle}>Tipo de cliente</label>
+                  <select
+                    value={tipoCliente}
+                    onChange={(e) => cambiarTipoCliente(e.target.value as TipoCliente)}
+                    style={inputStyle}
+                  >
+                    <option value="normal">Normal</option>
+                    <option value="corporativo">Corporativo</option>
+                    <option value="web">Web</option>
+                  </select>
+                </div>
+                <div style={{ width: 150 }}>
+                  <label style={labelStyle}>Días adicionales</label>
+                  <input
+                    type="number"
+                    min={1}
+                    placeholder="0"
+                    value={diasAdicionales}
+                    onChange={(e) => setDiasAdicionales(e.target.value)}
+                    style={inputStyle}
+                  />
+                </div>
+              </div>
+              <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: '0 0 8px' }}>
+                Días actuales: {diasActuales}. Los días adicionales extienden la salida programada y generan el
+                cargo de alquiler correspondiente (no se puede reducir).
+              </p>
+              <div style={{ marginBottom: 8 }}>
+                <label style={labelStyle}>Fecha y hora de check-in</label>
+                <input
+                  type="text"
+                  value={checkinReal ? new Date(checkinReal).toLocaleString('es-PE') : '—'}
+                  disabled
+                  style={{ ...inputStyle, background: 'var(--surface-2, var(--surface-1))', color: 'var(--text-muted)' }}
+                />
                 <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: '4px 0 0' }}>
-                  No hay cocheras disponibles ahora mismo.
+                  No se puede editar: es el momento real en que ingresó el huésped.
                 </p>
-              )}
+              </div>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13 }}>
+                <input type="checkbox" checked={incluyeDesayuno} onChange={(e) => setIncluyeDesayuno(e.target.checked)} />
+                Incluye desayuno (cortesía, no se cobra)
+              </label>
+            </div>
+
+            <div style={cardStyle}>
+              <p style={cardTitleStyle}>Tarifa</p>
+              <div style={{ width: 150 }}>
+                <label style={labelStyle}>Tarifa/día (S/.)</label>
+                <input
+                  type="number"
+                  min={0}
+                  step={0.01}
+                  value={tarifaDiaNueva}
+                  onChange={(e) => setTarifaDiaNueva(e.target.value)}
+                  style={{
+                    ...inputStyle,
+                    ...(tarifaBajoCosto ? { borderColor: 'var(--danger)' } : {}),
+                  }}
+                />
+              </div>
+              <p style={{ fontSize: 11, color: tarifaBajoCosto ? 'var(--danger)' : 'var(--text-muted)', margin: '6px 0 0' }}>
+                {precioCosto > 0
+                  ? `Precio de costo: S/. ${precioCosto}${tarifaBajoCosto ? ' — la tarifa no puede quedar por debajo de este valor.' : ''}`
+                  : 'Este tipo de habitación no tiene un precio de costo configurado.'}
+              </p>
+              <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: '6px 0 0' }}>
+                Cambiar la tarifa aplica desde ahora en adelante; no recalcula los cargos ya registrados.
+              </p>
             </div>
           </div>
-        )}
-      </div>
 
-      <div style={{ display: 'flex', gap: 8 }}>
-        <button onClick={guardar} disabled={enviando} style={btnPrimary}>
-          Guardar cambios
-        </button>
-        <button
-          type="button"
-          onClick={() => {
-            setMostrar(false);
-            setTarifaDiaNueva(String(tarifaActual));
-            setDiasAdicionales('');
-            setError(null);
-          }}
-          style={btnSecondary}
-        >
-          Cancelar
-        </button>
+          {/* ---------- Vehículo y cochera ---------- */}
+          <div style={cardStyle}>
+            <p style={cardTitleStyle}>Vehículo y cochera</p>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, marginBottom: tieneVehiculo ? 8 : 0 }}>
+              <input type="checkbox" checked={tieneVehiculo} onChange={(e) => setTieneVehiculo(e.target.checked)} />
+              El huésped tiene vehículo
+            </label>
+            {tieneVehiculo && (
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                <div style={{ width: 160 }}>
+                  <label style={labelStyle}>Marca</label>
+                  <input value={vehiculoMarca} onChange={(e) => setVehiculoMarca(e.target.value)} style={inputStyle} />
+                </div>
+                <div style={{ width: 140 }}>
+                  <label style={labelStyle}>Tipo</label>
+                  <select value={vehiculoTipo} onChange={(e) => setVehiculoTipo(e.target.value)} style={inputStyle}>
+                    <option value="">Sin especificar</option>
+                    {TIPOS_VEHICULO.map((t) => (
+                      <option key={t.value} value={t.value}>
+                        {t.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div style={{ width: 140 }}>
+                  <label style={labelStyle}>Placa</label>
+                  <input value={vehiculoPlaca} onChange={(e) => setVehiculoPlaca(e.target.value)} style={inputStyle} />
+                </div>
+                <div style={{ flex: 1, minWidth: 180 }}>
+                  <label style={labelStyle}>Cochera</label>
+                  <select value={cocheraId} onChange={(e) => setCocheraId(e.target.value)} style={inputStyle}>
+                    <option value="">Sin asignar</option>
+                    {cocherasSeleccionables.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.numero} ({c.tamano}
+                        {c.tipo_vehiculo_permitido ? ` · ${c.tipo_vehiculo_permitido}` : ''}
+                        {c.es_externa ? ' · externa' : ''})
+                      </option>
+                    ))}
+                  </select>
+                  {cocherasSeleccionables.length === 0 && (
+                    <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: '4px 0 0' }}>
+                      No hay cocheras disponibles ahora mismo.
+                    </p>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+
+          <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 4 }}>
+            <button type="button" onClick={onClose} style={btnSecondary}>
+              Cancelar
+            </button>
+            <button type="submit" disabled={enviando || tarifaBajoCosto} style={btnPrimary}>
+              {enviando ? 'Guardando...' : 'Guardar cambios'}
+            </button>
+          </div>
+        </form>
       </div>
-      {error && <p style={{ color: 'var(--danger)', fontSize: 12, margin: 0 }}>{error}</p>}
     </div>
   );
 }
@@ -987,4 +1164,40 @@ const btnSecondary: CSSProperties = {
   border: '1px solid var(--border)',
   borderRadius: 'var(--radius)',
   fontSize: 13,
+};
+
+const overlayStyle: CSSProperties = {
+  position: 'fixed',
+  inset: 0,
+  background: 'rgba(0,0,0,0.5)',
+  display: 'flex',
+  alignItems: 'flex-start',
+  justifyContent: 'center',
+  padding: '40px 16px',
+  overflowY: 'auto',
+  zIndex: 100,
+};
+
+const modalStyle: CSSProperties = {
+  background: 'var(--surface-0, var(--surface-1))',
+  border: '1px solid var(--border)',
+  borderRadius: 12,
+  padding: 24,
+  width: '100%',
+};
+
+const cardStyle: CSSProperties = {
+  border: '1px solid var(--border)',
+  borderRadius: 'var(--radius)',
+  padding: 14,
+  background: 'var(--surface-1)',
+};
+
+const cardTitleStyle: CSSProperties = {
+  fontSize: 11,
+  fontWeight: 700,
+  color: 'var(--text-secondary)',
+  margin: '0 0 10px',
+  textTransform: 'uppercase',
+  letterSpacing: 0.4,
 };
