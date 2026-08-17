@@ -489,18 +489,17 @@ function CalendarioReservas({
 
   return (
     <div>
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16, alignItems: 'flex-end', marginBottom: 12 }}>
-        <div>
-          <label style={labelStyle}>Desde</label>
-          <input type="date" value={desde} onChange={(e) => onDesdeChange(e.target.value)} style={inputStyle} />
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16, alignItems: 'flex-start', marginBottom: 12 }}>
+        <div style={{ display: 'flex', gap: 16 }}>
+          <div>
+            <label style={labelStyle}>Desde</label>
+            <input type="date" value={desde} onChange={(e) => onDesdeChange(e.target.value)} style={inputStyle} />
+          </div>
+          <div>
+            <label style={labelStyle}>Hasta</label>
+            <input type="date" value={hasta} onChange={(e) => onHastaChange(e.target.value)} style={inputStyle} />
+          </div>
         </div>
-        <div>
-          <label style={labelStyle}>Hasta</label>
-          <input type="date" value={hasta} onChange={(e) => onHastaChange(e.target.value)} style={inputStyle} />
-        </div>
-      </div>
-
-      <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 16 }}>
         <TarifasReferencia tiposHabitacion={tiposHabitacion} />
       </div>
 
@@ -681,10 +680,10 @@ function TarifasReferencia({ tiposHabitacion }: { tiposHabitacion: TipoHabitacio
         border: '1px solid var(--border)',
         borderRadius: 'var(--radius)',
         background: 'var(--surface-1)',
-        padding: '10px 16px',
+        padding: '6px 14px',
       }}
     >
-      <p style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-secondary)', margin: '0 0 8px', textTransform: 'uppercase', letterSpacing: 0.4, textAlign: 'center' }}>
+      <p style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-secondary)', margin: '0 0 4px', textTransform: 'uppercase', letterSpacing: 0.4, textAlign: 'center' }}>
         Tarifas por tipo (S/., referencia)
       </p>
       <table style={{ borderCollapse: 'collapse', fontSize: 13 }}>
@@ -1069,14 +1068,14 @@ const tdCalStyle: CSSProperties = {
 };
 
 const thTarifaStyle: CSSProperties = {
-  padding: '3px 12px 6px',
+  padding: '1px 10px 4px',
   textAlign: 'right',
   fontWeight: 500,
   whiteSpace: 'nowrap',
 };
 
 const tdTarifaStyle: CSSProperties = {
-  padding: '3px 12px',
+  padding: '1px 10px',
   textAlign: 'right',
   whiteSpace: 'nowrap',
 };
