@@ -670,6 +670,11 @@ function CalendarioReservas({
 // habitación según el tipo de cliente -- útil para no tener que ir a
 // Configuración cada vez que se arma una reserva y hay que decidir/
 // verificar el precio a cobrar.
+// Tabla transpuesta (tipos de habitación en columnas, no en filas): con 6-7
+// tipos una tabla vertical se vuelve más alta que el propio filtro Desde/
+// Hasta y empuja el calendario hacia abajo -- así queda ancha pero baja
+// (máximo 4 filas: Normal/Corp./Web/Hora), lo que mantiene todo pegado
+// arriba, cerca del calendario.
 function TarifasReferencia({ tiposHabitacion }: { tiposHabitacion: TipoHabitacionPrecios[] }) {
   if (tiposHabitacion.length === 0) return null;
   const hayPorHora = tiposHabitacion.some((t) => t.precio_por_hora != null && Number(t.precio_por_hora) > 0);
@@ -680,36 +685,52 @@ function TarifasReferencia({ tiposHabitacion }: { tiposHabitacion: TipoHabitacio
         border: '1px solid var(--border)',
         borderRadius: 'var(--radius)',
         background: 'var(--surface-1)',
-        padding: '6px 14px',
+        padding: '5px 12px',
       }}
     >
-      <p style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-secondary)', margin: '0 0 4px', textTransform: 'uppercase', letterSpacing: 0.4, textAlign: 'center' }}>
+      <p style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-secondary)', margin: '0 0 3px', textTransform: 'uppercase', letterSpacing: 0.4, textAlign: 'center' }}>
         Tarifas por tipo (S/., referencia)
       </p>
-      <table style={{ borderCollapse: 'collapse', fontSize: 13 }}>
+      <table style={{ borderCollapse: 'collapse', fontSize: 12 }}>
         <thead>
           <tr style={{ color: 'var(--text-muted)' }}>
-            <th style={thTarifaStyle}>Tipo</th>
-            <th style={thTarifaStyle}>Normal</th>
-            <th style={thTarifaStyle}>Corp.</th>
-            <th style={thTarifaStyle}>Web</th>
-            {hayPorHora && <th style={thTarifaStyle}>Hora</th>}
+            <th style={{ ...thTarifaStyle, textAlign: 'left' }}></th>
+            {ordenados.map((t) => (
+              <th key={t.id} style={thTarifaStyle}>
+                {t.nombre}
+              </th>
+            ))}
           </tr>
         </thead>
         <tbody>
-          {ordenados.map((t) => (
-            <tr key={t.id}>
-              <td style={{ ...tdTarifaStyle, textAlign: 'left', fontWeight: 500 }}>{t.nombre}</td>
-              <td style={tdTarifaStyle}>{Number(t.precio_normal).toFixed(2)}</td>
-              <td style={tdTarifaStyle}>{Number(t.precio_corporativo).toFixed(2)}</td>
-              <td style={tdTarifaStyle}>{Number(t.precio_web).toFixed(2)}</td>
-              {hayPorHora && (
-                <td style={tdTarifaStyle}>
+          <tr>
+            <td style={{ ...tdTarifaStyle, textAlign: 'left', fontWeight: 500 }}>Normal</td>
+            {ordenados.map((t) => (
+              <td key={t.id} style={tdTarifaStyle}>{Number(t.precio_normal).toFixed(2)}</td>
+            ))}
+          </tr>
+          <tr>
+            <td style={{ ...tdTarifaStyle, textAlign: 'left', fontWeight: 500 }}>Corp.</td>
+            {ordenados.map((t) => (
+              <td key={t.id} style={tdTarifaStyle}>{Number(t.precio_corporativo).toFixed(2)}</td>
+            ))}
+          </tr>
+          <tr>
+            <td style={{ ...tdTarifaStyle, textAlign: 'left', fontWeight: 500 }}>Web</td>
+            {ordenados.map((t) => (
+              <td key={t.id} style={tdTarifaStyle}>{Number(t.precio_web).toFixed(2)}</td>
+            ))}
+          </tr>
+          {hayPorHora && (
+            <tr>
+              <td style={{ ...tdTarifaStyle, textAlign: 'left', fontWeight: 500 }}>Hora</td>
+              {ordenados.map((t) => (
+                <td key={t.id} style={tdTarifaStyle}>
                   {t.precio_por_hora != null ? Number(t.precio_por_hora).toFixed(2) : '—'}
                 </td>
-              )}
+              ))}
             </tr>
-          ))}
+          )}
         </tbody>
       </table>
     </div>
