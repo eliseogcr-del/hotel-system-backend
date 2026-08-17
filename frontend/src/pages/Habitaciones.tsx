@@ -682,8 +682,8 @@ function VistaTarjetas({
                 <span
                   style={{
                     fontSize: 13,
-                    fontWeight: 600,
-                    color: h.saldo != null && h.saldo > 0 ? 'var(--ocupada-text)' : 'var(--text-primary)',
+                    fontWeight: h.saldo != null && h.saldo > 0 ? 700 : 600,
+                    color: h.saldo != null && h.saldo > 0 ? '#ffffff' : 'var(--text-primary)',
                   }}
                 >
                   Saldo: {h.saldo != null ? `S/. ${h.saldo.toFixed(2)}` : '—'}
