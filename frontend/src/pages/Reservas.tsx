@@ -498,6 +498,9 @@ function CalendarioReservas({
           <label style={labelStyle}>Hasta</label>
           <input type="date" value={hasta} onChange={(e) => onHastaChange(e.target.value)} style={inputStyle} />
         </div>
+      </div>
+
+      <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 16 }}>
         <TarifasReferencia tiposHabitacion={tiposHabitacion} />
       </div>
 
@@ -671,21 +674,20 @@ function CalendarioReservas({
 function TarifasReferencia({ tiposHabitacion }: { tiposHabitacion: TipoHabitacionPrecios[] }) {
   if (tiposHabitacion.length === 0) return null;
   const hayPorHora = tiposHabitacion.some((t) => t.precio_por_hora != null && Number(t.precio_por_hora) > 0);
+  const ordenados = [...tiposHabitacion].sort((a, b) => Number(a.precio_normal) - Number(b.precio_normal));
   return (
     <div
       style={{
         border: '1px solid var(--border)',
         borderRadius: 'var(--radius)',
         background: 'var(--surface-1)',
-        padding: '6px 10px',
-        maxHeight: 150,
-        overflowY: 'auto',
+        padding: '10px 16px',
       }}
     >
-      <p style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-secondary)', margin: '0 0 4px', textTransform: 'uppercase', letterSpacing: 0.4 }}>
+      <p style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-secondary)', margin: '0 0 8px', textTransform: 'uppercase', letterSpacing: 0.4, textAlign: 'center' }}>
         Tarifas por tipo (S/., referencia)
       </p>
-      <table style={{ borderCollapse: 'collapse', fontSize: 11 }}>
+      <table style={{ borderCollapse: 'collapse', fontSize: 13 }}>
         <thead>
           <tr style={{ color: 'var(--text-muted)' }}>
             <th style={thTarifaStyle}>Tipo</th>
@@ -696,7 +698,7 @@ function TarifasReferencia({ tiposHabitacion }: { tiposHabitacion: TipoHabitacio
           </tr>
         </thead>
         <tbody>
-          {tiposHabitacion.map((t) => (
+          {ordenados.map((t) => (
             <tr key={t.id}>
               <td style={{ ...tdTarifaStyle, textAlign: 'left', fontWeight: 500 }}>{t.nombre}</td>
               <td style={tdTarifaStyle}>{Number(t.precio_normal).toFixed(2)}</td>
@@ -1067,14 +1069,14 @@ const tdCalStyle: CSSProperties = {
 };
 
 const thTarifaStyle: CSSProperties = {
-  padding: '1px 8px 3px',
+  padding: '3px 12px 6px',
   textAlign: 'right',
   fontWeight: 500,
   whiteSpace: 'nowrap',
 };
 
 const tdTarifaStyle: CSSProperties = {
-  padding: '1px 8px',
+  padding: '3px 12px',
   textAlign: 'right',
   whiteSpace: 'nowrap',
 };
