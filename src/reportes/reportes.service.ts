@@ -14,13 +14,14 @@ export interface MovimientoCaja {
 
 // El concepto de caja no distingue de qué cargo viene un pago genérico
 // (alquiler, cochera, mascota, ajustes, saldos pendientes... todo cae como
-// 'Pago de huésped' -- ver EstadiasService.registrarMovimiento): por eso
-// esa etiqueta se deja explícita aquí en vez de fingir una categoría por
-// habitación/cochera/mascota que el sistema no registra por separado.
-// Bazar y desayuno sí quedan aparte porque generan su propio concepto
-// cuando se pagan al momento.
+// 'Pago de huésped' -- ver EstadiasService.registrarMovimiento). Para no
+// perder esa distinción, si quien registró el pago escribió algo en
+// "Notas" (ej. "Pago de cochera"), se usa ese texto como la categoría en
+// vez del genérico; solo cuando no hay notas cae en el bucket genérico de
+// abajo. Bazar y desayuno sí quedan aparte porque generan su propio
+// concepto cuando se pagan al momento.
 const CONCEPTO_LABEL: Record<string, string> = {
-  'Pago de huésped': 'Pagos de estadía (alquiler, cochera, mascota y otros cargos)',
+  'Pago de huésped': 'Pagos de estadía sin descripción',
   'Consumo de bazar pagado al momento': 'Bazar',
   'Desayuno pagado al momento': 'Desayuno',
 };
@@ -107,14 +108,21 @@ export class ReportesService {
     return movimientos.reduce((acc, m) => acc + Number(m.monto), 0);
   }
 
-  private agruparPorConcepto(movimientos: { concepto: string; monto: number }[]) {
+  private agruparPorConcepto(movimientos: MovimientoCaja[]) {
     const mapa = new Map<string, number>();
     for (const m of movimientos) {
-      const etiqueta = CONCEPTO_LABEL[m.concepto] ?? m.concepto;
+      const etiqueta = this.etiquetaConcepto(m);
       mapa.set(etiqueta, (mapa.get(etiqueta) ?? 0) + Number(m.monto));
     }
     return [...mapa.entries()]
       .map(([concepto, monto]) => ({ concepto, monto }))
       .sort((a, b) => b.monto - a.monto);
+  }
+
+  private etiquetaConcepto(m: MovimientoCaja): string {
+    if (m.concepto === 'Pago de huésped' && m.notas?.trim()) {
+      return m.notas.trim();
+    }
+    return CONCEPTO_LABEL[m.concepto] ?? m.concepto;
   }
 }
