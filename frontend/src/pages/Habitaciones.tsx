@@ -64,6 +64,19 @@ const ESTADO_LABEL: Record<Estado, string> = {
   bloqueada: 'Bloqueada',
 };
 
+// Colores más intensos/saturados que los tokens globales (var(--estado-bg)),
+// pensados solo para esta pantalla (tarjetas grandes y celdas donde el
+// color es la señal principal). Mantenimiento se separa deliberadamente de
+// Ocupada hacia un naranja puro para que no se confundan a simple vista.
+const ESTADO_COLOR_INTENSO: Record<string, { bg: string; border: string; text: string }> = {
+  disponible: { bg: '#8fca55', border: '#4c7a19', text: '#173404' },
+  ocupada: { bg: '#ef7371', border: '#c8302f', text: '#501313' },
+  limpieza: { bg: '#f7c94a', border: '#c97e0a', text: '#412402' },
+  mantenimiento: { bg: '#f2954a', border: '#cc5f00', text: '#4a2000' },
+  bloqueada: { bg: '#a89ae8', border: '#5347d1', text: '#26215c' },
+  reservada: { bg: '#5cbde0', border: '#0f7fa8', text: '#0b3a4a' },
+};
+
 const ESTADO_COCHERA_LABEL: Record<Cochera['estado'], string> = {
   disponible: 'Disponible',
   ocupada: 'Ocupada',
@@ -275,7 +288,7 @@ export function Habitaciones() {
                   width: 8,
                   height: 8,
                   borderRadius: '50%',
-                  background: `var(--${estado})`,
+                  background: ESTADO_COLOR_INTENSO[estado].border,
                   display: 'inline-block',
                 }}
               />
@@ -288,7 +301,7 @@ export function Habitaciones() {
                 width: 8,
                 height: 8,
                 borderRadius: '50%',
-                background: 'var(--reservada)',
+                background: ESTADO_COLOR_INTENSO.reservada.border,
                 display: 'inline-block',
               }}
             />
@@ -426,8 +439,9 @@ export function Habitaciones() {
                 <td style={tdStyle}>
                   <span
                     style={{
-                      background: `var(--${colorEstado(h)}-bg)`,
-                      color: `var(--${colorEstado(h)}-text)`,
+                      background: ESTADO_COLOR_INTENSO[colorEstado(h)].bg,
+                      color: ESTADO_COLOR_INTENSO[colorEstado(h)].text,
+                      fontWeight: 700,
                       padding: '2px 8px',
                       borderRadius: 999,
                       fontSize: 11,
@@ -446,7 +460,7 @@ export function Habitaciones() {
                   style={{
                     ...tdStyle,
                     ...(h.huesped && h.saldo != null && h.saldo > 0
-                      ? { background: 'var(--ocupada-bg)', color: 'var(--ocupada-text)', fontWeight: 500 }
+                      ? { background: ESTADO_COLOR_INTENSO.ocupada.bg, color: ESTADO_COLOR_INTENSO.ocupada.text, fontWeight: 700 }
                       : {}),
                   }}
                 >
@@ -457,7 +471,7 @@ export function Habitaciones() {
                   {h.huesped ? (
                     <NotasCelda notas={h.notas ?? ''} onGuardar={(n) => guardarNotas(h, n)} />
                   ) : h.tareaHkEnProceso?.notas ? (
-                    <span style={{ color: 'var(--text-muted)', fontStyle: 'italic' }}>
+                    <span style={{ color: 'var(--nota-texto)', fontWeight: 700, fontStyle: 'italic' }}>
                       {h.tareaHkEnProceso.notas}
                     </span>
                   ) : (
@@ -517,8 +531,9 @@ export function Habitaciones() {
                     <td style={tdStyle}>
                       <span
                         style={{
-                          background: `var(--${c.estado}-bg)`,
-                          color: `var(--${c.estado}-text)`,
+                          background: ESTADO_COLOR_INTENSO[c.estado].bg,
+                          color: ESTADO_COLOR_INTENSO[c.estado].text,
+                          fontWeight: 700,
                           padding: '2px 8px',
                           borderRadius: 999,
                           fontSize: 11,
@@ -626,15 +641,15 @@ function VistaTarjetas({
               onClick={() => clickable && onClickHabitacion(h)}
               style={{
                 ...tarjetaStyle,
-                background: `var(--${color}-bg)`,
-                border: `1px solid var(--${color})`,
+                background: ESTADO_COLOR_INTENSO[color].bg,
+                border: `2px solid ${ESTADO_COLOR_INTENSO[color].border}`,
                 cursor: clickable ? 'pointer' : 'default',
               }}
               title={clickable ? tituloClick : undefined}
             >
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
                 <span style={{ fontSize: 20, fontWeight: 700, color: 'var(--text-primary)' }}>{h.hab_numero}</span>
-                <span style={{ fontSize: 10, fontWeight: 600, color: `var(--${color}-text)` }}>{etiqueta}</span>
+                <span style={{ fontSize: 10, fontWeight: 700, color: ESTADO_COLOR_INTENSO[color].text }}>{etiqueta}</span>
               </div>
               <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{h.tipos_habitacion?.nombre ?? '—'}</span>
               {(h.huesped || h.reservaHoy?.huesped) && (
@@ -671,7 +686,8 @@ function VistaTarjetas({
                 <span
                   style={{
                     fontSize: 11,
-                    color: 'var(--text-muted)',
+                    color: 'var(--nota-texto)',
+                    fontWeight: 700,
                     fontStyle: 'italic',
                     overflow: 'hidden',
                     textOverflow: 'ellipsis',
@@ -712,8 +728,8 @@ function VistaTarjetas({
                   onClick={() => clickable && onClickCochera(c)}
                   style={{
                     ...tarjetaStyle,
-                    background: `var(--${c.estado}-bg)`,
-                    border: `1px solid var(--${c.estado})`,
+                    background: ESTADO_COLOR_INTENSO[c.estado].bg,
+                    border: `2px solid ${ESTADO_COLOR_INTENSO[c.estado].border}`,
                     cursor: clickable ? 'pointer' : 'default',
                     minHeight: 76,
                   }}
@@ -721,7 +737,7 @@ function VistaTarjetas({
                 >
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
                     <span style={{ fontSize: 18, fontWeight: 700, color: 'var(--text-primary)' }}>{c.numero}</span>
-                    <span style={{ fontSize: 10, fontWeight: 600, color: `var(--${c.estado}-text)` }}>
+                    <span style={{ fontSize: 10, fontWeight: 700, color: ESTADO_COLOR_INTENSO[c.estado].text }}>
                       {ESTADO_COCHERA_LABEL[c.estado]}
                     </span>
                   </div>
@@ -784,8 +800,8 @@ function NotasCelda({
           padding: 0,
           textAlign: 'left',
           fontSize: tarjeta ? 11 : 12.5,
-          fontStyle: tarjeta && notas ? 'italic' : undefined,
-          color: notas ? (tarjeta ? 'var(--text-muted)' : 'var(--text-primary)') : 'var(--text-muted)',
+          fontWeight: notas ? 700 : undefined,
+          color: notas ? 'var(--nota-texto)' : 'var(--text-muted)',
           cursor: 'pointer',
           width: tarjeta ? '100%' : undefined,
           maxWidth: tarjeta ? undefined : 180,

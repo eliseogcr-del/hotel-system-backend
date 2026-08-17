@@ -22,6 +22,10 @@
   --reservada-bg: #e2f4fa;
   --reservada-text: #0b3a4a;
 
+  /* Texto de notas operativas en Habitaciones: debe resaltar sobre
+     cualquier color de tarjeta/fondo (ver Habitaciones.tsx). */
+  --nota-texto: #1145b3;
+
   --danger: #e24b4a;
   --danger-bg: #fcebeb;
 
