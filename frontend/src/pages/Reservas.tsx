@@ -394,6 +394,8 @@ function CalendarioReservas({
     [habitaciones],
   );
 
+  const [mostrarTarifas, setMostrarTarifas] = useState(false);
+
   function segmentoDesde(item: ReservaCalendario, fechaInicio: string): SegmentoCelda {
     return {
       span: 1,
@@ -489,19 +491,23 @@ function CalendarioReservas({
 
   return (
     <div>
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16, alignItems: 'flex-start', marginBottom: 12 }}>
-        <div style={{ display: 'flex', gap: 16 }}>
-          <div>
-            <label style={labelStyle}>Desde</label>
-            <input type="date" value={desde} onChange={(e) => onDesdeChange(e.target.value)} style={inputStyle} />
-          </div>
-          <div>
-            <label style={labelStyle}>Hasta</label>
-            <input type="date" value={hasta} onChange={(e) => onHastaChange(e.target.value)} style={inputStyle} />
-          </div>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16, alignItems: 'flex-end', marginBottom: 12 }}>
+        <div>
+          <label style={labelStyle}>Desde</label>
+          <input type="date" value={desde} onChange={(e) => onDesdeChange(e.target.value)} style={inputStyle} />
         </div>
-        <TarifasReferencia tiposHabitacion={tiposHabitacion} />
+        <div>
+          <label style={labelStyle}>Hasta</label>
+          <input type="date" value={hasta} onChange={(e) => onHastaChange(e.target.value)} style={inputStyle} />
+        </div>
+        <button type="button" onClick={() => setMostrarTarifas(true)} style={btnSecondary}>
+          Ver tarifas
+        </button>
       </div>
+
+      {mostrarTarifas && (
+        <TarifasModal tiposHabitacion={tiposHabitacion} onClose={() => setMostrarTarifas(false)} />
+      )}
 
       {loading && <p style={{ color: 'var(--text-muted)' }}>Cargando...</p>}
       {error && <p style={{ color: 'var(--danger)' }}>{error}</p>}
@@ -670,69 +676,64 @@ function CalendarioReservas({
 // habitación según el tipo de cliente -- útil para no tener que ir a
 // Configuración cada vez que se arma una reserva y hay que decidir/
 // verificar el precio a cobrar.
-// Tabla transpuesta (tipos de habitación en columnas, no en filas): con 6-7
-// tipos una tabla vertical se vuelve más alta que el propio filtro Desde/
-// Hasta y empuja el calendario hacia abajo -- así queda ancha pero baja
-// (máximo 4 filas: Normal/Corp./Web/Hora), lo que mantiene todo pegado
-// arriba, cerca del calendario.
-function TarifasReferencia({ tiposHabitacion }: { tiposHabitacion: TipoHabitacionPrecios[] }) {
-  if (tiposHabitacion.length === 0) return null;
+// Modal de solo consulta: al vivir fuera del flujo normal de la página no
+// compite por espacio con el filtro Desde/Hasta ni con el calendario (a
+// diferencia de la versión anterior, embebida junto a los filtros, que
+// terminaba empujando todo hacia abajo). Sin límite de alto, cada tipo de
+// habitación vuelve a ir en su propia fila (más fácil de leer que la
+// versión compacta por columnas).
+function TarifasModal({
+  tiposHabitacion,
+  onClose,
+}: {
+  tiposHabitacion: TipoHabitacionPrecios[];
+  onClose: () => void;
+}) {
   const hayPorHora = tiposHabitacion.some((t) => t.precio_por_hora != null && Number(t.precio_por_hora) > 0);
   const ordenados = [...tiposHabitacion].sort((a, b) => Number(a.precio_normal) - Number(b.precio_normal));
   return (
-    <div
-      style={{
-        border: '1px solid var(--border)',
-        borderRadius: 'var(--radius)',
-        background: 'var(--surface-1)',
-        padding: '5px 12px',
-      }}
-    >
-      <p style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-secondary)', margin: '0 0 3px', textTransform: 'uppercase', letterSpacing: 0.4, textAlign: 'center' }}>
-        Tarifas por tipo (S/., referencia)
-      </p>
-      <table style={{ borderCollapse: 'collapse', fontSize: 12 }}>
-        <thead>
-          <tr style={{ color: 'var(--text-muted)' }}>
-            <th style={{ ...thTarifaStyle, textAlign: 'left' }}></th>
-            {ordenados.map((t) => (
-              <th key={t.id} style={thTarifaStyle}>
-                {t.nombre}
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          <tr>
-            <td style={{ ...tdTarifaStyle, textAlign: 'left', fontWeight: 500 }}>Normal</td>
-            {ordenados.map((t) => (
-              <td key={t.id} style={tdTarifaStyle}>{Number(t.precio_normal).toFixed(2)}</td>
-            ))}
-          </tr>
-          <tr>
-            <td style={{ ...tdTarifaStyle, textAlign: 'left', fontWeight: 500 }}>Corp.</td>
-            {ordenados.map((t) => (
-              <td key={t.id} style={tdTarifaStyle}>{Number(t.precio_corporativo).toFixed(2)}</td>
-            ))}
-          </tr>
-          <tr>
-            <td style={{ ...tdTarifaStyle, textAlign: 'left', fontWeight: 500 }}>Web</td>
-            {ordenados.map((t) => (
-              <td key={t.id} style={tdTarifaStyle}>{Number(t.precio_web).toFixed(2)}</td>
-            ))}
-          </tr>
-          {hayPorHora && (
-            <tr>
-              <td style={{ ...tdTarifaStyle, textAlign: 'left', fontWeight: 500 }}>Hora</td>
-              {ordenados.map((t) => (
-                <td key={t.id} style={tdTarifaStyle}>
-                  {t.precio_por_hora != null ? Number(t.precio_por_hora).toFixed(2) : '—'}
-                </td>
-              ))}
+    <div style={overlayStyle}>
+      <div style={{ ...modalStyle, maxWidth: 480 }}>
+        <h2 style={{ fontSize: 17, marginBottom: 16 }}>Tarifas por tipo (S/.)</h2>
+        <table style={{ borderCollapse: 'collapse', fontSize: 13, width: '100%' }}>
+          <thead>
+            <tr style={{ color: 'var(--text-muted)' }}>
+              <th style={{ ...thTarifaStyle, textAlign: 'left' }}>Tipo</th>
+              <th style={thTarifaStyle}>Normal</th>
+              <th style={thTarifaStyle}>Corp.</th>
+              <th style={thTarifaStyle}>Web</th>
+              {hayPorHora && <th style={thTarifaStyle}>Hora</th>}
             </tr>
-          )}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {ordenados.map((t) => (
+              <tr key={t.id}>
+                <td style={{ ...tdTarifaStyle, textAlign: 'left', fontWeight: 500 }}>{t.nombre}</td>
+                <td style={tdTarifaStyle}>{Number(t.precio_normal).toFixed(2)}</td>
+                <td style={tdTarifaStyle}>{Number(t.precio_corporativo).toFixed(2)}</td>
+                <td style={tdTarifaStyle}>{Number(t.precio_web).toFixed(2)}</td>
+                {hayPorHora && (
+                  <td style={tdTarifaStyle}>
+                    {t.precio_por_hora != null ? Number(t.precio_por_hora).toFixed(2) : '—'}
+                  </td>
+                )}
+              </tr>
+            ))}
+            {ordenados.length === 0 && (
+              <tr>
+                <td colSpan={hayPorHora ? 5 : 4} style={{ ...tdTarifaStyle, textAlign: 'center', color: 'var(--text-muted)' }}>
+                  No hay tipos de habitación configurados.
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+        <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 16 }}>
+          <button type="button" onClick={onClose} style={btnSecondary}>
+            Cerrar
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
@@ -1089,14 +1090,34 @@ const tdCalStyle: CSSProperties = {
 };
 
 const thTarifaStyle: CSSProperties = {
-  padding: '1px 10px 4px',
+  padding: '4px 10px 6px',
   textAlign: 'right',
   fontWeight: 500,
   whiteSpace: 'nowrap',
 };
 
 const tdTarifaStyle: CSSProperties = {
-  padding: '1px 10px',
+  padding: '4px 10px',
   textAlign: 'right',
   whiteSpace: 'nowrap',
+};
+
+const overlayStyle: CSSProperties = {
+  position: 'fixed',
+  inset: 0,
+  background: 'rgba(0,0,0,0.5)',
+  display: 'flex',
+  alignItems: 'flex-start',
+  justifyContent: 'center',
+  padding: '40px 16px',
+  overflowY: 'auto',
+  zIndex: 100,
+};
+
+const modalStyle: CSSProperties = {
+  background: 'var(--surface-0, var(--surface-1))',
+  border: '1px solid var(--border)',
+  borderRadius: 12,
+  padding: 24,
+  width: '100%',
 };
