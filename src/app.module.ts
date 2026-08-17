@@ -15,6 +15,7 @@ import { ProductosBazarModule } from './productos-bazar/productos-bazar.module';
 import { TiposDesayunoModule } from './tipos-desayuno/tipos-desayuno.module';
 import { TurnosModule } from './turnos/turnos.module';
 import { TipoCambioModule } from './tipo-cambio/tipo-cambio.module';
+import { ReportesModule } from './reportes/reportes.module';
 
 @Module({
   imports: [
@@ -34,6 +35,7 @@ import { TipoCambioModule } from './tipo-cambio/tipo-cambio.module';
     TiposDesayunoModule,
     TurnosModule,
     TipoCambioModule,
+    ReportesModule,
   ],
 })
 export class AppModule {}

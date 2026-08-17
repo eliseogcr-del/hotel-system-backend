@@ -58,6 +58,7 @@ const NAV_ITEMS: { to: string; label: string; icon: string; roles: Rol[] }[] = [
   { to: '/caja', label: 'Caja', icon: '💵', roles: ['admin', 'recepcion'] },
   { to: '/tareas-hk', label: 'Tareas HK', icon: '🧹', roles: ['admin', 'hk'] },
   { to: '/cotizaciones', label: 'Cotizaciones', icon: '📄', roles: ['admin', 'recepcion'] },
+  { to: '/reportes', label: 'Reportes', icon: '📊', roles: ['admin'] },
   { to: '/configuracion', label: 'Configuración', icon: '⚙', roles: ['admin'] },
 ];
 

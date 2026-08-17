@@ -13,6 +13,7 @@ import { TareasHk } from './pages/TareasHk';
 import { Cotizaciones } from './pages/Cotizaciones';
 import { CotizacionDetalle } from './pages/CotizacionDetalle';
 import { Configuracion } from './pages/Configuracion';
+import { Reportes } from './pages/Reportes';
 
 export function App() {
   return (
@@ -38,6 +39,7 @@ export function App() {
         <Route path="/cotizaciones" element={<Cotizaciones />} />
         <Route path="/cotizaciones/:id" element={<CotizacionDetalle />} />
         <Route path="/configuracion" element={<Configuracion />} />
+        <Route path="/reportes" element={<Reportes />} />
       </Route>
 
       <Route path="*" element={<Navigate to="/" replace />} />
