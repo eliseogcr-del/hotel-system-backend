@@ -2,10 +2,46 @@ import { useEffect, useState, type CSSProperties, type FormEvent } from 'react';
 import { api, ApiError } from '../lib/api';
 import { useHotel } from '../contexts/HotelContext';
 
+type EstadoHabitacion = 'disponible' | 'ocupada' | 'limpieza' | 'mantenimiento' | 'bloqueada';
+
 interface Habitacion {
   id: string;
   hab_numero: number;
+  estado?: EstadoHabitacion;
+  huesped?: string | null;
+  reservaHoy?: { huesped: string | null } | null;
 }
+
+interface Cochera {
+  id: string;
+  numero: string;
+  estado: 'disponible' | 'ocupada';
+  ocupante: { habNumero: number | null; huesped: string | null } | null;
+}
+
+type Vista = 'tareas' | 'habitaciones';
+
+// Mismos colores intensos que usa el dashboard de Habitaciones (ver
+// Habitaciones.tsx) -- se duplican acá porque esta es una vista de solo
+// lectura, sin ninguna de las acciones/columnas de esa pantalla, pensada
+// para que HK tenga visibilidad rápida sin exponerle datos financieros ni
+// operativos que no le corresponden.
+const ESTADO_HAB_COLOR: Record<string, { bg: string; border: string; text: string }> = {
+  disponible: { bg: '#8fca55', border: '#4c7a19', text: '#173404' },
+  ocupada: { bg: '#ef7371', border: '#c8302f', text: '#501313' },
+  limpieza: { bg: '#f7c94a', border: '#c97e0a', text: '#412402' },
+  mantenimiento: { bg: '#f2954a', border: '#cc5f00', text: '#4a2000' },
+  bloqueada: { bg: '#a89ae8', border: '#5347d1', text: '#26215c' },
+  reservada: { bg: '#5cbde0', border: '#0f7fa8', text: '#0b3a4a' },
+};
+
+const ESTADO_HAB_LABEL: Record<EstadoHabitacion, string> = {
+  disponible: 'Disponible',
+  ocupada: 'Ocupada',
+  limpieza: 'Limpieza',
+  mantenimiento: 'Mantenimiento',
+  bloqueada: 'Bloqueada',
+};
 
 interface TareaHk {
   id: string;
@@ -42,12 +78,14 @@ export function TareasHk() {
   const { hotelActual } = useHotel();
   const [tareas, setTareas] = useState<TareaHk[]>([]);
   const [habitaciones, setHabitaciones] = useState<Habitacion[]>([]);
+  const [cocheras, setCocheras] = useState<Cochera[]>([]);
   const [filtroEstado, setFiltroEstado] = useState('');
   const [filtroFecha, setFiltroFecha] = useState(fechaHoy());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [mostrarForm, setMostrarForm] = useState(false);
   const [accionando, setAccionando] = useState<string | null>(null);
+  const [vista, setVista] = useState<Vista>('tareas');
 
   function cargar() {
     if (!hotelActual) return;
@@ -65,13 +103,19 @@ export function TareasHk() {
 
   useEffect(cargar, [hotelActual, filtroEstado, filtroFecha]);
 
-  useEffect(() => {
+  function cargarHabitacionesCocheras() {
     if (!hotelActual) return;
     api
       .get<Habitacion[]>(`/hoteles/${hotelActual.hotelId}/habitaciones`)
       .then(setHabitaciones)
       .catch(() => {});
-  }, [hotelActual]);
+    api
+      .get<Cochera[]>(`/hoteles/${hotelActual.hotelId}/cocheras`)
+      .then(setCocheras)
+      .catch(() => {});
+  }
+
+  useEffect(cargarHabitacionesCocheras, [hotelActual]);
 
   async function iniciar(tareaId: string) {
     if (!hotelActual) return;
@@ -105,11 +149,52 @@ export function TareasHk() {
     <div>
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
         <h1 style={{ fontSize: 20 }}>Tareas HK</h1>
-        <button style={btnPrimary} onClick={() => setMostrarForm((v) => !v)}>
-          {mostrarForm ? 'Cancelar' : '+ Nueva tarea'}
-        </button>
+        <div style={{ display: 'flex', gap: 8 }}>
+          {vista === 'tareas' && (
+            <button style={btnPrimary} onClick={() => setMostrarForm((v) => !v)}>
+              {mostrarForm ? 'Cancelar' : '+ Nueva tarea'}
+            </button>
+          )}
+          <div style={{ display: 'flex', border: '1px solid var(--border)', borderRadius: 'var(--radius)', overflow: 'hidden' }}>
+            <button
+              onClick={() => setVista('tareas')}
+              style={{
+                padding: '6px 12px',
+                fontSize: 12,
+                border: 'none',
+                cursor: 'pointer',
+                background: vista === 'tareas' ? 'var(--brand)' : 'var(--surface-1)',
+                color: vista === 'tareas' ? '#fff' : 'var(--text-secondary)',
+              }}
+            >
+              Tareas HK
+            </button>
+            <button
+              onClick={() => {
+                setVista('habitaciones');
+                cargarHabitacionesCocheras();
+              }}
+              style={{
+                padding: '6px 12px',
+                fontSize: 12,
+                border: 'none',
+                cursor: 'pointer',
+                background: vista === 'habitaciones' ? 'var(--brand)' : 'var(--surface-1)',
+                color: vista === 'habitaciones' ? '#fff' : 'var(--text-secondary)',
+              }}
+            >
+              Habitaciones
+            </button>
+          </div>
+        </div>
       </div>
 
+      {vista === 'habitaciones' && (
+        <VistaHabitacionesSoloLectura habitaciones={habitaciones} cocheras={cocheras} />
+      )}
+
+      {vista === 'tareas' && (
+        <>
       {mostrarForm && (
         <NuevaTareaForm
           hotelId={hotelActual.hotelId}
@@ -204,6 +289,132 @@ export function TareasHk() {
             </div>
           ))}
           {tareas.length === 0 && <p style={{ color: 'var(--text-muted)' }}>No hay tareas.</p>}
+        </div>
+      )}
+        </>
+      )}
+    </div>
+  );
+}
+
+// Vista de solo lectura para que HK tenga visibilidad de qué habitaciones
+// están libres/ocupadas/bloqueadas sin exponerle datos financieros ni
+// operativos (saldo, tarifa, notas, etc.) que no le corresponden -- solo
+// número, estado (color) y nombre del huésped si la hay.
+function VistaHabitacionesSoloLectura({
+  habitaciones,
+  cocheras,
+}: {
+  habitaciones: Habitacion[];
+  cocheras: Cochera[];
+}) {
+  return (
+    <div>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16, fontSize: 12, color: 'var(--text-secondary)', marginBottom: 16 }}>
+        {(Object.keys(ESTADO_HAB_LABEL) as EstadoHabitacion[]).map((estado) => (
+          <span key={estado} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+            <span
+              style={{
+                width: 8,
+                height: 8,
+                borderRadius: '50%',
+                background: ESTADO_HAB_COLOR[estado].border,
+                display: 'inline-block',
+              }}
+            />
+            {ESTADO_HAB_LABEL[estado]}
+          </span>
+        ))}
+        <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+          <span
+            style={{
+              width: 8,
+              height: 8,
+              borderRadius: '50%',
+              background: ESTADO_HAB_COLOR.reservada.border,
+              display: 'inline-block',
+            }}
+          />
+          Reservada
+        </span>
+      </div>
+
+      <div style={tarjetasGridStyle}>
+        {habitaciones.map((h) => {
+          const color = h.reservaHoy ? 'reservada' : (h.estado ?? 'disponible');
+          const etiqueta = h.reservaHoy ? 'Reservada' : ESTADO_HAB_LABEL[h.estado ?? 'disponible'];
+          const nombre = h.huesped ?? h.reservaHoy?.huesped ?? null;
+          return (
+            <div
+              key={h.id}
+              style={{
+                ...tarjetaHabStyle,
+                background: ESTADO_HAB_COLOR[color].bg,
+                border: `2px solid ${ESTADO_HAB_COLOR[color].border}`,
+              }}
+            >
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+                <span style={{ fontSize: 20, fontWeight: 700, color: 'var(--text-primary)' }}>{h.hab_numero}</span>
+                <span style={{ fontSize: 10, fontWeight: 700, color: ESTADO_HAB_COLOR[color].text }}>{etiqueta}</span>
+              </div>
+              {nombre && (
+                <span
+                  style={{
+                    fontSize: 12,
+                    color: 'var(--text-primary)',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap',
+                  }}
+                  title={nombre}
+                >
+                  {nombre}
+                </span>
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      {habitaciones.length === 0 && <p style={{ color: 'var(--text-muted)' }}>No hay habitaciones registradas.</p>}
+
+      {cocheras.length > 0 && (
+        <div style={{ marginTop: 24 }}>
+          <h2 style={{ fontSize: 16, marginBottom: 10 }}>Cocheras</h2>
+          <div style={tarjetasGridStyle}>
+            {cocheras.map((c) => (
+              <div
+                key={c.id}
+                style={{
+                  ...tarjetaHabStyle,
+                  background: ESTADO_HAB_COLOR[c.estado].bg,
+                  border: `2px solid ${ESTADO_HAB_COLOR[c.estado].border}`,
+                  minHeight: 64,
+                }}
+              >
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+                  <span style={{ fontSize: 18, fontWeight: 700, color: 'var(--text-primary)' }}>{c.numero}</span>
+                  <span style={{ fontSize: 10, fontWeight: 700, color: ESTADO_HAB_COLOR[c.estado].text }}>
+                    {c.estado === 'disponible' ? 'Disponible' : 'Ocupada'}
+                  </span>
+                </div>
+                {c.ocupante?.huesped && (
+                  <span
+                    style={{
+                      fontSize: 12,
+                      color: 'var(--text-primary)',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap',
+                    }}
+                    title={c.ocupante.huesped}
+                  >
+                    {c.ocupante.huesped}
+                  </span>
+                )}
+              </div>
+            ))}
+          </div>
         </div>
       )}
     </div>
@@ -315,4 +526,19 @@ const btnSecondary: CSSProperties = {
   border: '1px solid var(--border)',
   borderRadius: 'var(--radius)',
   fontSize: 12,
+};
+
+const tarjetasGridStyle: CSSProperties = {
+  display: 'grid',
+  gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))',
+  gap: 10,
+};
+
+const tarjetaHabStyle: CSSProperties = {
+  borderRadius: 12,
+  padding: 10,
+  display: 'flex',
+  flexDirection: 'column',
+  gap: 4,
+  minHeight: 60,
 };

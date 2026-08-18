@@ -146,12 +146,13 @@ export class ConfiguracionController {
     return this.configuracionService.crearCochera(client, hotelId, dto);
   }
 
-  // Roles('admin', 'recepcion') porque este endpoint también lo usa el
-  // dashboard de Habitaciones (todo rol) para mostrar el semáforo de
-  // cocheras -- no solo la pantalla de Configuración (que sí es admin-only
-  // para crear/editar cocheras, ver POST/PATCH abajo).
+  // Roles('admin', 'recepcion', 'hk') porque este endpoint también lo usa
+  // el dashboard de Habitaciones y la vista de solo lectura de Tareas HK
+  // (todo rol) para mostrar el semáforo de cocheras -- no solo la pantalla
+  // de Configuración (que sí es admin-only para crear/editar, ver
+  // POST/PATCH abajo).
   @Get('cocheras')
-  @Roles('admin', 'recepcion')
+  @Roles('admin', 'recepcion', 'hk')
   async listarCocheras(
     @Param('hotelId') hotelId: string,
     @CurrentUser() user: RequestUser,
