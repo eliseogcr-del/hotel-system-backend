@@ -626,8 +626,8 @@ export class EstadiasService {
         `
         id, habitacion_id, tipo_alquiler, incluye_desayuno, tarifa_dia,
         fecha_hora_checkin_prevista, fecha_hora_checkout_prevista,
-        habitaciones(hab_numero, piso),
-        reservas!inner(hotel_id, huesped_id, huespedes(nombres, apellidos, tipo_doc, nro_doc, ruc, razon_social)),
+        habitaciones!inner(hab_numero, piso),
+        reservas!inner(hotel_id, huesped_id, huespedes(nombres, apellidos, tipo_doc, nro_doc, telefono, ruc, razon_social)),
         estadias!inner(id, estado_actual, saldo, checkin_real, checkout_real)
       `,
       )
@@ -639,10 +639,32 @@ export class EstadiasService {
     if (idsHuespedes) {
       query = query.in('reservas.huesped_id', idsHuespedes);
     }
+    if (filtros.habNumero) {
+      query = query.eq('habitaciones.hab_numero', Number(filtros.habNumero));
+    }
+    if (filtros.checkinDesde) {
+      query = query.gte('fecha_hora_checkin_prevista', this.fechaLimaAInstante(filtros.checkinDesde).toISOString());
+    }
+    if (filtros.checkinHasta) {
+      const hastaExclusivo = new Date(
+        this.fechaLimaAInstante(filtros.checkinHasta).getTime() + 24 * 60 * 60 * 1000,
+      );
+      query = query.lt('fecha_hora_checkin_prevista', hastaExclusivo.toISOString());
+    }
 
     const { data, error } = await query;
     if (error) throw error;
     return data;
+  }
+
+  // Convierte una fecha 'YYYY-MM-DD' (elegida en un <input type="date">, que
+  // el recepcionista piensa en hora Lima) al instante UTC real de esa
+  // medianoche en Lima -- mismo criterio que calcularCheckoutPrevisto() más
+  // abajo, para no repetir el bug de comparar contra medianoche UTC.
+  private fechaLimaAInstante(fechaYMD: string): Date {
+    const [anio, mes, dia] = fechaYMD.split('-').map(Number);
+    const relojLima = new Date(Date.UTC(anio, mes - 1, dia, 0, 0, 0, 0));
+    return desdeRelojLima(relojLima);
   }
 
   async obtenerDetalle(client: SupabaseClient, hotelId: string, estadiaId: string) {

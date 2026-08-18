@@ -17,6 +17,7 @@ interface FilaEstadia {
       apellidos: string;
       tipo_doc: string;
       nro_doc: string;
+      telefono: string | null;
       ruc: string | null;
       razon_social: string | null;
     } | null;
@@ -49,6 +50,10 @@ export function Estadias() {
   const [filtroEstado, setFiltroEstado] = useState('en_curso');
   const [busqueda, setBusqueda] = useState('');
   const [busquedaAplicada, setBusquedaAplicada] = useState('');
+  const [habNumero, setHabNumero] = useState('');
+  const [habNumeroAplicado, setHabNumeroAplicado] = useState('');
+  const [checkinDesde, setCheckinDesde] = useState('');
+  const [checkinHasta, setCheckinHasta] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -58,18 +63,26 @@ export function Estadias() {
   }, [busqueda]);
 
   useEffect(() => {
+    const t = setTimeout(() => setHabNumeroAplicado(habNumero.trim()), 300);
+    return () => clearTimeout(t);
+  }, [habNumero]);
+
+  useEffect(() => {
     if (!hotelActual) return;
     setLoading(true);
     const params = new URLSearchParams();
     if (filtroEstado) params.set('estado', filtroEstado);
     if (busquedaAplicada) params.set('busqueda', busquedaAplicada);
+    if (habNumeroAplicado) params.set('habNumero', habNumeroAplicado);
+    if (checkinDesde) params.set('checkinDesde', checkinDesde);
+    if (checkinHasta) params.set('checkinHasta', checkinHasta);
     const query = params.toString() ? `?${params.toString()}` : '';
     api
       .get<FilaEstadia[]>(`/hoteles/${hotelActual.hotelId}/estadias${query}`)
       .then(setFilas)
       .catch((err) => setError(err instanceof ApiError ? err.message : 'Error al cargar'))
       .finally(() => setLoading(false));
-  }, [hotelActual, filtroEstado, busquedaAplicada]);
+  }, [hotelActual, filtroEstado, busquedaAplicada, habNumeroAplicado, checkinDesde, checkinHasta]);
 
   const filasOrdenadas = useMemo(
     () =>
@@ -85,7 +98,7 @@ export function Estadias() {
     <div>
       <h1 style={{ fontSize: 20, marginBottom: 16 }}>Estadías</h1>
 
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 16 }}>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'flex-end', marginBottom: 16 }}>
         <select
           value={filtroEstado}
           onChange={(e) => setFiltroEstado(e.target.value)}
@@ -103,8 +116,47 @@ export function Estadias() {
           value={busqueda}
           onChange={(e) => setBusqueda(e.target.value)}
           placeholder="Buscar por DNI, RUC, empresa, nombre o apellido"
-          style={{ padding: '8px 10px', border: '1px solid var(--border)', borderRadius: 'var(--radius)', fontSize: 13, minWidth: 280 }}
+          style={{ padding: '8px 10px', border: '1px solid var(--border)', borderRadius: 'var(--radius)', fontSize: 13, minWidth: 260 }}
         />
+        <input
+          type="number"
+          min={1}
+          value={habNumero}
+          onChange={(e) => setHabNumero(e.target.value)}
+          placeholder="N° habitación"
+          style={{ padding: '8px 10px', border: '1px solid var(--border)', borderRadius: 'var(--radius)', fontSize: 13, width: 120 }}
+        />
+        <div>
+          <label style={labelStyle}>Check-in desde</label>
+          <input
+            type="date"
+            value={checkinDesde}
+            onChange={(e) => setCheckinDesde(e.target.value)}
+            style={{ padding: '8px 10px', border: '1px solid var(--border)', borderRadius: 'var(--radius)', fontSize: 13 }}
+          />
+        </div>
+        <div>
+          <label style={labelStyle}>Check-in hasta</label>
+          <input
+            type="date"
+            value={checkinHasta}
+            onChange={(e) => setCheckinHasta(e.target.value)}
+            style={{ padding: '8px 10px', border: '1px solid var(--border)', borderRadius: 'var(--radius)', fontSize: 13 }}
+          />
+        </div>
+        {(habNumero || checkinDesde || checkinHasta) && (
+          <button
+            type="button"
+            onClick={() => {
+              setHabNumero('');
+              setCheckinDesde('');
+              setCheckinHasta('');
+            }}
+            style={{ padding: '8px 10px', background: 'transparent', border: '1px solid var(--border)', borderRadius: 'var(--radius)', fontSize: 13, color: 'var(--text-secondary)', cursor: 'pointer' }}
+          >
+            Limpiar filtros
+          </button>
+        )}
       </div>
 
       {loading && <p style={{ color: 'var(--text-muted)' }}>Cargando...</p>}
@@ -112,7 +164,7 @@ export function Estadias() {
 
       {!loading && !error && (
         <div style={{ overflowX: 'auto', border: '1px solid var(--border)', borderRadius: 12 }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, minWidth: 1080 }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, minWidth: 1180 }}>
             <thead>
               <tr
                 style={{
@@ -127,6 +179,7 @@ export function Estadias() {
                 <th style={thStyle}>Habitación</th>
                 <th style={thStyle}>Huésped</th>
                 <th style={thStyle}>DNI</th>
+                <th style={thStyle}>Teléfono</th>
                 <th style={thStyle}>RUC</th>
                 <th style={thStyle}>Empresa</th>
                 <th style={thStyle}>Check-in</th>
@@ -155,6 +208,7 @@ export function Estadias() {
                     {f.reservas?.huespedes ? `${f.reservas.huespedes.nombres} ${f.reservas.huespedes.apellidos}` : '—'}
                   </td>
                   <td style={tdStyle}>{f.reservas?.huespedes?.nro_doc ?? '—'}</td>
+                  <td style={tdStyle}>{f.reservas?.huespedes?.telefono || '—'}</td>
                   <td style={tdStyle}>{f.reservas?.huespedes?.ruc || '—'}</td>
                   <td style={tdStyle}>{f.reservas?.huespedes?.razon_social || '—'}</td>
                   <td style={tdStyle}>{formatoFecha(f.fecha_hora_checkin_prevista)}</td>
@@ -209,4 +263,11 @@ const tdStyle: CSSProperties = {
   color: 'var(--text-secondary)',
   whiteSpace: 'nowrap',
   borderRight: '1px solid var(--border)',
+};
+
+const labelStyle: CSSProperties = {
+  fontSize: 11,
+  color: 'var(--text-secondary)',
+  display: 'block',
+  marginBottom: 3,
 };
