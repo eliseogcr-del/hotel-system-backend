@@ -150,11 +150,9 @@ export function TareasHk() {
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
         <h1 style={{ fontSize: 20 }}>Tareas HK</h1>
         <div style={{ display: 'flex', gap: 8 }}>
-          {vista === 'tareas' && (
-            <button style={btnPrimary} onClick={() => setMostrarForm((v) => !v)}>
-              {mostrarForm ? 'Cancelar' : '+ Nueva tarea'}
-            </button>
-          )}
+          {/* Oculto por el momento: las tareas las asigna recepción, no se
+              crean a mano desde acá -- ver mostrarForm/NuevaTareaForm más
+              abajo si hay que reactivarlo. */}
           <div style={{ display: 'flex', border: '1px solid var(--border)', borderRadius: 'var(--radius)', overflow: 'hidden' }}>
             <button
               onClick={() => setVista('tareas')}
