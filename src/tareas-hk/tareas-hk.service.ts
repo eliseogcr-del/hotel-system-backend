@@ -4,6 +4,22 @@ import { CrearTareaHkDto } from './dto/crear-tarea-hk.dto';
 import { AsignarTareaHkDto } from './dto/asignar-tarea-hk.dto';
 import { ListarTareasHkQueryDto } from './dto/listar-tareas-hk-query.dto';
 
+// Perú (America/Lima) es UTC-5 todo el año -- mismo criterio que en
+// estadias.service.ts para no comparar contra medianoche UTC por error.
+const PERU_UTC_OFFSET_MS = 5 * 60 * 60 * 1000;
+
+function desdeRelojLima(relojLima: Date): Date {
+  return new Date(relojLima.getTime() + PERU_UTC_OFFSET_MS);
+}
+
+// Convierte una fecha 'YYYY-MM-DD' (hora Lima) al instante UTC real de esa
+// medianoche en Lima.
+function fechaLimaAInstante(fechaYMD: string): Date {
+  const [anio, mes, dia] = fechaYMD.split('-').map(Number);
+  const relojLima = new Date(Date.UTC(anio, mes - 1, dia, 0, 0, 0, 0));
+  return desdeRelojLima(relojLima);
+}
+
 interface TareaHk {
   id: string;
   hotel_id: string;
@@ -60,6 +76,11 @@ export class TareasHkService {
     if (filtros.estado) query = query.eq('estado', filtros.estado);
     if (filtros.tipo) query = query.eq('tipo', filtros.tipo);
     if (filtros.habitacionId) query = query.eq('habitacion_id', filtros.habitacionId);
+    if (filtros.fecha) {
+      const desde = fechaLimaAInstante(filtros.fecha);
+      const hasta = new Date(desde.getTime() + 24 * 60 * 60 * 1000);
+      query = query.gte('created_at', desde.toISOString()).lt('created_at', hasta.toISOString());
+    }
 
     const { data, error } = await query;
     if (error) throw error;

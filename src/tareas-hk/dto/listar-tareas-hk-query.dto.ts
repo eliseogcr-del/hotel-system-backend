@@ -1,4 +1,4 @@
-import { IsEnum, IsOptional, IsUUID } from 'class-validator';
+import { IsDateString, IsEnum, IsOptional, IsUUID } from 'class-validator';
 
 export class ListarTareasHkQueryDto {
   @IsOptional()
@@ -12,4 +12,11 @@ export class ListarTareasHkQueryDto {
   @IsOptional()
   @IsUUID()
   habitacionId?: string;
+
+  // Filtra por el día (hora Lima) en que se creó la tarea -- planificada,
+  // en proceso o terminada, cualquier estado cuenta si es de ese día. El
+  // frontend siempre manda esto con el día de hoy por defecto.
+  @IsOptional()
+  @IsDateString()
+  fecha?: string;
 }
