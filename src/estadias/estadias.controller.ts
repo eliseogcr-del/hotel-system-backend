@@ -23,6 +23,7 @@ import { ListarEstadiasQueryDto } from './dto/listar-estadias-query.dto';
 import { ActualizarNotasDto } from './dto/actualizar-notas.dto';
 import { ActualizarEstadiaDto } from './dto/actualizar-estadia.dto';
 import { EditarMovimientoDto } from './dto/editar-movimiento.dto';
+import { TrasladarHabitacionDto } from './dto/trasladar-habitacion.dto';
 
 @Controller('hoteles/:hotelId/estadias')
 @UseGuards(AuthGuard, RolesGuard)
@@ -64,6 +65,18 @@ export class EstadiasController {
   ) {
     const client = this.supabase.getClientForRequest(user.accessToken);
     return this.estadiasService.checkout(client, hotelId, id, user.personalId, dto);
+  }
+
+  @Post(':id/trasladar-habitacion')
+  @Roles('admin', 'recepcion')
+  async trasladarHabitacion(
+    @Param('hotelId') hotelId: string,
+    @Param('id') id: string,
+    @Body() dto: TrasladarHabitacionDto,
+    @CurrentUser() user: RequestUser,
+  ) {
+    const client = this.supabase.getClientForRequest(user.accessToken);
+    return this.estadiasService.trasladarHabitacion(client, hotelId, id, dto, user.personalId);
   }
 
   @Post(':id/movimientos')

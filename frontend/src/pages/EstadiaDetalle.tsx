@@ -55,6 +55,14 @@ interface EstadiaDetalleData {
   };
 }
 
+interface HabitacionDisponible {
+  id: string;
+  hab_numero: number;
+  piso: number;
+  estado: string;
+  tipos_habitacion: { nombre: string; aforo_max: number } | null;
+}
+
 interface TipoHabitacionPrecios {
   id: string;
   precio_normal: number;
@@ -143,6 +151,7 @@ export function EstadiaDetalle() {
   const [editandoMovimientoId, setEditandoMovimientoId] = useState<string | null>(null);
   const [montoEdicion, setMontoEdicion] = useState('');
   const [mostrarEditar, setMostrarEditar] = useState(false);
+  const [mostrarTraslado, setMostrarTraslado] = useState(false);
   const [tiposHabitacion, setTiposHabitacion] = useState<TipoHabitacionPrecios[]>([]);
   const esAdmin = hotelActual?.rol === 'admin';
 
@@ -300,9 +309,28 @@ export function EstadiaDetalle() {
       {error && <p style={{ color: 'var(--danger)', fontSize: 13, marginBottom: 12 }}>{error}</p>}
 
       {estadia.estado_actual === 'en_curso' && (
-        <button onClick={() => setMostrarEditar(true)} style={{ ...btnSecondary, marginBottom: 20 }}>
-          Editar estadía
-        </button>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 20 }}>
+          <button onClick={() => setMostrarEditar(true)} style={btnSecondary}>
+            Editar estadía
+          </button>
+          <button onClick={() => setMostrarTraslado(true)} style={btnSecondary}>
+            Traslado de habitación
+          </button>
+        </div>
+      )}
+
+      {mostrarTraslado && (
+        <TrasladoHabitacionModal
+          hotelId={hotelActual.hotelId}
+          estadiaId={estadia.id}
+          habitacionActualNumero={estadia.reserva_habitacion.habitaciones?.hab_numero ?? 0}
+          nroPersonas={estadia.reserva_habitacion.nro_personas}
+          onClose={() => setMostrarTraslado(false)}
+          onTrasladado={() => {
+            setMostrarTraslado(false);
+            cargar();
+          }}
+        />
       )}
 
       {mostrarEditar && (
@@ -1040,6 +1068,135 @@ function EditarEstadiaModal({
             </button>
             <button type="submit" disabled={enviando || tarifaBajoCosto} style={btnPrimary}>
               {enviando ? 'Guardando...' : 'Guardar cambios'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+function TrasladoHabitacionModal({
+  hotelId,
+  estadiaId,
+  habitacionActualNumero,
+  nroPersonas,
+  onClose,
+  onTrasladado,
+}: {
+  hotelId: string;
+  estadiaId: string;
+  habitacionActualNumero: number;
+  nroPersonas: number;
+  onClose: () => void;
+  onTrasladado: () => void;
+}) {
+  const [habitaciones, setHabitaciones] = useState<HabitacionDisponible[]>([]);
+  const [nuevaHabitacionId, setNuevaHabitacionId] = useState('');
+  const [habitacionQuedaLimpia, setHabitacionQuedaLimpia] = useState(true);
+  const [motivo, setMotivo] = useState('');
+  const [enviando, setEnviando] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    api.get<HabitacionDisponible[]>(`/hoteles/${hotelId}/habitaciones`).then(setHabitaciones).catch(() => {});
+  }, [hotelId]);
+
+  const disponibles = habitaciones.filter((h) => h.estado === 'disponible');
+  const destino = disponibles.find((h) => h.id === nuevaHabitacionId) ?? null;
+  const aforoInsuficiente = !!destino && destino.tipos_habitacion != null && nroPersonas > destino.tipos_habitacion.aforo_max;
+
+  async function confirmar(e: FormEvent) {
+    e.preventDefault();
+    if (!nuevaHabitacionId) return;
+    setEnviando(true);
+    setError(null);
+    try {
+      await api.post(`/hoteles/${hotelId}/estadias/${estadiaId}/trasladar-habitacion`, {
+        nuevaHabitacionId,
+        habitacionQuedaLimpia,
+        motivo: motivo || undefined,
+      });
+      onTrasladado();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'No se pudo trasladar la habitación');
+    } finally {
+      setEnviando(false);
+    }
+  }
+
+  return (
+    <div style={overlayStyle}>
+      <div style={{ ...modalStyle, maxWidth: 480 }}>
+        <h2 style={{ fontSize: 17, marginBottom: 4 }}>Traslado de habitación</h2>
+        <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '0 0 16px' }}>
+          Habitación actual: {habitacionActualNumero}. Se conserva el mismo huésped, saldo e historial de pagos —
+          solo cambia la habitación.
+        </p>
+        {error && <p style={{ color: 'var(--danger)', fontSize: 13, marginBottom: 12 }}>{error}</p>}
+
+        <form onSubmit={confirmar} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <div>
+            <label style={labelStyle}>Nueva habitación</label>
+            <select
+              value={nuevaHabitacionId}
+              onChange={(e) => setNuevaHabitacionId(e.target.value)}
+              style={inputStyle}
+              required
+            >
+              <option value="">Selecciona una habitación disponible...</option>
+              {disponibles.map((h) => (
+                <option key={h.id} value={h.id}>
+                  {h.hab_numero} · piso {h.piso}
+                  {h.tipos_habitacion ? ` · ${h.tipos_habitacion.nombre}` : ''}
+                </option>
+              ))}
+            </select>
+            {disponibles.length === 0 && (
+              <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: '4px 0 0' }}>
+                No hay habitaciones disponibles ahora mismo.
+              </p>
+            )}
+            {aforoInsuficiente && destino?.tipos_habitacion && (
+              <p style={{ fontSize: 11, color: 'var(--danger)', margin: '4px 0 0' }}>
+                Esta habitación admite hasta {destino.tipos_habitacion.aforo_max} persona(s); la estadía tiene{' '}
+                {nroPersonas}.
+              </p>
+            )}
+          </div>
+
+          <div>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13 }}>
+              <input
+                type="checkbox"
+                checked={habitacionQuedaLimpia}
+                onChange={(e) => setHabitacionQuedaLimpia(e.target.checked)}
+              />
+              La habitación {habitacionActualNumero} queda limpia
+            </label>
+            <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: '4px 0 0' }}>
+              {habitacionQuedaLimpia
+                ? `Si está desmarcado, la ${habitacionActualNumero} queda disponible de inmediato.`
+                : `La habitación ${habitacionActualNumero} pasará a "limpieza" y se generará una tarea para HK.`}
+            </p>
+          </div>
+
+          <div>
+            <label style={labelStyle}>Motivo (opcional)</label>
+            <input
+              value={motivo}
+              onChange={(e) => setMotivo(e.target.value)}
+              placeholder="Ej. no le gustó la vista"
+              style={inputStyle}
+            />
+          </div>
+
+          <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 4 }}>
+            <button type="button" onClick={onClose} style={btnSecondary}>
+              Cancelar
+            </button>
+            <button type="submit" disabled={enviando || !nuevaHabitacionId || aforoInsuficiente} style={btnPrimary}>
+              {enviando ? 'Trasladando...' : 'Confirmar traslado'}
             </button>
           </div>
         </form>

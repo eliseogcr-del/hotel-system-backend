@@ -18,6 +18,7 @@ import { ListarEstadiasQueryDto } from './dto/listar-estadias-query.dto';
 import { ActualizarNotasDto } from './dto/actualizar-notas.dto';
 import { ActualizarEstadiaDto } from './dto/actualizar-estadia.dto';
 import { EditarMovimientoDto } from './dto/editar-movimiento.dto';
+import { TrasladarHabitacionDto } from './dto/trasladar-habitacion.dto';
 import { ReservasService } from '../reservas/reservas.service';
 import { CrearReservaDto } from '../reservas/dto/crear-reserva.dto';
 import { TipoCambioService } from '../tipo-cambio/tipo-cambio.service';
@@ -363,6 +364,106 @@ export class EstadiasService {
         registradoPor: personalId,
       });
     }
+
+    return this.obtenerDetalle(client, hotelId, estadiaId);
+  }
+
+  /**
+   * Traslado de habitación: el huésped ya hizo check-in pero pide cambiarse
+   * a otra habitación disponible. Todo lo que ya cuelga de
+   * reserva_habitacion_id/estadia_id (movimientos_cuenta, anticipos,
+   * vehículo, cochera) sigue apuntando a la misma línea sin tocarse -- solo
+   * se reasigna reserva_habitacion.habitacion_id, igual que ya hace
+   * actualizar() con la cochera. La habitación que se deja pasa a
+   * 'disponible' directo si quedó limpia, o a 'limpieza' + tarea HK (mismo
+   * flujo que checkout()) si no.
+   */
+  async trasladarHabitacion(
+    client: SupabaseClient,
+    hotelId: string,
+    estadiaId: string,
+    dto: TrasladarHabitacionDto,
+    personalId: string,
+  ) {
+    const estadia = await this.cargarEstadiaHotel(client, hotelId, estadiaId);
+    if (estadia.estado_actual !== 'en_curso') {
+      throw new BadRequestException(
+        `No se puede trasladar: la estadía está en estado '${estadia.estado_actual}'`,
+      );
+    }
+
+    const habitacionActualId = estadia.reserva_habitacion.habitacion_id;
+    if (dto.nuevaHabitacionId === habitacionActualId) {
+      throw new BadRequestException('La habitación destino es la misma que la actual');
+    }
+
+    const { data: habNueva, error: habError } = await client
+      .from('habitaciones')
+      .select('id, estado, hab_numero, tipos_habitacion(aforo_max)')
+      .eq('id', dto.nuevaHabitacionId)
+      .eq('hotel_id', hotelId)
+      .maybeSingle();
+    if (habError) throw habError;
+    if (!habNueva) {
+      throw new NotFoundException('La habitación destino no existe en este hotel');
+    }
+    if (habNueva.estado !== 'disponible') {
+      throw new BadRequestException(
+        `No se puede trasladar: la habitación ${habNueva.hab_numero} está en estado '${habNueva.estado}'`,
+      );
+    }
+
+    const aforoMax = Number((habNueva as any).tipos_habitacion?.aforo_max ?? 0);
+    if (aforoMax > 0 && estadia.reserva_habitacion.nro_personas > aforoMax) {
+      throw new BadRequestException(
+        `La habitación ${habNueva.hab_numero} admite hasta ${aforoMax} persona(s); esta estadía tiene ${estadia.reserva_habitacion.nro_personas}.`,
+      );
+    }
+
+    const { error: rhError } = await client
+      .from('reserva_habitacion')
+      .update({ habitacion_id: dto.nuevaHabitacionId })
+      .eq('id', estadia.reserva_habitacion.id);
+    if (rhError) throw rhError;
+
+    if (dto.habitacionQuedaLimpia) {
+      const { error } = await client
+        .from('habitaciones')
+        .update({ estado: 'disponible' })
+        .eq('id', habitacionActualId);
+      if (error) throw error;
+    } else {
+      const { error } = await client
+        .from('habitaciones')
+        .update({ estado: 'limpieza' })
+        .eq('id', habitacionActualId);
+      if (error) throw error;
+
+      const { error: tareaError } = await client.from('tareas_hk').insert({
+        hotel_id: hotelId,
+        habitacion_id: habitacionActualId,
+        tipo: 'limpieza',
+        estado: 'planificado',
+        con_huesped_dentro: false,
+        definido_por: personalId,
+      });
+      if (tareaError) throw tareaError;
+    }
+
+    const { error: ocuparError } = await client
+      .from('habitaciones')
+      .update({ estado: 'ocupada' })
+      .eq('id', dto.nuevaHabitacionId);
+    if (ocuparError) throw ocuparError;
+
+    const numeroAnterior = estadia.reserva_habitacion.habitaciones?.hab_numero ?? '—';
+    const notaTraslado = `Traslado de habitación: ${numeroAnterior} → ${habNueva.hab_numero}${dto.motivo ? ` (${dto.motivo})` : ''}`;
+    await this.insertarMovimiento(client, estadiaId, {
+      tipo: 'ajuste',
+      monto: 0,
+      notas: notaTraslado,
+      registradoPor: personalId,
+    });
 
     return this.obtenerDetalle(client, hotelId, estadiaId);
   }
