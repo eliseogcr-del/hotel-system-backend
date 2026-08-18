@@ -21,8 +21,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setLoading(false);
     });
 
-    const { data: listener } = supabase.auth.onAuthStateChange((_event, newSession) => {
-      setSession(newSession);
+    // Al volver de otra pestaña/app, Supabase intenta refrescar el token
+    // solo (GoTrueClient escucha visibilitychange) y dispara este callback
+    // de nuevo -- a veces con un hueco momentáneo de sesión null antes de
+    // que llegue la refrescada, aunque el usuario nunca cerró sesión de
+    // verdad. Tratar ese null como logout real mandaba a toda la app a
+    // /login y de vuelta, lo que remontaba cada página desde cero y borraba
+    // cualquier formulario a medio llenar (ver Reservas.tsx). Solo se
+    // considera logout real el evento explícito 'SIGNED_OUT'; cualquier
+    // otro evento con sesión null se ignora y se mantiene la sesión actual.
+    const { data: listener } = supabase.auth.onAuthStateChange((event, newSession) => {
+      if (event === 'SIGNED_OUT') {
+        setSession(null);
+        return;
+      }
+      if (newSession) {
+        setSession(newSession);
+      }
     });
 
     return () => listener.subscription.unsubscribe();

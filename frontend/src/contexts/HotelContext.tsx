@@ -27,8 +27,19 @@ export function HotelProvider({ children }: { children: ReactNode }) {
   );
   const [loading, setLoading] = useState(true);
 
+  // authUserId (no el objeto session completo): Supabase entrega un objeto
+  // `session` NUEVO en cada refresh silencioso de token (incluso para el
+  // mismo usuario, ver AuthContext.tsx) -- si este efecto dependiera de
+  // `session` por referencia, se repetiría el fetch de personal/asignaciones
+  // cada vez que alguien vuelve de otra pestaña, y `hotelActual` (recalculado
+  // de `asignaciones.find(...)`) sería un objeto nuevo cada vez, disparando
+  // en cascada los useEffect de TODAS las páginas que dependen de
+  // `hotelActual` (Reservas, Habitaciones, Estadías, etc.) sin que haya
+  // nada que realmente cambió.
+  const authUserId = session?.user.id ?? null;
+
   useEffect(() => {
-    if (!session) {
+    if (!authUserId) {
       setAsignaciones([]);
       setPersonalNombre(null);
       setLoading(false);
@@ -42,7 +53,7 @@ export function HotelProvider({ children }: { children: ReactNode }) {
       const { data: personal } = await supabase
         .from('personal')
         .select('id, nombre')
-        .eq('auth_user_id', session.user.id)
+        .eq('auth_user_id', authUserId)
         .maybeSingle();
 
       if (!personal) {
@@ -71,7 +82,7 @@ export function HotelProvider({ children }: { children: ReactNode }) {
         : lista[0]?.hotelId ?? null);
       setLoading(false);
     })();
-  }, [session]);
+  }, [authUserId]);
 
   function cambiarHotel(hotelId: string) {
     setHotelActualId(hotelId);

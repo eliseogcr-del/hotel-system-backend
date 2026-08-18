@@ -106,8 +106,25 @@ export function Reservas() {
   const [mostrarForm, setMostrarForm] = useState(false);
 
   const [vista, setVista] = useState<'calendario' | 'lista'>('calendario');
-  const [desde, setDesde] = useState(() => hoyYMD());
-  const [hasta, setHasta] = useState(() => sumarDias(hoyYMD(), 10));
+  // Persistido en localStorage (igual que la vista de Habitaciones.tsx):
+  // si alguien deja el rango en, por ejemplo, la semana que viene y la
+  // página se recarga de verdad (no solo el bug de sesión ya corregido en
+  // AuthContext.tsx), el calendario reabre en ese mismo rango en vez de
+  // saltar de nuevo a "hoy + 10 días".
+  const [desde, setDesde] = useState(() => localStorage.getItem('reservas_desde') || hoyYMD());
+  const [hasta, setHasta] = useState(
+    () => localStorage.getItem('reservas_hasta') || sumarDias(hoyYMD(), 10),
+  );
+
+  function cambiarDesde(v: string) {
+    setDesde(v);
+    localStorage.setItem('reservas_desde', v);
+  }
+
+  function cambiarHasta(v: string) {
+    setHasta(v);
+    localStorage.setItem('reservas_hasta', v);
+  }
   const [calendario, setCalendario] = useState<ReservaCalendario[]>([]);
   const [calendarioLoading, setCalendarioLoading] = useState(false);
   const [calendarioError, setCalendarioError] = useState<string | null>(null);
@@ -246,8 +263,8 @@ export function Reservas() {
           error={calendarioError}
           desde={desde}
           hasta={hasta}
-          onDesdeChange={setDesde}
-          onHastaChange={setHasta}
+          onDesdeChange={cambiarDesde}
+          onHastaChange={cambiarHasta}
           onCellClick={abrirFormularioCelda}
         />
       )}
