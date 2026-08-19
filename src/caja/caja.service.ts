@@ -258,7 +258,7 @@ export class CajaService {
 
     const { data: movimiento, error: movError } = await client
       .from('movimientos_caja')
-      .select('id, monto, notas')
+      .select('id, monto, metodo_pago, notas')
       .eq('id', movimientoId)
       .eq('sesion_turno_id', sesionId)
       .maybeSingle();
@@ -275,13 +275,18 @@ export class CajaService {
     if (personalError) throw personalError;
     const nombreAdmin = personal?.nombre ?? 'usuario desconocido';
 
-    const notaCambio = `Modificado por el administrador ${nombreAdmin} (monto anterior: ${Number(movimiento.monto).toFixed(2)}) el ${this.fechaHoraLimaTexto()}`;
-    const notasNuevas = movimiento.notas ? `${movimiento.notas} — ${notaCambio}` : notaCambio;
+    const notaCambio = `Modificado por el administrador ${nombreAdmin} (monto anterior: ${Number(movimiento.monto).toFixed(2)}, método anterior: ${movimiento.metodo_pago ?? '—'}) el ${this.fechaHoraLimaTexto()}`;
+    const notasBase = dto.notas !== undefined ? dto.notas : movimiento.notas;
+    const notasNuevas = notasBase ? `${notasBase} — ${notaCambio}` : notaCambio;
 
     const service = this.supabase.getServiceClient();
     const { error: updError } = await service
       .from('movimientos_caja')
-      .update({ monto: dto.monto, notas: notasNuevas })
+      .update({
+        monto: dto.monto,
+        metodo_pago: dto.metodoPago ?? movimiento.metodo_pago,
+        notas: notasNuevas,
+      })
       .eq('id', movimientoId);
     if (updError) throw updError;
 

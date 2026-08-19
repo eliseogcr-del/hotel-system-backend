@@ -150,6 +150,8 @@ export function EstadiaDetalle() {
   const [cajaAbierta, setCajaAbierta] = useState(true);
   const [editandoMovimientoId, setEditandoMovimientoId] = useState<string | null>(null);
   const [montoEdicion, setMontoEdicion] = useState('');
+  const [metodoEdicion, setMetodoEdicion] = useState('efectivo');
+  const [notasEdicion, setNotasEdicion] = useState('');
   const [mostrarEditar, setMostrarEditar] = useState(false);
   const [mostrarTraslado, setMostrarTraslado] = useState(false);
   const [tiposHabitacion, setTiposHabitacion] = useState<TipoHabitacionPrecios[]>([]);
@@ -228,19 +230,23 @@ export function EstadiaDetalle() {
     }
   }
 
-  function iniciarEdicionMonto(movimientoId: string, montoActual: number) {
+  function iniciarEdicionMonto(movimientoId: string, montoActual: number, metodoActual: string | null, notasActuales: string | null) {
     setEditandoMovimientoId(movimientoId);
     setMontoEdicion(String(montoActual));
+    setMetodoEdicion(metodoActual ?? 'efectivo');
+    setNotasEdicion(notasActuales ?? '');
     setError(null);
   }
 
-  async function guardarEdicionMonto(movimientoId: string) {
+  async function guardarEdicionMonto(movimientoId: string, teniaMetodo: boolean) {
     if (!hotelActual || !id || montoEdicion === '') return;
     setAccionando(true);
     setError(null);
     try {
       await api.patch(`/hoteles/${hotelActual.hotelId}/estadias/${id}/movimientos/${movimientoId}`, {
         monto: Number(montoEdicion),
+        metodoPago: teniaMetodo ? metodoEdicion : undefined,
+        notas: notasEdicion,
       });
       setEditandoMovimientoId(null);
       cargar();
@@ -471,14 +477,40 @@ export function EstadiaDetalle() {
                       m.monto
                     )}
                   </td>
-                  <td style={{ ...tdStyle, color }}>{m.metodo_pago ?? '—'}</td>
+                  <td style={{ ...tdStyle, color }}>
+                    {editandoMovimientoId === m.id && m.metodo_pago !== null ? (
+                      <select
+                        value={metodoEdicion}
+                        onChange={(e) => setMetodoEdicion(e.target.value)}
+                        style={{ fontSize: 12, padding: '2px 4px' }}
+                      >
+                        {METODOS.map((met) => (
+                          <option key={met} value={met}>
+                            {met}
+                          </option>
+                        ))}
+                      </select>
+                    ) : (
+                      m.metodo_pago ?? '—'
+                    )}
+                  </td>
                   <td style={{ ...tdStyle, color }}>{m.personal?.nombre ?? '—'}</td>
-                  <td style={{ ...tdStyle, color }}>{m.notas ?? ''}</td>
+                  <td style={{ ...tdStyle, color }}>
+                    {editandoMovimientoId === m.id ? (
+                      <input
+                        value={notasEdicion}
+                        onChange={(e) => setNotasEdicion(e.target.value)}
+                        style={{ width: 160, padding: '2px 4px', fontSize: 12 }}
+                      />
+                    ) : (
+                      m.notas ?? ''
+                    )}
+                  </td>
                   <td style={tdStyle}>
                     {editandoMovimientoId === m.id ? (
                       <span style={{ display: 'flex', gap: 8 }}>
                         <button
-                          onClick={() => guardarEdicionMonto(m.id)}
+                          onClick={() => guardarEdicionMonto(m.id, m.metodo_pago !== null)}
                           disabled={accionando}
                           style={{ border: 'none', background: 'transparent', color: 'var(--brand)', fontSize: 12, textDecoration: 'underline', cursor: 'pointer', padding: 0 }}
                         >
@@ -513,7 +545,7 @@ export function EstadiaDetalle() {
                         )}
                         {esAdmin && (
                           <button
-                            onClick={() => iniciarEdicionMonto(m.id, Number(m.monto))}
+                            onClick={() => iniciarEdicionMonto(m.id, Number(m.monto), m.metodo_pago, m.notas)}
                             disabled={accionando}
                             style={{ border: 'none', background: 'transparent', color: 'var(--text-secondary)', fontSize: 12, textDecoration: 'underline', cursor: 'pointer', padding: 0 }}
                           >

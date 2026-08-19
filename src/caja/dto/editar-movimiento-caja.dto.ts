@@ -1,6 +1,14 @@
-import { IsNumber } from 'class-validator';
+import { IsEnum, IsNumber, IsOptional, IsString } from 'class-validator';
 
 export class EditarMovimientoCajaDto {
   @IsNumber()
   monto: number;
+
+  @IsOptional()
+  @IsEnum(['efectivo', 'transferencia', 'yape', 'tarjeta'])
+  metodoPago?: string;
+
+  @IsOptional()
+  @IsString()
+  notas?: string;
 }

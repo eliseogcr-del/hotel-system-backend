@@ -323,12 +323,16 @@ function ResumenSesion({
   const saldoFinal = sesion.estado === 'cerrada' && sesion.saldo_final != null ? sesion.saldo_final : sesion.saldoActual;
   const [editandoId, setEditandoId] = useState<string | null>(null);
   const [montoEdicion, setMontoEdicion] = useState('');
+  const [metodoEdicion, setMetodoEdicion] = useState('efectivo');
+  const [notasEdicion, setNotasEdicion] = useState('');
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  function iniciarEdicion(movimientoId: string, montoActual: number) {
+  function iniciarEdicion(movimientoId: string, montoActual: number, metodoActual: string, notasActuales: string | null) {
     setEditandoId(movimientoId);
     setMontoEdicion(String(montoActual));
+    setMetodoEdicion(metodoActual);
+    setNotasEdicion(notasActuales ?? '');
     setError(null);
   }
 
@@ -339,7 +343,7 @@ function ResumenSesion({
     try {
       const actualizada = await api.patch<SesionCaja>(
         `/hoteles/${hotelId}/caja/sesiones/${sesion.id}/movimientos/${movimientoId}`,
-        { monto: Number(montoEdicion) },
+        { monto: Number(montoEdicion), metodoPago: metodoEdicion, notas: notasEdicion },
       );
       setEditandoId(null);
       onActualizado(actualizada);
@@ -382,7 +386,23 @@ function ResumenSesion({
                 <tr key={m.id} style={{ borderTop: '1px solid var(--border)', background: bg }}>
                   <td style={{ ...tdStyle, color, fontWeight: 500 }}>{m.tipo}</td>
                   <td style={{ ...tdStyle, color }}>{m.concepto}</td>
-                  <td style={{ ...tdStyle, color }}>{m.metodo_pago}</td>
+                  <td style={{ ...tdStyle, color }}>
+                    {editandoId === m.id ? (
+                      <select
+                        value={metodoEdicion}
+                        onChange={(e) => setMetodoEdicion(e.target.value)}
+                        style={{ fontSize: 12, padding: '2px 4px' }}
+                      >
+                        {METODOS.map((met) => (
+                          <option key={met} value={met}>
+                            {met}
+                          </option>
+                        ))}
+                      </select>
+                    ) : (
+                      m.metodo_pago
+                    )}
+                  </td>
                   <td style={{ ...tdStyle, color, fontWeight: 600 }}>
                     {editandoId === m.id ? (
                       <input
@@ -405,7 +425,17 @@ function ResumenSesion({
                     )}
                   </td>
                   <td style={{ ...tdStyle, color }}>{new Date(m.created_at).toLocaleTimeString()}</td>
-                  <td style={{ ...tdStyle, color }}>{m.notas ?? ''}</td>
+                  <td style={{ ...tdStyle, color }}>
+                    {editandoId === m.id ? (
+                      <input
+                        value={notasEdicion}
+                        onChange={(e) => setNotasEdicion(e.target.value)}
+                        style={{ width: 160, padding: '2px 4px', fontSize: 12 }}
+                      />
+                    ) : (
+                      m.notas ?? ''
+                    )}
+                  </td>
                   {esAdmin && (
                     <td style={tdStyle}>
                       {editandoId === m.id ? (
@@ -427,7 +457,7 @@ function ResumenSesion({
                         </span>
                       ) : (
                         <button
-                          onClick={() => iniciarEdicion(m.id, Number(m.monto))}
+                          onClick={() => iniciarEdicion(m.id, Number(m.monto), m.metodo_pago, m.notas)}
                           style={{ border: 'none', background: 'transparent', color: 'var(--text-secondary)', fontSize: 12, textDecoration: 'underline', cursor: 'pointer', padding: 0 }}
                         >
                           Editar

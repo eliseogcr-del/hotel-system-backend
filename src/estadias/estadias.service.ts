@@ -866,7 +866,7 @@ export class EstadiasService {
 
     const { data: movimiento, error: movError } = await client
       .from('movimientos_cuenta')
-      .select('id, monto, notas')
+      .select('id, monto, metodo_pago, notas')
       .eq('id', movimientoId)
       .eq('estadia_id', estadiaId)
       .maybeSingle();
@@ -883,12 +883,20 @@ export class EstadiasService {
     if (personalError) throw personalError;
     const nombreAdmin = personal?.nombre ?? 'usuario desconocido';
 
-    const notaCambio = `Modificado por el administrador ${nombreAdmin} (monto anterior: ${Number(movimiento.monto).toFixed(2)}) el ${fechaHoraLimaTexto(new Date())}`;
-    const notasNuevas = movimiento.notas ? `${movimiento.notas} — ${notaCambio}` : notaCambio;
+    const notaCambio = `Modificado por el administrador ${nombreAdmin} (monto anterior: ${Number(movimiento.monto).toFixed(2)}, método anterior: ${movimiento.metodo_pago ?? '—'}) el ${fechaHoraLimaTexto(new Date())}`;
+    // dto.notas reemplaza el texto base de la nota (para que el admin pueda
+    // corregirla directamente); el recordatorio de auditoría se agrega
+    // siempre, sobre ese texto base.
+    const notasBase = dto.notas !== undefined ? dto.notas : movimiento.notas;
+    const notasNuevas = notasBase ? `${notasBase} — ${notaCambio}` : notaCambio;
 
     const { error: updError } = await client
       .from('movimientos_cuenta')
-      .update({ monto: dto.monto, notas: notasNuevas })
+      .update({
+        monto: dto.monto,
+        metodo_pago: dto.metodoPago ?? movimiento.metodo_pago,
+        notas: notasNuevas,
+      })
       .eq('id', movimientoId);
     if (updError) throw updError;
 
