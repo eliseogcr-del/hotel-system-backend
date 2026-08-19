@@ -133,6 +133,7 @@ export function ReservaFormModal({
   const [rucEmpresa, setRucEmpresa] = useState('');
   const [resultados, setResultados] = useState<ResultadoCliente[]>([]);
   const [buscando, setBuscando] = useState(false);
+  const [buscado, setBuscado] = useState(false);
 
   const [observaciones, setObservaciones] = useState('');
 
@@ -201,6 +202,7 @@ export function ReservaFormModal({
     setHuespedId(null);
     setEmpresaId(null);
     setResultados([]);
+    setBuscado(false);
   }
 
   function seleccionarHuesped(h: Huesped) {
@@ -282,8 +284,15 @@ export function ReservaFormModal({
       setError(err instanceof Error ? err.message : 'No se pudo buscar el cliente');
     } finally {
       setBuscando(false);
+      setBuscado(true);
     }
   }
+
+  // Solo con esto en true se habilitan los campos para escribir a mano los
+  // datos de un huésped nuevo: hay que buscar primero (Enter) y que
+  // realmente no aparezca nadie, para no dejar pasar sin querer un
+  // duplicado de alguien que ya está registrado.
+  const sinResultados = buscado && !huespedId && !empresaId && resultados.length === 0;
 
   const checkoutCalculado = calcularCheckout(fecha, hora, dias);
   const cobroMascotaTotal = conMascota ? precioMascotaDia * dias : 0;
@@ -306,8 +315,11 @@ export function ReservaFormModal({
         let idHuesped = huespedId;
         let idEmpresa = empresaId;
         if (!idHuesped && !idEmpresa) {
-          if (!nombres.trim() || !apellidos.trim() || !busqueda.trim()) {
-            throw new Error('Busca o completa nombres y apellidos para registrar al huésped');
+          if (!sinResultados) {
+            throw new Error('Busca al cliente (Enter) antes de guardar; si no aparece, podrás completar sus datos.');
+          }
+          if (!nombres.trim() || !apellidos.trim()) {
+            throw new Error('Completa nombres y apellidos para registrar al huésped');
           }
           const creado = await crearHuesped(hotelId, {
             nombres: nombres.trim(),
@@ -531,6 +543,18 @@ export function ReservaFormModal({
                       Empresa encontrada: {razonSocial} · RUC {rucEmpresa}
                     </p>
                   )}
+                  {sinResultados && (
+                    <p style={{ fontSize: 11, color: 'var(--danger)', fontWeight: 600, margin: '6px 0 0' }}>
+                      No se encontró ningún cliente con ese dato — completa los datos abajo para registrarlo como
+                      huésped nuevo (son provisionales; el número de documento se confirma obligatoriamente en el
+                      check-in).
+                    </p>
+                  )}
+                  {!buscado && !huespedId && !empresaId && (
+                    <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: '6px 0 0' }}>
+                      Busca primero (Enter) — si no aparece nadie, se habilitan los campos de abajo para registrarlo.
+                    </p>
+                  )}
 
                   {resultados.length > 0 && (
                     <div style={{ marginTop: 8, border: '1px solid var(--border)', borderRadius: 'var(--radius)', overflow: 'hidden' }}>
@@ -584,8 +608,8 @@ export function ReservaFormModal({
                           value={nombres}
                           onChange={(e) => setNombres(e.target.value)}
                           style={inputStyle}
-                          disabled={!!huespedId}
-                          required={!huespedId}
+                          disabled={!sinResultados}
+                          required={sinResultados}
                         />
                       </div>
                       <div>
@@ -594,8 +618,8 @@ export function ReservaFormModal({
                           value={apellidos}
                           onChange={(e) => setApellidos(e.target.value)}
                           style={inputStyle}
-                          disabled={!!huespedId}
-                          required={!huespedId}
+                          disabled={!sinResultados}
+                          required={sinResultados}
                         />
                       </div>
                       <div>
@@ -604,7 +628,7 @@ export function ReservaFormModal({
                           value={telefono}
                           onChange={(e) => setTelefono(e.target.value)}
                           style={inputStyle}
-                          disabled={!!huespedId}
+                          disabled={!sinResultados}
                         />
                       </div>
                       <div>
@@ -614,7 +638,7 @@ export function ReservaFormModal({
                           value={correo}
                           onChange={(e) => setCorreo(e.target.value)}
                           style={inputStyle}
-                          disabled={!!huespedId}
+                          disabled={!sinResultados}
                         />
                       </div>
                       <div>
@@ -625,7 +649,7 @@ export function ReservaFormModal({
                           placeholder="11 dígitos"
                           maxLength={11}
                           style={inputStyle}
-                          disabled={!!huespedId}
+                          disabled={!sinResultados}
                         />
                       </div>
                       <div>
@@ -634,15 +658,14 @@ export function ReservaFormModal({
                           value={huespedRazonSocial}
                           onChange={(e) => setHuespedRazonSocial(e.target.value)}
                           style={inputStyle}
-                          disabled={!!huespedId}
+                          disabled={!sinResultados}
                         />
                       </div>
-                      {!huespedId && (
+                      {sinResultados && (
                         <p style={{ fontSize: 11, color: 'var(--text-muted)', gridColumn: '1 / -1', margin: 0 }}>
-                          Si al buscar (Enter) no se encuentra al cliente, completa estos datos para registrar un
-                          huésped nuevo — usará lo escrito arriba como documento. RUC y razón social: del propio
-                          huésped si pidió factura a su nombre, o de la empresa que paga su estadía. Déjalo vacío si
-                          no aplica.
+                          Se registrará como huésped nuevo usando "{busqueda.trim()}" como documento. RUC y razón
+                          social: del propio huésped si pidió factura a su nombre, o de la empresa que paga su
+                          estadía. Déjalo vacío si no aplica.
                         </p>
                       )}
                     </div>
