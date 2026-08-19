@@ -22,6 +22,7 @@ import { TrasladarHabitacionDto } from './dto/trasladar-habitacion.dto';
 import { ReservasService } from '../reservas/reservas.service';
 import { CrearReservaDto } from '../reservas/dto/crear-reserva.dto';
 import { TipoCambioService } from '../tipo-cambio/tipo-cambio.service';
+import { SupabaseService } from '../common/supabase/supabase.service';
 
 interface HotelHoras {
   hora_checkin: string;
@@ -100,6 +101,7 @@ export class EstadiasService {
   constructor(
     private readonly reservasService: ReservasService,
     private readonly tipoCambioService: TipoCambioService,
+    private readonly supabase: SupabaseService,
   ) {}
 
   /**
@@ -652,7 +654,7 @@ export class EstadiasService {
       notasCargo = dto.notas ? `${refUsd} — ${dto.notas}` : refUsd;
     }
 
-    await this.insertarMovimiento(client, estadiaId, {
+    const movimientoCargoId = await this.insertarMovimiento(client, estadiaId, {
       tipo: dto.tipo,
       monto: montoFinal,
       metodoPago: dto.metodoPago,
@@ -670,8 +672,11 @@ export class EstadiasService {
     // La venta con catálogo (bazar/desayuno) pagada al momento genera además
     // el pago que compensa esa deuda en el libro de la estadía (antes solo
     // se registraba el ingreso en caja y el cargo quedaba como pendiente).
+    // Ese pago compensatorio -- no el cargo -- es el que corresponde al
+    // ingreso de caja de más abajo.
+    let movimientoPagoId = movimientoCargoId;
     if (esVentaConCatalogo && pagadoAlMomento) {
-      await this.insertarMovimiento(client, estadiaId, {
+      movimientoPagoId = await this.insertarMovimiento(client, estadiaId, {
         tipo: 'pago',
         monto: -Math.abs(dto.monto),
         metodoPago: dto.metodoPago,
@@ -697,6 +702,10 @@ export class EstadiasService {
         moneda_pago: monedaPago ?? null,
         monto_original: montoOriginalUsd ?? null,
         tipo_cambio_aplicado: tipoCambioAplicado ?? null,
+        // Vínculo hacia el movimiento del lado de la estadía que representa
+        // este mismo pago, para que editarMovimiento() pueda propagar aquí
+        // una corrección de monto/método/notas (ver migracion_link_movimiento_caja.sql).
+        movimiento_cuenta_id: movimientoPagoId,
       });
       if (cajaError) throw cajaError;
     }
@@ -899,6 +908,23 @@ export class EstadiasService {
       })
       .eq('id', movimientoId);
     if (updError) throw updError;
+
+    // Un pago que generó ingreso de caja tiene una fila espejo en
+    // movimientos_caja (ver registrarMovimiento) -- si existe, se corrige
+    // también para que el reporte de Caja no quede desactualizado.
+    // movimientos_caja no tiene policy de UPDATE (solo select/insert), así
+    // que este ajuste necesita el cliente de service-role, igual que
+    // CajaService.editarMovimiento().
+    const { error: cajaUpdError } = await this.supabase
+      .getServiceClient()
+      .from('movimientos_caja')
+      .update({
+        monto: Math.abs(dto.monto),
+        metodo_pago: dto.metodoPago ?? movimiento.metodo_pago,
+        notas: notasNuevas,
+      })
+      .eq('movimiento_cuenta_id', movimientoId);
+    if (cajaUpdError) throw cajaUpdError;
 
     await this.recalcularSaldo(client, estadiaId);
 
@@ -1225,24 +1251,30 @@ export class EstadiasService {
       tipoCambioAplicado?: number;
     },
   ) {
-    const { error: movError } = await client.from('movimientos_cuenta').insert({
-      estadia_id: estadiaId,
-      tipo: input.tipo,
-      monto: input.monto,
-      metodo_pago: input.metodoPago ?? null,
-      producto_id: input.productoId ?? null,
-      tipo_desayuno_id: input.tipoDesayunoId ?? null,
-      pagado_al_momento: input.pagadoAlMomento ?? true,
-      sesion_turno_id: input.sesionTurnoId ?? null,
-      notas: input.notas ?? null,
-      registrado_por: input.registradoPor ?? null,
-      moneda_pago: input.monedaPago ?? null,
-      monto_original: input.montoOriginal ?? null,
-      tipo_cambio_aplicado: input.tipoCambioAplicado ?? null,
-    });
+    const { data: movimiento, error: movError } = await client
+      .from('movimientos_cuenta')
+      .insert({
+        estadia_id: estadiaId,
+        tipo: input.tipo,
+        monto: input.monto,
+        metodo_pago: input.metodoPago ?? null,
+        producto_id: input.productoId ?? null,
+        tipo_desayuno_id: input.tipoDesayunoId ?? null,
+        pagado_al_momento: input.pagadoAlMomento ?? true,
+        sesion_turno_id: input.sesionTurnoId ?? null,
+        notas: input.notas ?? null,
+        registrado_por: input.registradoPor ?? null,
+        moneda_pago: input.monedaPago ?? null,
+        monto_original: input.montoOriginal ?? null,
+        tipo_cambio_aplicado: input.tipoCambioAplicado ?? null,
+      })
+      .select('id')
+      .single();
     if (movError) throw movError;
 
     await this.recalcularSaldo(client, estadiaId);
+
+    return movimiento.id as string;
   }
 
   private async recalcularSaldo(client: SupabaseClient, estadiaId: string) {
