@@ -480,7 +480,7 @@ export class ReservasService {
         `
         id, habitacion_id, nro_personas, incluye_desayuno, con_mascota, tarifa_dia, dias,
         tipo_alquiler, fecha_hora_checkin_prevista, fecha_hora_checkout_prevista,
-        reservas!inner(id, hotel_id, estado, origen, moneda, descuento_total),
+        reservas!inner(id, hotel_id, estado, origen, moneda, descuento_total, huesped_id),
         vehiculos(id, marca, tipo, placa),
         estadias(estado_actual)
       `,
@@ -494,6 +494,22 @@ export class ReservasService {
     const reserva = rhData?.reservas;
     if (!rh || reserva.hotel_id !== hotelId) {
       throw new NotFoundException('La línea de reserva no existe en este hotel');
+    }
+    if (dto.nuevoHuespedId && dto.nuevoHuespedId !== reserva.huesped_id) {
+      const { data: huespedNuevo, error: huespedError } = await client
+        .from('huespedes')
+        .select('id, hotel_id')
+        .eq('id', dto.nuevoHuespedId)
+        .maybeSingle();
+      if (huespedError) throw huespedError;
+      if (!huespedNuevo || huespedNuevo.hotel_id !== hotelId) {
+        throw new NotFoundException('Huésped no encontrado en este hotel');
+      }
+      const { error: reasignarError } = await client
+        .from('reservas')
+        .update({ huesped_id: dto.nuevoHuespedId })
+        .eq('id', reservaId);
+      if (reasignarError) throw reasignarError;
     }
     if (reserva.estado === 'cancelada') {
       throw new BadRequestException('No se puede editar una reserva cancelada');

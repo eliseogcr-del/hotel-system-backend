@@ -6,6 +6,7 @@ import {
   IsNumber,
   IsOptional,
   IsString,
+  IsUUID,
   Min,
 } from 'class-validator';
 import { OrigenReserva } from './crear-reserva.dto';
@@ -17,6 +18,14 @@ import { OrigenReserva } from './crear-reserva.dto';
  * alcance de este formulario).
  */
 export class ActualizarReservaLineaDto {
+  // Reasignar la reserva a otro huésped ya existente en el hotel (ej. se
+  // registró bajo la persona equivocada). NUNCA edita los datos del
+  // huésped encontrado -- eso se hace aparte, con PATCH /huespedes/:id,
+  // porque ese registro puede estar compartido con otras reservas.
+  @IsOptional()
+  @IsUUID()
+  nuevoHuespedId?: string;
+
   @IsOptional()
   @IsEnum(['telefono', 'whatsapp', 'booking', 'airbnb', 'directo', 'walkin'])
   origen?: OrigenReserva;

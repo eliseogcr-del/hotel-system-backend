@@ -6,6 +6,7 @@ import {
   buscarHuespedPorDni,
   buscarHuespedPorRuc,
   buscarHuespedesPorNombre,
+  buscarHuespedesPorTexto,
   buscarEmpresaPorRuc,
   buscarEmpresasPorNombre,
   crearHuesped,
@@ -96,6 +97,23 @@ function isoAHoraLocal(iso: string): string {
   return d.toISOString().slice(11, 16);
 }
 
+// Compara los campos editables del huésped contra su snapshot original y
+// arma solo el objeto de campos que cambiaron, para PATCH /huespedes/:id
+// (mismo patrón que EditarEstadiaModal en EstadiaDetalle.tsx).
+function diffDatosHuesped(
+  original: Huesped,
+  actual: { nombres: string; apellidos: string; telefono: string; correo: string; ruc: string; razonSocial: string },
+): Record<string, string> {
+  const cambios: Record<string, string> = {};
+  if (actual.nombres.trim() !== original.nombres) cambios.nombres = actual.nombres.trim();
+  if (actual.apellidos.trim() !== original.apellidos) cambios.apellidos = actual.apellidos.trim();
+  if (actual.telefono.trim() !== (original.telefono ?? '')) cambios.telefono = actual.telefono.trim();
+  if (actual.correo.trim() !== (original.correo ?? '')) cambios.correo = actual.correo.trim();
+  if (actual.ruc.trim() !== (original.ruc ?? '')) cambios.ruc = actual.ruc.trim();
+  if (actual.razonSocial.trim() !== (original.razon_social ?? '')) cambios.razonSocial = actual.razonSocial.trim();
+  return cambios;
+}
+
 function calcularCheckout(fecha: string, hora: string, dias: number): Date | null {
   if (!fecha || !hora || !dias) return null;
   const checkin = new Date(`${fecha}T${hora}:00`);
@@ -143,6 +161,23 @@ export function ReservaFormModal({
   const [buscando, setBuscando] = useState(false);
   const [buscado, setBuscado] = useState(false);
 
+  // Snapshot del huésped tal como se encontró/cargó, para poder comparar
+  // contra lo que el usuario edite y mandar solo los campos que cambiaron
+  // en PATCH /huespedes/:id (nunca se pisa el registro entero). En modo
+  // 'editar' huespedIdOriginal además sirve para detectar "reasignando".
+  const [huespedOriginal, setHuespedOriginal] = useState<Huesped | null>(null);
+  const [huespedIdOriginal, setHuespedIdOriginal] = useState<string | null>(null);
+
+  // Reasignar a otro huésped (solo modo 'editar'): igual patrón que
+  // EstadiaDetalle.tsx -- se busca aparte, sin tocar los datos del huésped
+  // actual, y al confirmar los campos de arriba muestran una vista previa
+  // (de solo lectura) de la persona encontrada.
+  const [busquedaReasignar, setBusquedaReasignar] = useState('');
+  const [buscandoReasignar, setBuscandoReasignar] = useState(false);
+  const [mensajeReasignar, setMensajeReasignar] = useState<string | null>(null);
+  const [resultadosReasignar, setResultadosReasignar] = useState<Huesped[]>([]);
+  const reasignando = modo === 'editar' && huespedId !== huespedIdOriginal;
+
   const [observaciones, setObservaciones] = useState('');
 
   const [origen, setOrigen] = useState('directo');
@@ -186,17 +221,35 @@ export function ReservaFormModal({
         );
         // Mismos campos que el buscador de "Nueva reserva" (Nombres,
         // Apellidos, Teléfono, Correo, RUC, Razón social) para que también
-        // se vean acá -- de solo lectura, porque este huésped ya existe y
-        // puede estar compartido con otras reservas (para corregirlo hay
-        // que ir al módulo Huéspedes, igual que en EstadiaDetalle.tsx).
+        // se vean y se puedan corregir acá (igual que EstadiaDetalle.tsx):
+        // por defecto editables, se guardan como PATCH /huespedes/:id de
+        // solo los campos que cambien. Si la reserva quedó a nombre de la
+        // persona equivocada, "Buscar huésped" abajo permite reasignarla
+        // sin tocar los datos de este huésped (puede estar compartido con
+        // otras reservas).
         if (reserva.huespedes) {
           setHuespedId(reserva.huespedes.id);
+          setHuespedIdOriginal(reserva.huespedes.id);
           setNombres(reserva.huespedes.nombres);
           setApellidos(reserva.huespedes.apellidos);
           setTelefono(reserva.huespedes.telefono ?? '');
           setCorreo(reserva.huespedes.correo ?? '');
           setHuespedRuc(reserva.huespedes.ruc ?? '');
           setHuespedRazonSocial(reserva.huespedes.razon_social ?? '');
+          setHuespedOriginal({
+            id: reserva.huespedes.id,
+            nombres: reserva.huespedes.nombres,
+            apellidos: reserva.huespedes.apellidos,
+            tipo_doc: '',
+            nro_doc: '',
+            telefono: reserva.huespedes.telefono,
+            correo: reserva.huespedes.correo,
+            nacionalidad: null,
+            origen: null,
+            fecha_nacimiento: null,
+            ruc: reserva.huespedes.ruc,
+            razon_social: reserva.huespedes.razon_social,
+          });
         }
         setAnticiposExistentes(reserva.anticipos_reserva ?? []);
         if (linea) {
@@ -236,7 +289,74 @@ export function ReservaFormModal({
     setCorreo(h.correo ?? '');
     setHuespedRuc(h.ruc ?? '');
     setHuespedRazonSocial(h.razon_social ?? '');
+    setHuespedOriginal(h);
     setResultados([]);
+  }
+
+  // Reasignar (solo modo 'editar'): a diferencia de seleccionarHuesped, NO
+  // toca huespedOriginal -- el huésped original sigue siendo el que estaba
+  // antes, por si se cancela la reasignación. Los campos de abajo pasan a
+  // mostrar una vista previa (de solo lectura) de esta persona encontrada.
+  function seleccionarParaReasignar(h: Huesped) {
+    setHuespedId(h.id);
+    setNombres(h.nombres);
+    setApellidos(h.apellidos);
+    setTelefono(h.telefono ?? '');
+    setCorreo(h.correo ?? '');
+    setHuespedRuc(h.ruc ?? '');
+    setHuespedRazonSocial(h.razon_social ?? '');
+    setResultadosReasignar([]);
+    setMensajeReasignar('Huésped encontrado — se reasignará esta habitación a esta persona al guardar.');
+  }
+
+  function cancelarReasignacion() {
+    setHuespedId(huespedIdOriginal);
+    if (huespedOriginal) {
+      setNombres(huespedOriginal.nombres);
+      setApellidos(huespedOriginal.apellidos);
+      setTelefono(huespedOriginal.telefono ?? '');
+      setCorreo(huespedOriginal.correo ?? '');
+      setHuespedRuc(huespedOriginal.ruc ?? '');
+      setHuespedRazonSocial(huespedOriginal.razon_social ?? '');
+    }
+    setBusquedaReasignar('');
+    setMensajeReasignar(null);
+    setResultadosReasignar([]);
+  }
+
+  async function buscarParaReasignar() {
+    const q = busquedaReasignar.trim();
+    if (!q) return;
+    setBuscandoReasignar(true);
+    setError(null);
+    setResultadosReasignar([]);
+    setMensajeReasignar(null);
+    try {
+      if (/^\d{11}$/.test(q)) {
+        const porRuc = await buscarHuespedPorRuc(hotelId, q);
+        if (porRuc) {
+          seleccionarParaReasignar(porRuc);
+          return;
+        }
+      }
+      const porDoc = await buscarHuespedPorDni(hotelId, q);
+      if (porDoc) {
+        seleccionarParaReasignar(porDoc);
+        return;
+      }
+      const varios = await buscarHuespedesPorTexto(hotelId, q);
+      if (varios.length === 1) {
+        seleccionarParaReasignar(varios[0]);
+      } else if (varios.length > 1) {
+        setResultadosReasignar(varios);
+      } else {
+        setMensajeReasignar('No se encontró ningún huésped con ese dato.');
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'No se pudo buscar el huésped');
+    } finally {
+      setBuscandoReasignar(false);
+    }
   }
 
   function seleccionarEmpresa(e: Empresa) {
@@ -354,6 +474,16 @@ export function ReservaFormModal({
             razonSocial: huespedRazonSocial.trim() || undefined,
           });
           idHuesped = creado.id;
+        } else if (idHuesped && huespedOriginal) {
+          // Huésped ya existente encontrado por la búsqueda: si se corrigió
+          // algún dato (ej. nombre mal escrito, teléfono desactualizado) se
+          // guarda en su ficha antes de crear la reserva.
+          const cambios = diffDatosHuesped(huespedOriginal, {
+            nombres, apellidos, telefono, correo, ruc: huespedRuc, razonSocial: huespedRazonSocial,
+          });
+          if (Object.keys(cambios).length > 0) {
+            await api.patch(`/hoteles/${hotelId}/huespedes/${idHuesped}`, cambios);
+          }
         }
 
         await api.post(`/hoteles/${hotelId}/reservas`, {
@@ -382,6 +512,15 @@ export function ReservaFormModal({
           anticipoMetodoPago: anticipoMontoNum ? anticipoMetodoPago : undefined,
         });
       } else {
+        if (!reasignando && huespedId && huespedOriginal) {
+          const cambios = diffDatosHuesped(huespedOriginal, {
+            nombres, apellidos, telefono, correo, ruc: huespedRuc, razonSocial: huespedRazonSocial,
+          });
+          if (Object.keys(cambios).length > 0) {
+            await api.patch(`/hoteles/${hotelId}/huespedes/${huespedId}`, cambios);
+          }
+        }
+
         await api.patch(`/hoteles/${hotelId}/reservas/${reservaId}/habitaciones/${lineaId}`, {
           origen,
           moneda,
@@ -397,12 +536,19 @@ export function ReservaFormModal({
           vehiculoPlaca: tieneVehiculo ? vehiculoPlaca.trim() || undefined : undefined,
           anticipoMonto: anticipoMontoNum,
           anticipoMetodoPago: anticipoMontoNum ? anticipoMetodoPago : undefined,
+          nuevoHuespedId: reasignando && huespedId ? huespedId : undefined,
         });
       }
       onGuardado();
       onClose();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : err instanceof Error ? err.message : 'No se pudo guardar la reserva');
+      if (err instanceof ApiError && err.status === 409) {
+        setError(
+          `${err.message} — si es una persona distinta, usa "Buscar huésped" arriba para reasignar en vez de editar estos datos.`,
+        );
+      } else {
+        setError(err instanceof ApiError ? err.message : err instanceof Error ? err.message : 'No se pudo guardar la reserva');
+      }
     } finally {
       setEnviando(false);
     }
@@ -618,7 +764,74 @@ export function ReservaFormModal({
                   </>
                 )}
 
-                {(modo === 'crear' ? !empresaId : !!huespedId) && (
+                {modo === 'editar' && huespedId && (
+                  <div style={{ marginTop: 10, marginBottom: 10, padding: 10, border: '1px dashed var(--border)', borderRadius: 'var(--radius)' }}>
+                    <label style={labelStyle}>Buscar huésped (si la reserva quedó a nombre de otra persona)</label>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                      <input
+                        value={busquedaReasignar}
+                        onChange={(e) => setBusquedaReasignar(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            buscarParaReasignar();
+                          }
+                        }}
+                        placeholder="DNI, RUC o nombre — Enter para buscar"
+                        style={{ ...inputStyle, flex: 1, minWidth: 160 }}
+                      />
+                      <button type="button" onClick={buscarParaReasignar} disabled={buscandoReasignar} style={btnSecondary}>
+                        {buscandoReasignar ? 'Buscando...' : 'Buscar'}
+                      </button>
+                      {reasignando && (
+                        <button type="button" onClick={cancelarReasignacion} style={btnSecondary}>
+                          Cancelar reasignación
+                        </button>
+                      )}
+                    </div>
+                    {mensajeReasignar && (
+                      <p
+                        style={{
+                          fontSize: 11,
+                          fontWeight: reasignando ? 600 : 400,
+                          color: reasignando ? 'var(--disponible)' : 'var(--danger)',
+                          margin: '6px 0 0',
+                        }}
+                      >
+                        {mensajeReasignar}
+                      </p>
+                    )}
+                    {resultadosReasignar.length > 0 && (
+                      <div style={{ marginTop: 8, border: '1px solid var(--border)', borderRadius: 'var(--radius)', overflow: 'hidden' }}>
+                        <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: 0, padding: '6px 10px', background: 'var(--surface-2)' }}>
+                          {resultadosReasignar.length} coincidencia(s) — elige una:
+                        </p>
+                        {resultadosReasignar.map((h) => (
+                          <button
+                            key={h.id}
+                            type="button"
+                            onClick={() => seleccionarParaReasignar(h)}
+                            style={{
+                              display: 'block',
+                              width: '100%',
+                              textAlign: 'left',
+                              padding: '8px 10px',
+                              background: 'transparent',
+                              border: 'none',
+                              borderTop: '1px solid var(--border)',
+                              fontSize: 12,
+                              cursor: 'pointer',
+                            }}
+                          >
+                            {h.nombres} {h.apellidos} <span style={{ color: 'var(--text-muted)' }}>· {h.nro_doc}</span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {(modo === 'crear' ? !empresaId && (huespedId || sinResultados) : !!huespedId) && (
                   <div
                     style={{
                       display: 'grid',
@@ -633,8 +846,8 @@ export function ReservaFormModal({
                         value={nombres}
                         onChange={(e) => setNombres(e.target.value)}
                         style={inputStyle}
-                        disabled={!(modo === 'crear' && sinResultados)}
-                        required={modo === 'crear' && sinResultados}
+                        disabled={modo === 'editar' && reasignando}
+                        required
                       />
                     </div>
                     <div>
@@ -643,8 +856,8 @@ export function ReservaFormModal({
                         value={apellidos}
                         onChange={(e) => setApellidos(e.target.value)}
                         style={inputStyle}
-                        disabled={!(modo === 'crear' && sinResultados)}
-                        required={modo === 'crear' && sinResultados}
+                        disabled={modo === 'editar' && reasignando}
+                        required
                       />
                     </div>
                     <div>
@@ -653,7 +866,7 @@ export function ReservaFormModal({
                         value={telefono}
                         onChange={(e) => setTelefono(e.target.value)}
                         style={inputStyle}
-                        disabled={!(modo === 'crear' && sinResultados)}
+                        disabled={modo === 'editar' && reasignando}
                       />
                     </div>
                     <div>
@@ -663,7 +876,7 @@ export function ReservaFormModal({
                         value={correo}
                         onChange={(e) => setCorreo(e.target.value)}
                         style={inputStyle}
-                        disabled={!(modo === 'crear' && sinResultados)}
+                        disabled={modo === 'editar' && reasignando}
                       />
                     </div>
                     <div>
@@ -674,7 +887,7 @@ export function ReservaFormModal({
                         placeholder="11 dígitos"
                         maxLength={11}
                         style={inputStyle}
-                        disabled={!(modo === 'crear' && sinResultados)}
+                        disabled={modo === 'editar' && reasignando}
                       />
                     </div>
                     <div>
@@ -683,7 +896,7 @@ export function ReservaFormModal({
                         value={huespedRazonSocial}
                         onChange={(e) => setHuespedRazonSocial(e.target.value)}
                         style={inputStyle}
-                        disabled={!(modo === 'crear' && sinResultados)}
+                        disabled={modo === 'editar' && reasignando}
                       />
                     </div>
                     {modo === 'crear' && sinResultados && (
@@ -693,10 +906,23 @@ export function ReservaFormModal({
                         estadía. Déjalo vacío si no aplica.
                       </p>
                     )}
-                    {modo === 'editar' && (
+                    {modo === 'crear' && huespedId && (
                       <p style={{ fontSize: 11, color: 'var(--text-muted)', gridColumn: '1 / -1', margin: 0 }}>
-                        Datos de la ficha del huésped — para corregirlos, hazlo desde el módulo Huéspedes (puede
-                        estar compartida con otras reservas).
+                        Puedes corregir estos datos si hay un error (ej. nombre mal escrito) — se guardan en la
+                        ficha del huésped al crear la reserva.
+                      </p>
+                    )}
+                    {modo === 'editar' && !reasignando && (
+                      <p style={{ fontSize: 11, color: 'var(--text-muted)', gridColumn: '1 / -1', margin: 0 }}>
+                        Puedes corregir estos datos si hay un error (ej. nombre mal escrito o teléfono desactualizado)
+                        — se guardan en la ficha del huésped. Si la reserva es de una persona distinta, usa "Buscar
+                        huésped" arriba para reasignarla en vez de editar estos datos.
+                      </p>
+                    )}
+                    {modo === 'editar' && reasignando && (
+                      <p style={{ fontSize: 11, color: 'var(--text-muted)', gridColumn: '1 / -1', margin: 0 }}>
+                        Vista previa del huésped encontrado (sus datos no se modifican) — se reasignará esta
+                        habitación a esta persona al guardar.
                       </p>
                     )}
                   </div>
