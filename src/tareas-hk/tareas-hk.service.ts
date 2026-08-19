@@ -20,6 +20,20 @@ function fechaLimaAInstante(fechaYMD: string): Date {
   return desdeRelojLima(relojLima);
 }
 
+// Instante UTC real de la medianoche de "hoy" en hora Lima -- para comparar
+// contra created_at y decidir qué tareas quedaron atrás.
+function inicioDeHoyLima(): Date {
+  const relojLimaAhora = comoRelojLima(new Date());
+  const soloFecha = new Date(
+    Date.UTC(relojLimaAhora.getUTCFullYear(), relojLimaAhora.getUTCMonth(), relojLimaAhora.getUTCDate()),
+  );
+  return desdeRelojLima(soloFecha);
+}
+
+function comoRelojLima(fecha: Date): Date {
+  return new Date(fecha.getTime() - PERU_UTC_OFFSET_MS);
+}
+
 interface TareaHk {
   id: string;
   hotel_id: string;
@@ -66,6 +80,8 @@ export class TareasHkService {
   }
 
   async listar(client: SupabaseClient, hotelId: string, filtros: ListarTareasHkQueryDto) {
+    await this.rolloverPlanificadasVencidas(client, hotelId);
+
     let query = client
       .from('tareas_hk')
       .select('*, habitaciones(hab_numero, piso)')
@@ -234,6 +250,25 @@ export class TareasHkService {
     const { error } = await client.from('tareas_hk').delete().eq('id', tareaId);
     if (error) throw error;
     return { eliminado: true };
+  }
+
+  /**
+   * Una tarea 'planificado' que quedó pendiente de días anteriores (nadie
+   * la inició) no debe perderse en el filtro de fecha del frontend, que
+   * por defecto muestra solo las de hoy -- se "arrastra" al día actual
+   * (created_at, el mismo campo que usa el filtro de fecha) para que quien
+   * entre a Tareas HK siempre vea todo lo pendiente junto. Solo aplica a
+   * 'planificado': una tarea en_proceso o terminado es un registro de lo
+   * que ya pasó ese día, no algo por hacer.
+   */
+  private async rolloverPlanificadasVencidas(client: SupabaseClient, hotelId: string) {
+    const { error } = await client
+      .from('tareas_hk')
+      .update({ created_at: new Date().toISOString() })
+      .eq('hotel_id', hotelId)
+      .eq('estado', 'planificado')
+      .lt('created_at', inicioDeHoyLima().toISOString());
+    if (error) throw error;
   }
 
   private async cargarTareaHotel(
