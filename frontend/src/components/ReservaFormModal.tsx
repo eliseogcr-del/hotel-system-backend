@@ -44,7 +44,15 @@ interface ReservaDetalle {
   origen: string;
   moneda: 'PEN' | 'USD';
   estado: string;
-  huespedes: { nombres: string; apellidos: string } | null;
+  huespedes: {
+    id: string;
+    nombres: string;
+    apellidos: string;
+    telefono: string | null;
+    correo: string | null;
+    ruc: string | null;
+    razon_social: string | null;
+  } | null;
   empresas: { razon_social: string } | null;
   reserva_habitacion: ReservaHabitacionDetalle[];
   anticipos_reserva: AnticipoExistente[];
@@ -176,6 +184,20 @@ export function ReservaFormModal({
             ? `${reserva.huespedes.nombres} ${reserva.huespedes.apellidos}`
             : (reserva.empresas?.razon_social ?? null),
         );
+        // Mismos campos que el buscador de "Nueva reserva" (Nombres,
+        // Apellidos, Teléfono, Correo, RUC, Razón social) para que también
+        // se vean acá -- de solo lectura, porque este huésped ya existe y
+        // puede estar compartido con otras reservas (para corregirlo hay
+        // que ir al módulo Huéspedes, igual que en EstadiaDetalle.tsx).
+        if (reserva.huespedes) {
+          setHuespedId(reserva.huespedes.id);
+          setNombres(reserva.huespedes.nombres);
+          setApellidos(reserva.huespedes.apellidos);
+          setTelefono(reserva.huespedes.telefono ?? '');
+          setCorreo(reserva.huespedes.correo ?? '');
+          setHuespedRuc(reserva.huespedes.ruc ?? '');
+          setHuespedRazonSocial(reserva.huespedes.razon_social ?? '');
+        }
         setAnticiposExistentes(reserva.anticipos_reserva ?? []);
         if (linea) {
           setFecha(isoAFechaLocal(linea.fecha_hora_checkin_prevista));
@@ -509,173 +531,183 @@ export function ReservaFormModal({
             {/* ---------- Cliente ---------- */}
             <div style={cardStyle}>
               <p style={cardTitleStyle}>Cliente</p>
-              {modo === 'crear' ? (
-                <div>
-                  <label style={labelStyle}>DNI, RUC (empresa) o nombre del cliente</label>
-                  <input
-                    value={busqueda}
-                    onChange={(e) => {
-                      setBusqueda(e.target.value);
-                      limpiarSeleccionCliente();
-                    }}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') {
-                        e.preventDefault();
-                        buscarCliente();
-                      }
-                    }}
-                    placeholder="Ej. 45678912, 20601234567 o RIOS — Enter para buscar"
-                    style={inputStyle}
-                    required={!huespedId && !empresaId}
-                  />
-                  {buscando && (
-                    <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: '4px 0 0' }}>Buscando...</p>
-                  )}
-
-                  {huespedId && (
-                    <p style={{ fontSize: 11, color: 'var(--disponible)', margin: '6px 0 0' }}>
-                      Huésped encontrado — sus datos se muestran abajo. Si hay que corregir algo de su ficha, hazlo
-                      desde el módulo Huéspedes (puede estar compartida con otras reservas).
-                    </p>
-                  )}
-                  {empresaId && (
-                    <p style={{ fontSize: 11, color: 'var(--disponible)', margin: '6px 0 0' }}>
-                      Empresa encontrada: {razonSocial} · RUC {rucEmpresa}
-                    </p>
-                  )}
-                  {sinResultados && (
-                    <p style={{ fontSize: 11, color: 'var(--danger)', fontWeight: 600, margin: '6px 0 0' }}>
-                      No se encontró ningún cliente con ese dato — completa los datos abajo para registrarlo como
-                      huésped nuevo (son provisionales; el número de documento se confirma obligatoriamente en el
-                      check-in).
-                    </p>
-                  )}
-                  {!buscado && !huespedId && !empresaId && (
-                    <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: '6px 0 0' }}>
-                      Busca primero (Enter) — si no aparece nadie, se habilitan los campos de abajo para registrarlo.
-                    </p>
-                  )}
-
-                  {resultados.length > 0 && (
-                    <div style={{ marginTop: 8, border: '1px solid var(--border)', borderRadius: 'var(--radius)', overflow: 'hidden' }}>
-                      <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: 0, padding: '6px 10px', background: 'var(--surface-2)' }}>
-                        {resultados.length} coincidencia(s) — elige una:
-                      </p>
-                      {resultados.map((r, i) => (
-                        <button
-                          key={i}
-                          type="button"
-                          onClick={() => elegirResultado(r)}
-                          style={{
-                            display: 'block',
-                            width: '100%',
-                            textAlign: 'left',
-                            padding: '8px 10px',
-                            background: 'transparent',
-                            border: 'none',
-                            borderTop: '1px solid var(--border)',
-                            fontSize: 12,
-                            cursor: 'pointer',
-                          }}
-                        >
-                          {r.tipo === 'huesped' ? (
-                            <>
-                              {r.data.nombres} {r.data.apellidos}{' '}
-                              <span style={{ color: 'var(--text-muted)' }}>· {r.data.nro_doc}</span>
-                            </>
-                          ) : (
-                            <>
-                              {r.data.razon_social} <span style={{ color: 'var(--text-muted)' }}>· Empresa · RUC {r.data.ruc}</span>
-                            </>
-                          )}
-                        </button>
-                      ))}
-                    </div>
-                  )}
-
-                  {!empresaId && (
-                    <div
-                      style={{
-                        display: 'grid',
-                        gridTemplateColumns: isMobile ? '1fr' : 'repeat(3, 1fr)',
-                        gap: 8,
-                        marginTop: 10,
+              <div>
+                {modo === 'crear' && (
+                  <>
+                    <label style={labelStyle}>DNI, RUC (empresa) o nombre del cliente</label>
+                    <input
+                      value={busqueda}
+                      onChange={(e) => {
+                        setBusqueda(e.target.value);
+                        limpiarSeleccionCliente();
                       }}
-                    >
-                      <div>
-                        <label style={labelStyle}>Nombres</label>
-                        <input
-                          value={nombres}
-                          onChange={(e) => setNombres(e.target.value)}
-                          style={inputStyle}
-                          disabled={!sinResultados}
-                          required={sinResultados}
-                        />
-                      </div>
-                      <div>
-                        <label style={labelStyle}>Apellidos</label>
-                        <input
-                          value={apellidos}
-                          onChange={(e) => setApellidos(e.target.value)}
-                          style={inputStyle}
-                          disabled={!sinResultados}
-                          required={sinResultados}
-                        />
-                      </div>
-                      <div>
-                        <label style={labelStyle}>Teléfono</label>
-                        <input
-                          value={telefono}
-                          onChange={(e) => setTelefono(e.target.value)}
-                          style={inputStyle}
-                          disabled={!sinResultados}
-                        />
-                      </div>
-                      <div>
-                        <label style={labelStyle}>Correo</label>
-                        <input
-                          type="email"
-                          value={correo}
-                          onChange={(e) => setCorreo(e.target.value)}
-                          style={inputStyle}
-                          disabled={!sinResultados}
-                        />
-                      </div>
-                      <div>
-                        <label style={labelStyle}>RUC (opcional)</label>
-                        <input
-                          value={huespedRuc}
-                          onChange={(e) => setHuespedRuc(e.target.value)}
-                          placeholder="11 dígitos"
-                          maxLength={11}
-                          style={inputStyle}
-                          disabled={!sinResultados}
-                        />
-                      </div>
-                      <div>
-                        <label style={labelStyle}>Razón social (empresa, opcional)</label>
-                        <input
-                          value={huespedRazonSocial}
-                          onChange={(e) => setHuespedRazonSocial(e.target.value)}
-                          style={inputStyle}
-                          disabled={!sinResultados}
-                        />
-                      </div>
-                      {sinResultados && (
-                        <p style={{ fontSize: 11, color: 'var(--text-muted)', gridColumn: '1 / -1', margin: 0 }}>
-                          Se registrará como huésped nuevo usando "{busqueda.trim()}" como documento. RUC y razón
-                          social: del propio huésped si pidió factura a su nombre, o de la empresa que paga su
-                          estadía. Déjalo vacío si no aplica.
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          buscarCliente();
+                        }
+                      }}
+                      placeholder="Ej. 45678912, 20601234567 o RIOS — Enter para buscar"
+                      style={inputStyle}
+                      required={!huespedId && !empresaId}
+                    />
+                    {buscando && (
+                      <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: '4px 0 0' }}>Buscando...</p>
+                    )}
+
+                    {huespedId && (
+                      <p style={{ fontSize: 11, color: 'var(--disponible)', margin: '6px 0 0' }}>
+                        Huésped encontrado — sus datos se muestran abajo. Si hay que corregir algo de su ficha, hazlo
+                        desde el módulo Huéspedes (puede estar compartida con otras reservas).
+                      </p>
+                    )}
+                    {empresaId && (
+                      <p style={{ fontSize: 11, color: 'var(--disponible)', margin: '6px 0 0' }}>
+                        Empresa encontrada: {razonSocial} · RUC {rucEmpresa}
+                      </p>
+                    )}
+                    {sinResultados && (
+                      <p style={{ fontSize: 11, color: 'var(--danger)', fontWeight: 600, margin: '6px 0 0' }}>
+                        No se encontró ningún cliente con ese dato — completa los datos abajo para registrarlo como
+                        huésped nuevo (son provisionales; el número de documento se confirma obligatoriamente en el
+                        check-in).
+                      </p>
+                    )}
+                    {!buscado && !huespedId && !empresaId && (
+                      <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: '6px 0 0' }}>
+                        Busca primero (Enter) — si no aparece nadie, se habilitan los campos de abajo para registrarlo.
+                      </p>
+                    )}
+
+                    {resultados.length > 0 && (
+                      <div style={{ marginTop: 8, border: '1px solid var(--border)', borderRadius: 'var(--radius)', overflow: 'hidden' }}>
+                        <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: 0, padding: '6px 10px', background: 'var(--surface-2)' }}>
+                          {resultados.length} coincidencia(s) — elige una:
                         </p>
-                      )}
+                        {resultados.map((r, i) => (
+                          <button
+                            key={i}
+                            type="button"
+                            onClick={() => elegirResultado(r)}
+                            style={{
+                              display: 'block',
+                              width: '100%',
+                              textAlign: 'left',
+                              padding: '8px 10px',
+                              background: 'transparent',
+                              border: 'none',
+                              borderTop: '1px solid var(--border)',
+                              fontSize: 12,
+                              cursor: 'pointer',
+                            }}
+                          >
+                            {r.tipo === 'huesped' ? (
+                              <>
+                                {r.data.nombres} {r.data.apellidos}{' '}
+                                <span style={{ color: 'var(--text-muted)' }}>· {r.data.nro_doc}</span>
+                              </>
+                            ) : (
+                              <>
+                                {r.data.razon_social} <span style={{ color: 'var(--text-muted)' }}>· Empresa · RUC {r.data.ruc}</span>
+                              </>
+                            )}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </>
+                )}
+
+                {(modo === 'crear' ? !empresaId : !!huespedId) && (
+                  <div
+                    style={{
+                      display: 'grid',
+                      gridTemplateColumns: isMobile ? '1fr' : 'repeat(3, 1fr)',
+                      gap: 8,
+                      marginTop: modo === 'crear' ? 10 : 0,
+                    }}
+                  >
+                    <div>
+                      <label style={labelStyle}>Nombres</label>
+                      <input
+                        value={nombres}
+                        onChange={(e) => setNombres(e.target.value)}
+                        style={inputStyle}
+                        disabled={!(modo === 'crear' && sinResultados)}
+                        required={modo === 'crear' && sinResultados}
+                      />
                     </div>
-                  )}
-                </div>
-              ) : (
-                <p style={{ fontSize: 13, color: 'var(--text-secondary)', margin: 0 }}>
-                  {huespedNombre ?? 'Sin datos de cliente'}
-                </p>
-              )}
+                    <div>
+                      <label style={labelStyle}>Apellidos</label>
+                      <input
+                        value={apellidos}
+                        onChange={(e) => setApellidos(e.target.value)}
+                        style={inputStyle}
+                        disabled={!(modo === 'crear' && sinResultados)}
+                        required={modo === 'crear' && sinResultados}
+                      />
+                    </div>
+                    <div>
+                      <label style={labelStyle}>Teléfono</label>
+                      <input
+                        value={telefono}
+                        onChange={(e) => setTelefono(e.target.value)}
+                        style={inputStyle}
+                        disabled={!(modo === 'crear' && sinResultados)}
+                      />
+                    </div>
+                    <div>
+                      <label style={labelStyle}>Correo</label>
+                      <input
+                        type="email"
+                        value={correo}
+                        onChange={(e) => setCorreo(e.target.value)}
+                        style={inputStyle}
+                        disabled={!(modo === 'crear' && sinResultados)}
+                      />
+                    </div>
+                    <div>
+                      <label style={labelStyle}>RUC (opcional)</label>
+                      <input
+                        value={huespedRuc}
+                        onChange={(e) => setHuespedRuc(e.target.value)}
+                        placeholder="11 dígitos"
+                        maxLength={11}
+                        style={inputStyle}
+                        disabled={!(modo === 'crear' && sinResultados)}
+                      />
+                    </div>
+                    <div>
+                      <label style={labelStyle}>Razón social (empresa, opcional)</label>
+                      <input
+                        value={huespedRazonSocial}
+                        onChange={(e) => setHuespedRazonSocial(e.target.value)}
+                        style={inputStyle}
+                        disabled={!(modo === 'crear' && sinResultados)}
+                      />
+                    </div>
+                    {modo === 'crear' && sinResultados && (
+                      <p style={{ fontSize: 11, color: 'var(--text-muted)', gridColumn: '1 / -1', margin: 0 }}>
+                        Se registrará como huésped nuevo usando "{busqueda.trim()}" como documento. RUC y razón
+                        social: del propio huésped si pidió factura a su nombre, o de la empresa que paga su
+                        estadía. Déjalo vacío si no aplica.
+                      </p>
+                    )}
+                    {modo === 'editar' && (
+                      <p style={{ fontSize: 11, color: 'var(--text-muted)', gridColumn: '1 / -1', margin: 0 }}>
+                        Datos de la ficha del huésped — para corregirlos, hazlo desde el módulo Huéspedes (puede
+                        estar compartida con otras reservas).
+                      </p>
+                    )}
+                  </div>
+                )}
+
+                {modo === 'editar' && !huespedId && (
+                  <p style={{ fontSize: 13, color: 'var(--text-secondary)', margin: 0 }}>
+                    {huespedNombre ?? 'Sin datos de cliente'}
+                  </p>
+                )}
+              </div>
             </div>
 
             {/* ---------- Datos de la reserva + Fechas ---------- */}
