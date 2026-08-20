@@ -108,6 +108,13 @@ function fechaLimaYMD(iso: string): string {
   return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}`;
 }
 
+// HH:MM en hora Lima -- misma conversión que fechaLimaYMD, para mostrar la
+// hora de llegada prevista de cada tarjeta.
+function horaLima(iso: string): string {
+  const d = new Date(new Date(iso).getTime() - 5 * 60 * 60 * 1000);
+  return `${String(d.getUTCHours()).padStart(2, '0')}:${String(d.getUTCMinutes()).padStart(2, '0')}`;
+}
+
 const DIAS_SEMANA = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
 const MESES = [
   'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
@@ -855,7 +862,12 @@ function ProximasLlegadas({ llegadas }: { llegadas: ProximaLlegada[] }) {
                       border: `2px solid ${ESTADO_COLOR_INTENSO.reservada.border}`,
                     }}
                   >
-                    <span style={{ fontSize: 20, fontWeight: 700, color: 'var(--text-primary)' }}>{l.habNumero}</span>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+                      <span style={{ fontSize: 20, fontWeight: 700, color: 'var(--text-primary)' }}>{l.habNumero}</span>
+                      <span style={{ fontSize: 12, fontWeight: 700, color: ESTADO_COLOR_INTENSO.reservada.text }}>
+                        {horaLima(l.checkinPrevisto)}
+                      </span>
+                    </div>
                     <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{l.tipoHabitacion ?? '—'}</span>
                     <span
                       style={{
