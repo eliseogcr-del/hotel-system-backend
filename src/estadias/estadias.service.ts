@@ -715,20 +715,17 @@ export class EstadiasService {
 
   async listar(client: SupabaseClient, hotelId: string, filtros: ListarEstadiasQueryDto) {
     const busqueda = filtros.busqueda?.trim().replace(/[,()%]/g, '');
-    let idsHuespedes: string[] | null = null;
-    if (busqueda) {
-      const { data: huespedes, error: huespedesError } = await client
-        .from('huespedes')
-        .select('id')
-        .eq('hotel_id', hotelId)
-        .or(
-          `nombres.ilike.%${busqueda}%,apellidos.ilike.%${busqueda}%,nro_doc.ilike.%${busqueda}%,ruc.ilike.%${busqueda}%,razon_social.ilike.%${busqueda}%`,
-        );
-      if (huespedesError) throw huespedesError;
-      if (!huespedes?.length) return [];
 
-      idsHuespedes = huespedes.map((h) => h.id);
-    }
+    // Antes se buscaba primero en `huespedes` y se armaba un filtro
+    // `.in(reservas.huesped_id, [...])` con los ids encontrados -- con un
+    // término corto (ej. una sola letra) esa lista podía tener cientos de
+    // ids y la URL de la consulta reventaba (500). Filtrar directo sobre la
+    // tabla embebida evita ese problema porque nunca viaja una lista de ids
+    // por la URL. `huespedes!inner` (en vez del left join normal) solo se
+    // usa cuando hay término de búsqueda, para no excluir de la lista a las
+    // reservas a nombre de una empresa (huesped_id null) cuando no se busca
+    // nada.
+    const embedHuespedes = busqueda ? 'huespedes!inner' : 'huespedes';
 
     let query = client
       .from('reserva_habitacion')
@@ -737,17 +734,21 @@ export class EstadiasService {
         id, habitacion_id, tipo_alquiler, incluye_desayuno, tarifa_dia,
         fecha_hora_checkin_prevista, fecha_hora_checkout_prevista,
         habitaciones!inner(hab_numero, piso),
-        reservas!inner(hotel_id, huesped_id, huespedes(nombres, apellidos, tipo_doc, nro_doc, telefono, ruc, razon_social)),
+        reservas!inner(hotel_id, huesped_id, ${embedHuespedes}(nombres, apellidos, tipo_doc, nro_doc, telefono, ruc, razon_social)),
         estadias!inner(id, estado_actual, saldo, checkin_real, checkout_real)
       `,
       )
       .eq('reservas.hotel_id', hotelId);
 
+    if (busqueda) {
+      query = query.or(
+        `nombres.ilike.%${busqueda}%,apellidos.ilike.%${busqueda}%,nro_doc.ilike.%${busqueda}%,ruc.ilike.%${busqueda}%,razon_social.ilike.%${busqueda}%`,
+        { referencedTable: 'reservas.huespedes' },
+      );
+    }
+
     if (filtros.estado) {
       query = query.eq('estadias.estado_actual', filtros.estado);
-    }
-    if (idsHuespedes) {
-      query = query.in('reservas.huesped_id', idsHuespedes);
     }
     if (filtros.habNumero) {
       query = query.eq('habitaciones.hab_numero', Number(filtros.habNumero));

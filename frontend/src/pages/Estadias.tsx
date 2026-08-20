@@ -70,6 +70,7 @@ export function Estadias() {
   useEffect(() => {
     if (!hotelActual) return;
     setLoading(true);
+    setError(null);
     const params = new URLSearchParams();
     if (filtroEstado) params.set('estado', filtroEstado);
     if (busquedaAplicada) params.set('busqueda', busquedaAplicada);
