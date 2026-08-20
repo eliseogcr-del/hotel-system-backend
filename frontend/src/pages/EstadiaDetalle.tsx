@@ -288,6 +288,15 @@ export function EstadiaDetalle() {
 
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 24, marginBottom: 20 }}>
         <div>
+          <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: '0 0 2px' }}>Tarifa</p>
+          <p style={{ fontSize: 18, fontWeight: 600, margin: 0 }}>
+            PEN {Number(estadia.reserva_habitacion.tarifa_dia).toFixed(2)}
+            <span style={{ fontSize: 11, fontWeight: 400, color: 'var(--text-muted)' }}>
+              {' '}/día × {estadia.reserva_habitacion.dias}
+            </span>
+          </p>
+        </div>
+        <div>
           <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: '0 0 2px' }}>Total cargado</p>
           <p style={{ fontSize: 18, fontWeight: 600, margin: 0 }}>PEN {totalCargos.toFixed(2)}</p>
         </div>
