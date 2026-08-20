@@ -68,6 +68,19 @@ export class ReservasController {
     );
   }
 
+  // Vista mínima para el panel de Habitaciones (HK incluido): quién llega en
+  // los próximos 3 días, sin datos financieros ni de contacto -- ver
+  // ReservasService.proximasLlegadas().
+  @Get('proximas-llegadas')
+  @Roles('admin', 'recepcion', 'hk')
+  async proximasLlegadas(
+    @Param('hotelId') hotelId: string,
+    @CurrentUser() user: RequestUser,
+  ) {
+    const client = this.supabase.getClientForRequest(user.accessToken);
+    return this.reservasService.proximasLlegadas(client, hotelId);
+  }
+
   @Get(':id')
   @Roles('admin', 'recepcion')
   async detalle(

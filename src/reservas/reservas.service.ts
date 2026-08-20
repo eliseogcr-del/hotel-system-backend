@@ -20,6 +20,23 @@ import { CancelarReservaDto } from './dto/cancelar-reserva.dto';
 
 type MetodoPagoAnticipo = 'efectivo' | 'transferencia' | 'yape' | 'tarjeta';
 
+// Perú (America/Lima) es UTC-5 todo el año -- mismo criterio que en
+// estadias.service.ts para no comparar contra medianoche UTC por error.
+const PERU_UTC_OFFSET_MS = 5 * 60 * 60 * 1000;
+
+function desdeRelojLima(relojLima: Date): Date {
+  return new Date(relojLima.getTime() + PERU_UTC_OFFSET_MS);
+}
+
+// Medianoche de "hoy" en hora Lima, como instante UTC real.
+function inicioDeHoyLima(): Date {
+  const relojLimaAhora = new Date(Date.now() - PERU_UTC_OFFSET_MS);
+  const soloFecha = new Date(
+    Date.UTC(relojLimaAhora.getUTCFullYear(), relojLimaAhora.getUTCMonth(), relojLimaAhora.getUTCDate()),
+  );
+  return desdeRelojLima(soloFecha);
+}
+
 interface PreciosTipoHabitacion {
   precio_normal: number;
   precio_corporativo: number;
@@ -295,6 +312,45 @@ export class ReservasService {
           ? `${r.reservas.huespedes.nombres} ${r.reservas.huespedes.apellidos}`
           : (r.reservas.empresas?.razon_social ?? '—'),
       }));
+  }
+
+  /**
+   * Llegadas de los próximos 3 días (mañana, pasado y el siguiente), para
+   * el panel de Habitaciones -- HK también lo ve, así que va sin datos
+   * financieros ni de contacto (ver p.ej. VistaHabitacionesSoloLectura en
+   * TareasHk.tsx, mismo criterio de "solo lo necesario"). Ninguna de estas
+   * reservas puede tener estadía todavía (el check-in solo se permite el
+   * mismo día), así que no hace falta cruzar con `estadias`.
+   */
+  async proximasLlegadas(client: SupabaseClient, hotelId: string) {
+    const desde = new Date(inicioDeHoyLima().getTime() + 24 * 60 * 60 * 1000);
+    const hasta = new Date(desde.getTime() + 3 * 24 * 60 * 60 * 1000);
+
+    const { data, error } = await client
+      .from('reserva_habitacion')
+      .select(
+        `
+        fecha_hora_checkin_prevista,
+        habitaciones!inner(hab_numero, tipos_habitacion(nombre)),
+        reservas!inner(hotel_id, estado, origen, huespedes(nombres, apellidos), empresas(razon_social))
+      `,
+      )
+      .eq('reservas.hotel_id', hotelId)
+      .neq('reservas.estado', 'cancelada')
+      .gte('fecha_hora_checkin_prevista', desde.toISOString())
+      .lt('fecha_hora_checkin_prevista', hasta.toISOString())
+      .order('fecha_hora_checkin_prevista', { ascending: true });
+    if (error) throw error;
+
+    return (data ?? []).map((r: any) => ({
+      checkinPrevisto: r.fecha_hora_checkin_prevista,
+      habNumero: r.habitaciones.hab_numero,
+      tipoHabitacion: r.habitaciones.tipos_habitacion?.nombre ?? null,
+      huesped: r.reservas.huespedes
+        ? `${r.reservas.huespedes.nombres} ${r.reservas.huespedes.apellidos}`
+        : (r.reservas.empresas?.razon_social ?? '—'),
+      origen: r.reservas.origen,
+    }));
   }
 
   async obtenerDetalle(

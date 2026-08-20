@@ -84,6 +84,42 @@ const ESTADO_COCHERA_LABEL: Record<Cochera['estado'], string> = {
   ocupada: 'Ocupada',
 };
 
+interface ProximaLlegada {
+  checkinPrevisto: string;
+  habNumero: number;
+  tipoHabitacion: string | null;
+  huesped: string;
+  origen: string;
+}
+
+const ORIGEN_LABEL: Record<string, string> = {
+  telefono: 'Teléfono',
+  whatsapp: 'WhatsApp',
+  booking: 'Booking',
+  airbnb: 'Airbnb',
+  directo: 'Directo',
+  walkin: 'Walk-in',
+};
+
+// YYYY-MM-DD en hora Lima -- mismo criterio que el resto del frontend
+// (Reservas.tsx) para agrupar por día sin desfasarse con la medianoche UTC.
+function fechaLimaYMD(iso: string): string {
+  const d = new Date(new Date(iso).getTime() - 5 * 60 * 60 * 1000);
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}`;
+}
+
+const DIAS_SEMANA = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
+const MESES = [
+  'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
+  'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre',
+];
+
+function tituloFechaLima(fechaYMD: string): string {
+  const [anio, mes, dia] = fechaYMD.split('-').map(Number);
+  const diaSemana = new Date(Date.UTC(anio, mes - 1, dia)).getUTCDay();
+  return `${DIAS_SEMANA[diaSemana]} ${dia} de ${MESES[mes - 1]}`;
+}
+
 function formatoFechaHora(iso: string | null) {
   if (!iso) return '—';
   return new Date(iso).toLocaleString('es-PE', { dateStyle: 'short', timeStyle: 'short' });
@@ -101,6 +137,7 @@ export function Habitaciones() {
   const [habitaciones, setHabitaciones] = useState<Habitacion[]>([]);
   const [tiposHabitacion, setTiposHabitacion] = useState<TipoHabitacionPrecios[]>([]);
   const [cocheras, setCocheras] = useState<Cochera[]>([]);
+  const [proximasLlegadas, setProximasLlegadas] = useState<ProximaLlegada[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [ahora, setAhora] = useState(new Date());
@@ -157,6 +194,10 @@ export function Habitaciones() {
     api
       .get<Cochera[]>(`/hoteles/${hotelActual.hotelId}/cocheras`)
       .then(setCocheras)
+      .catch(() => {});
+    api
+      .get<ProximaLlegada[]>(`/hoteles/${hotelActual.hotelId}/reservas/proximas-llegadas`)
+      .then(setProximasLlegadas)
       .catch(() => {});
     api
       .get<{ precio_mascota: number }>(`/hoteles/${hotelActual.hotelId}`)
@@ -582,6 +623,8 @@ export function Habitaciones() {
         />
       )}
 
+      <ProximasLlegadas llegadas={proximasLlegadas} />
+
       {checkinHab && (
         <CheckinRapidoModal
           hotelId={hotelActual.hotelId}
@@ -774,6 +817,68 @@ function VistaTarjetas({
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+// Solo lectura -- de un vistazo, quién llega mañana, pasado y el siguiente
+// (3 días), para anticipar limpieza/HK y recepción sin tener que ir al
+// calendario de Reservas. Mismo color "reservada" (celeste) que ya se usa
+// en el resto de esta pantalla para una habitación con reserva pendiente.
+function ProximasLlegadas({ llegadas }: { llegadas: ProximaLlegada[] }) {
+  const dias = [1, 2, 3].map((offset) => {
+    const d = new Date();
+    d.setDate(d.getDate() + offset);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  });
+
+  return (
+    <div style={{ marginTop: 28 }}>
+      <h2 style={{ fontSize: 16, marginBottom: 10 }}>Próximas llegadas</h2>
+      {dias.map((fechaYMD) => {
+        const delDia = llegadas.filter((l) => fechaLimaYMD(l.checkinPrevisto) === fechaYMD);
+        return (
+          <div key={fechaYMD} style={{ marginBottom: 16 }}>
+            <p style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 8 }}>
+              {tituloFechaLima(fechaYMD)}
+            </p>
+            {delDia.length === 0 ? (
+              <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: 0 }}>Sin llegadas.</p>
+            ) : (
+              <div style={tarjetasGridStyle}>
+                {delDia.map((l, i) => (
+                  <div
+                    key={i}
+                    style={{
+                      ...tarjetaStyle,
+                      background: ESTADO_COLOR_INTENSO.reservada.bg,
+                      border: `2px solid ${ESTADO_COLOR_INTENSO.reservada.border}`,
+                    }}
+                  >
+                    <span style={{ fontSize: 20, fontWeight: 700, color: 'var(--text-primary)' }}>{l.habNumero}</span>
+                    <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{l.tipoHabitacion ?? '—'}</span>
+                    <span
+                      style={{
+                        fontSize: 12,
+                        color: 'var(--text-primary)',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap',
+                      }}
+                      title={l.huesped}
+                    >
+                      {l.huesped}
+                    </span>
+                    <span style={{ fontSize: 11, fontWeight: 700, color: ESTADO_COLOR_INTENSO.reservada.text }}>
+                      {ORIGEN_LABEL[l.origen] ?? l.origen}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 }
