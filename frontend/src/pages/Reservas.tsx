@@ -592,14 +592,14 @@ function CalendarioReservas({
             </thead>
             <tbody>
               {habitacionesOrdenadas.map((h, idxFila) => (
-                <tr key={h.id} style={{ background: idxFila % 2 === 1 ? 'var(--surface-0)' : 'transparent' }}>
+                <tr key={h.id} style={{ background: idxFila % 2 === 1 ? 'var(--ingreso-bg)' : 'transparent' }}>
                   <td
                     title={`${h.hab_numero} · ${h.tipos_habitacion?.nombre ?? ''}`}
                     style={{
                       ...tdCalStyle,
                       position: 'sticky',
                       left: 0,
-                      background: idxFila % 2 === 1 ? 'var(--surface-0)' : 'var(--surface-1)',
+                      background: idxFila % 2 === 1 ? 'var(--ingreso-bg)' : 'var(--surface-1)',
                       textAlign: 'left',
                       width: 108,
                       maxWidth: 108,
