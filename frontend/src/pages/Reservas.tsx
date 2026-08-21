@@ -609,14 +609,14 @@ function CalendarioReservas({
                       fontWeight: 700,
                     }}
                   >
-                    <span style={{ fontWeight: 500 }}>{h.hab_numero}</span>
+                    <span style={{ fontSize: 16, fontWeight: 800 }}>{h.hab_numero}</span>
                     {h.tipos_habitacion?.nombre && (
                       <span
                         style={{
                           display: 'block',
-                          fontSize: 10,
-                          color: 'var(--text-muted)',
-                          fontWeight: 400,
+                          fontSize: 12,
+                          color: 'var(--text-secondary)',
+                          fontWeight: 700,
                           overflow: 'hidden',
                           textOverflow: 'ellipsis',
                           whiteSpace: 'nowrap',
