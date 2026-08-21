@@ -9,7 +9,8 @@ export interface ValidarDisponibilidadInput {
 
 export type MotivoBloqueo =
   | 'SOLAPA_RESERVA_EXISTENTE'
-  | 'SIN_MARGEN_LIMPIEZA';
+  | 'SIN_MARGEN_LIMPIEZA'
+  | 'HABITACION_BLOQUEADA';
 
 export interface ConflictoDisponibilidad {
   motivo: MotivoBloqueo;

@@ -8,6 +8,7 @@ import { ReservaFormModal } from '../components/ReservaFormModal';
 interface Habitacion {
   id: string;
   hab_numero: number;
+  estado: string;
   tipos_habitacion: { id: string; nombre: string; aforo_max?: number } | null;
 }
 
@@ -128,6 +129,10 @@ export function Reservas() {
   const [calendario, setCalendario] = useState<ReservaCalendario[]>([]);
   const [calendarioLoading, setCalendarioLoading] = useState(false);
   const [calendarioError, setCalendarioError] = useState<string | null>(null);
+  // Aparte de calendarioError (que oculta toda la tabla mientras esté seteado,
+  // ver CalendarioReservas más abajo): un aviso liviano al hacer clic en una
+  // celda vacía de una habitación bloqueada, sin tapar el calendario.
+  const [avisoBloqueada, setAvisoBloqueada] = useState<string | null>(null);
   const [precioMascotaDia, setPrecioMascotaDia] = useState(0);
   const [horaCheckinHotel, setHoraCheckinHotel] = useState<string | undefined>(undefined);
 
@@ -193,6 +198,7 @@ export function Reservas() {
   }, [hotelActual, desde, hasta]);
 
   function abrirFormularioCelda(hab: Habitacion, segmento: SegmentoCelda) {
+    setAvisoBloqueada(null);
     if (segmento.ocupado) {
       if (segmento.estadoEstadia === 'en_curso' && segmento.estadiaId) {
         navigate(`/estadias/${segmento.estadiaId}`);
@@ -207,6 +213,11 @@ export function Reservas() {
         reservaId: segmento.reservaId,
         lineaId: segmento.lineaId,
       });
+    } else if (hab.estado === 'bloqueada') {
+      // Bloqueada (fuera de servicio) no admite reservas en ninguna fecha
+      // hasta que un admin la desbloquee desde Configuración -- mismo
+      // criterio que el backend en DisponibilidadService.validar().
+      setAvisoBloqueada(`La habitación ${hab.hab_numero} está bloqueada; no se pueden crear reservas ahí.`);
     } else {
       setFormulario({
         modo: 'crear',
@@ -253,6 +264,10 @@ export function Reservas() {
           Lista
         </button>
       </div>
+
+      {avisoBloqueada && (
+        <p style={{ color: 'var(--danger)', fontSize: 13, marginBottom: 12 }}>{avisoBloqueada}</p>
+      )}
 
       {vista === 'calendario' && (
         <CalendarioReservas
@@ -591,10 +606,12 @@ function CalendarioReservas({
               </tr>
             </thead>
             <tbody>
-              {habitacionesOrdenadas.map((h, idxFila) => (
+              {habitacionesOrdenadas.map((h, idxFila) => {
+                const bloqueada = h.estado === 'bloqueada';
+                return (
                 <tr key={h.id} style={{ background: idxFila % 2 === 1 ? 'var(--ingreso-bg)' : 'transparent' }}>
                   <td
-                    title={`${h.hab_numero} · ${h.tipos_habitacion?.nombre ?? ''}`}
+                    title={`${h.hab_numero} · ${h.tipos_habitacion?.nombre ?? ''}${bloqueada ? ' · Bloqueada' : ''}`}
                     style={{
                       ...tdCalStyle,
                       position: 'sticky',
@@ -625,24 +642,50 @@ function CalendarioReservas({
                         {h.tipos_habitacion.nombre}
                       </span>
                     )}
+                    {bloqueada && (
+                      <span
+                        style={{
+                          display: 'inline-block',
+                          marginTop: 2,
+                          fontSize: 9,
+                          fontWeight: 700,
+                          color: '#5347d1',
+                          background: '#a89ae8',
+                          padding: '1px 5px',
+                          borderRadius: 999,
+                        }}
+                      >
+                        Bloqueada
+                      </span>
+                    )}
                   </td>
                   {celdasHabitacion(h.id).map((c, i) =>
                     c.tipo === 'simple' ? (
                       <td
                         key={i}
                         colSpan={c.segmento.span}
-                        title={c.segmento.ocupado ? c.segmento.huesped : 'Crear reserva'}
+                        title={
+                          c.segmento.ocupado
+                            ? c.segmento.huesped
+                            : bloqueada
+                              ? 'Habitación bloqueada'
+                              : 'Crear reserva'
+                        }
                         onClick={() => onCellClick(h, c.segmento)}
                         style={{
                           ...tdCalStyle,
-                          background: c.segmento.ocupado ? 'var(--brand)' : 'transparent',
+                          background: c.segmento.ocupado
+                            ? 'var(--brand)'
+                            : bloqueada
+                              ? 'repeating-linear-gradient(45deg, var(--surface-2), var(--surface-2) 6px, var(--border) 6px, var(--border) 12px)'
+                              : 'transparent',
                           color: c.segmento.ocupado ? '#fff' : 'var(--text-muted)',
                           fontWeight: c.segmento.ocupado ? 500 : 400,
                           overflow: 'hidden',
                           textOverflow: 'ellipsis',
                           whiteSpace: 'nowrap',
                           maxWidth: 0,
-                          cursor: 'pointer',
+                          cursor: !c.segmento.ocupado && bloqueada ? 'not-allowed' : 'pointer',
                         }}
                       >
                         {c.segmento.ocupado ? c.segmento.huesped : ''}
@@ -675,7 +718,8 @@ function CalendarioReservas({
                     ),
                   )}
                 </tr>
-              ))}
+                );
+              })}
               {habitacionesOrdenadas.length === 0 && (
                 <tr>
                   <td style={tdCalStyle}>No hay habitaciones.</td>

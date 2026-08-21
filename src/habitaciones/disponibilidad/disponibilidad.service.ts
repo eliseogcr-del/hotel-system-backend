@@ -55,7 +55,7 @@ export class DisponibilidadService {
     // 1. Tiempo de limpieza según el tipo de habitación
     const { data: habitacion, error: habError } = await client
       .from('habitaciones')
-      .select('id, tipo_id, tipos_habitacion(tiempo_limpieza_min)')
+      .select('id, tipo_id, estado, tipos_habitacion(tiempo_limpieza_min)')
       .eq('id', habitacionId)
       .single();
 
@@ -65,6 +65,21 @@ export class DisponibilidadService {
         conflicto: {
           motivo: 'SOLAPA_RESERVA_EXISTENTE',
           mensaje: 'Habitación no encontrada.',
+        },
+      };
+    }
+
+    // Bloqueada (fuera de servicio, ej. en renovación) es un estado que se
+    // pone a mano desde Configuración y no tiene fecha de fin -- a
+    // diferencia de una reserva o un margen de limpieza, no importa qué
+    // rango se pida: no se puede reservar en absoluto hasta que un admin la
+    // desbloquee.
+    if (habitacion.estado === 'bloqueada') {
+      return {
+        disponible: false,
+        conflicto: {
+          motivo: 'HABITACION_BLOQUEADA',
+          mensaje: 'Esta habitación está bloqueada; no se puede reservar hasta que un administrador la desbloquee.',
         },
       };
     }
