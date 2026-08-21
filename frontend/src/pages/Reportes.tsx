@@ -55,6 +55,22 @@ interface ReporteCaja {
   };
 }
 
+interface FilaVentas {
+  etiqueta: string;
+  valores: number[];
+  total: number;
+}
+
+interface ReporteVentas {
+  dias: string[];
+  porMetodo: FilaVentas[];
+  totalesPorDiaMetodo: number[];
+  totalMetodo: number;
+  porTipo: FilaVentas[];
+  totalesPorDiaTipo: number[];
+  totalTipo: number;
+}
+
 // Mismo criterio que el backend (ver comoRelojLima en estadias.service.ts /
 // caja.service.ts): sesiones_turno.fecha se guarda en hora de Lima, así que
 // "hoy" por defecto también debe calcularse en hora de Lima -- si se usa la
@@ -73,6 +89,28 @@ const METODO_LABEL: Record<string, string> = {
   tarjeta: 'Tarjeta',
 };
 
+function sumarDiasYMD(fechaYMD: string, dias: number): string {
+  const [anio, mes, dia] = fechaYMD.split('-').map(Number);
+  const d = new Date(Date.UTC(anio, mes - 1, dia));
+  d.setUTCDate(d.getUTCDate() + dias);
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}`;
+}
+
+// "20 ago" -- corto a propósito, porque el rango puede tener muchas columnas.
+function fechaCorta(fechaYMD: string): string {
+  const [anio, mes, dia] = fechaYMD.split('-').map(Number);
+  const texto = new Date(Date.UTC(anio, mes - 1, dia)).toLocaleDateString('es-PE', {
+    timeZone: 'UTC',
+    day: 'numeric',
+    month: 'short',
+  });
+  return texto.replace('.', '');
+}
+
+function formatoPEN(n: number): string {
+  return n.toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
 export function Reportes() {
   const { hotelActual } = useHotel();
   const [turnos, setTurnos] = useState<Turno[]>([]);
@@ -81,6 +119,13 @@ export function Reportes() {
   const [reporte, setReporte] = useState<ReporteCaja | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  // Ventas diarias: por defecto, los últimos 7 días (hoy incluido).
+  const [ventasDesde, setVentasDesde] = useState(sumarDiasYMD(fechaHoy(), -6));
+  const [ventasHasta, setVentasHasta] = useState(fechaHoy());
+  const [ventas, setVentas] = useState<ReporteVentas | null>(null);
+  const [ventasLoading, setVentasLoading] = useState(true);
+  const [ventasError, setVentasError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!hotelActual || hotelActual.rol !== 'admin') return;
@@ -102,6 +147,34 @@ export function Reportes() {
       .catch((err) => setError(err instanceof ApiError ? err.message : 'No se pudo cargar el reporte'))
       .finally(() => setLoading(false));
   }, [hotelActual, fecha, turnoId]);
+
+  useEffect(() => {
+    if (!hotelActual || hotelActual.rol !== 'admin' || !ventasDesde || !ventasHasta) return;
+    // Un rango más ancho tarda más en resolver en el backend -- si el
+    // usuario cambia las fechas rápido, la respuesta de un pedido anterior
+    // (ya obsoleto) puede llegar después que la del rango actual y pisar el
+    // resultado correcto. `vigente` descarta cualquier respuesta que no sea
+    // la del último pedido en curso.
+    let vigente = true;
+    setVentasLoading(true);
+    setVentasError(null);
+    api
+      .get<ReporteVentas>(
+        `/hoteles/${hotelActual.hotelId}/reportes/ventas-diarias?desde=${ventasDesde}&hasta=${ventasHasta}`,
+      )
+      .then((data) => {
+        if (vigente) setVentas(data);
+      })
+      .catch((err) => {
+        if (vigente) setVentasError(err instanceof ApiError ? err.message : 'No se pudo cargar el reporte');
+      })
+      .finally(() => {
+        if (vigente) setVentasLoading(false);
+      });
+    return () => {
+      vigente = false;
+    };
+  }, [hotelActual, ventasDesde, ventasHasta]);
 
   if (!hotelActual) return null;
 
@@ -181,6 +254,145 @@ export function Reportes() {
             </div>
           </>
         )}
+      </div>
+
+      <div>
+        <h2 style={{ fontSize: 15, marginBottom: 4 }}>Ventas diarias</h2>
+        <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '0 0 12px' }}>
+          Ingresos de todo el hotel (todas las recepcionistas y turnos) en el rango de fechas seleccionado.
+        </p>
+
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 20 }}>
+          <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 12, color: 'var(--text-secondary)' }}>
+            Desde
+            <input
+              type="date"
+              value={ventasDesde}
+              max={ventasHasta}
+              onChange={(e) => setVentasDesde(e.target.value)}
+              style={inputStyle}
+            />
+          </label>
+          <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 12, color: 'var(--text-secondary)' }}>
+            Hasta
+            <input
+              type="date"
+              value={ventasHasta}
+              min={ventasDesde}
+              onChange={(e) => setVentasHasta(e.target.value)}
+              style={inputStyle}
+            />
+          </label>
+        </div>
+
+        {ventasError && <p style={{ color: 'var(--danger)', fontSize: 12, marginBottom: 12 }}>{ventasError}</p>}
+        {ventasLoading && <p style={{ color: 'var(--text-muted)' }}>Cargando...</p>}
+
+        {!ventasLoading && ventas && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 28 }}>
+            <TablaVentas
+              titulo="Ingresos por método de pago"
+              dias={ventas.dias}
+              filas={ventas.porMetodo.map((f) => ({ ...f, etiqueta: METODO_LABEL[f.etiqueta] ?? f.etiqueta }))}
+              totalesPorDia={ventas.totalesPorDiaMetodo}
+              total={ventas.totalMetodo}
+            />
+            <TablaVentas
+              titulo="Ingresos por tipo"
+              dias={ventas.dias}
+              filas={ventas.porTipo}
+              totalesPorDia={ventas.totalesPorDiaTipo}
+              total={ventas.totalTipo}
+            />
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function TablaVentas({
+  titulo,
+  dias,
+  filas,
+  totalesPorDia,
+  total,
+}: {
+  titulo: string;
+  dias: string[];
+  filas: FilaVentas[];
+  totalesPorDia: number[];
+  total: number;
+}) {
+  return (
+    <div>
+      <p style={{ fontSize: 13, fontWeight: 600, margin: '0 0 8px' }}>{titulo}</p>
+      <div style={{ overflowX: 'auto', border: '1px solid var(--border)', borderRadius: 'var(--radius)' }}>
+        <table style={{ borderCollapse: 'collapse', fontSize: 12.5, minWidth: 480 }}>
+          <thead>
+            <tr>
+              <th style={{ ...thVentasStyle, position: 'sticky', left: 0, textAlign: 'left', background: 'var(--surface-2)' }}>
+                &nbsp;
+              </th>
+              {dias.map((d) => (
+                <th key={d} style={thVentasStyle}>
+                  {fechaCorta(d)}
+                </th>
+              ))}
+              <th style={{ ...thVentasStyle, background: 'var(--surface-2)' }}>Total</th>
+            </tr>
+          </thead>
+          <tbody>
+            {filas.map((f, i) => (
+              <tr key={f.etiqueta} style={{ background: i % 2 === 1 ? 'var(--ingreso-bg)' : 'transparent' }}>
+                <td
+                  style={{
+                    ...tdVentasStyle,
+                    position: 'sticky',
+                    left: 0,
+                    textAlign: 'left',
+                    fontWeight: 600,
+                    background: i % 2 === 1 ? 'var(--ingreso-bg)' : 'var(--surface-1)',
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  {f.etiqueta}
+                </td>
+                {f.valores.map((v, j) => (
+                  <td key={j} style={tdVentasStyle}>
+                    {v > 0 ? formatoPEN(v) : '—'}
+                  </td>
+                ))}
+                <td style={{ ...tdVentasStyle, fontWeight: 700, background: 'var(--brand-bg)' }}>
+                  {formatoPEN(f.total)}
+                </td>
+              </tr>
+            ))}
+            <tr style={{ borderTop: '2px solid var(--border-strong)' }}>
+              <td
+                style={{
+                  ...tdVentasStyle,
+                  position: 'sticky',
+                  left: 0,
+                  textAlign: 'left',
+                  fontWeight: 700,
+                  background: 'var(--surface-2)',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                Total
+              </td>
+              {totalesPorDia.map((v, j) => (
+                <td key={j} style={{ ...tdVentasStyle, fontWeight: 700, background: 'var(--surface-2)' }}>
+                  {formatoPEN(v)}
+                </td>
+              ))}
+              <td style={{ ...tdVentasStyle, fontWeight: 700, background: 'var(--brand)', color: '#fff' }}>
+                {formatoPEN(total)}
+              </td>
+            </tr>
+          </tbody>
+        </table>
       </div>
     </div>
   );
@@ -329,3 +541,19 @@ const inputStyle: CSSProperties = {
 
 const thStyle: CSSProperties = { padding: '6px 8px' };
 const tdStyle: CSSProperties = { padding: '8px', color: 'var(--text-secondary)' };
+
+const thVentasStyle: CSSProperties = {
+  padding: '8px 10px',
+  textAlign: 'right',
+  fontSize: 11,
+  fontWeight: 700,
+  color: 'var(--text-secondary)',
+  borderBottom: '2px solid var(--border-strong)',
+  whiteSpace: 'nowrap',
+};
+const tdVentasStyle: CSSProperties = {
+  padding: '7px 10px',
+  textAlign: 'right',
+  color: 'var(--text-secondary)',
+  borderTop: '1px solid var(--border)',
+};
