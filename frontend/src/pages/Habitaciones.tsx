@@ -728,6 +728,11 @@ function VistaTarjetas({
                   {h.huesped ?? h.reservaHoy?.huesped}
                 </span>
               )}
+              {h.huesped && h.checkoutPrevisto && (
+                <span style={{ fontSize: 11, color: 'var(--text-secondary)' }}>
+                  Chk out: {formatoFechaHora(h.checkoutPrevisto)}
+                </span>
+              )}
               {h.huesped && (
                 <span
                   style={{
