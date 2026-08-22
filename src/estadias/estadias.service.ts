@@ -351,21 +351,9 @@ export class EstadiasService {
       if (cocheraError) throw cocheraError;
     }
 
-    const cobroLate = await this.calcularCobroLate(
-      client,
-      hotelId,
-      estadia,
-      ahora,
-      dto?.cobroLateManual,
-    );
-    if (cobroLate > 0) {
-      await this.insertarMovimiento(client, estadiaId, {
-        tipo: 'late',
-        monto: cobroLate,
-        notas: 'Salida después de la hora de check-out',
-        registradoPor: personalId,
-      });
-    }
+    // El cargo por late ya NO se calcula ni se cobra solo al hacer
+    // checkout -- lo decide recepción a mano (tipo 'late' en "Registrar
+    // movimiento") al momento de cobrarle al huésped, caso por caso.
 
     return this.obtenerDetalle(client, hotelId, estadiaId);
   }
@@ -1376,27 +1364,6 @@ export class EstadiasService {
 
     if (relojLima >= horaOficialLima) return 0;
     return tarifaDia * 0.5;
-  }
-
-  private async calcularCobroLate(
-    client: SupabaseClient,
-    hotelId: string,
-    estadia: EstadiaConReserva,
-    ahora: Date,
-    cobroLateManual?: number,
-  ): Promise<number> {
-    if (cobroLateManual !== undefined) return cobroLateManual;
-
-    const hotel = await this.obtenerConfigHotel(client, hotelId);
-    if (hotel.modo_24h) return 0;
-
-    const [hh, mm] = hotel.hora_checkout.split(':').map(Number);
-    const relojLima = comoRelojLima(ahora);
-    const horaLimiteLima = new Date(relojLima);
-    horaLimiteLima.setUTCHours(hh, mm, 0, 0);
-
-    if (relojLima <= horaLimiteLima) return 0;
-    return Number(estadia.reserva_habitacion.tarifa_dia) * 0.5;
   }
 
   private async obtenerSesionAbierta(

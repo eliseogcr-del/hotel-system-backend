@@ -1,20 +1,14 @@
-import { IsISO8601, IsNumber, IsOptional, Min } from 'class-validator';
+import { IsISO8601, IsOptional } from 'class-validator';
 
 /**
- * Body opcional del checkout. Si cobroLateManual no viene, el servicio lo
- * calcula solo (50% de la tarifa diaria si la salida real es posterior a
- * hora_checkout del hotel). Enviar 0 explícito para anularlo.
+ * Body opcional del checkout. El cargo por late ya no se calcula ni se
+ * cobra solo aquí -- recepción lo agrega a mano ("Registrar movimiento",
+ * tipo 'late') cuando decide cobrarlo, caso por caso.
  */
 export class CheckoutDto {
-  @IsOptional()
-  @IsNumber()
-  @Min(0)
-  cobroLateManual?: number;
-
   // Si no viene, se usa el momento en que llega la solicitud. Recepción
   // puede ajustarlo si registra el checkout un rato después de que el
-  // huésped ya se fue -- también se usa como referencia para el cálculo
-  // de late.
+  // huésped ya se fue.
   @IsOptional()
   @IsISO8601()
   checkoutReal?: string;

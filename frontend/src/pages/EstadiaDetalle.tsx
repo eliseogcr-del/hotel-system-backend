@@ -144,7 +144,6 @@ export function EstadiaDetalle() {
   const [error, setError] = useState<string | null>(null);
   const [accionando, setAccionando] = useState(false);
   const [mostrarCheckout, setMostrarCheckout] = useState(false);
-  const [cobroLate, setCobroLate] = useState('');
   const [checkoutReal, setCheckoutReal] = useState(ahoraLocal());
   const [tipoCambio, setTipoCambio] = useState<TipoCambioVigente | null>(null);
   const [cajaAbierta, setCajaAbierta] = useState(true);
@@ -202,11 +201,9 @@ export function EstadiaDetalle() {
     setError(null);
     try {
       await api.post(`/hoteles/${hotelActual.hotelId}/estadias/${id}/checkout`, {
-        cobroLateManual: cobroLate === '' ? undefined : Number(cobroLate),
         checkoutReal: new Date(checkoutReal).toISOString(),
       });
       setMostrarCheckout(false);
-      setCobroLate('');
       cargar();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'No se pudo hacer el checkout');
@@ -406,21 +403,9 @@ export function EstadiaDetalle() {
               style={inputStyle}
               required
             />
-          </div>
-          <div style={{ width: 180 }}>
-            <label style={labelStyle}>Cargo por late (S/.)</label>
-            <input
-              type="number"
-              min={0}
-              step={0.01}
-              placeholder="Automático"
-              value={cobroLate}
-              onChange={(e) => setCobroLate(e.target.value)}
-              style={inputStyle}
-            />
             <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: '4px 0 0' }}>
-              Vacío = se calcula solo (50% de la tarifa diaria si la salida es después de la hora de
-              check-out del hotel). Pon 0 para no cobrar.
+              El checkout ya no cobra late solo. Si corresponde, regístralo primero abajo en "Registrar
+              movimiento" (Tipo: Late) antes de confirmar el checkout.
             </p>
           </div>
           <button onClick={confirmarCheckout} disabled={accionando} style={btnPrimary}>
