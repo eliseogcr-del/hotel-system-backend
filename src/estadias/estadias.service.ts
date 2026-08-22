@@ -738,6 +738,9 @@ export class EstadiasService {
     if (filtros.estado) {
       query = query.eq('estadias.estado_actual', filtros.estado);
     }
+    if (filtros.conSaldo) {
+      query = query.gt('estadias.saldo', 0);
+    }
     if (filtros.habNumero) {
       query = query.eq('habitaciones.hab_numero', Number(filtros.habNumero));
     }

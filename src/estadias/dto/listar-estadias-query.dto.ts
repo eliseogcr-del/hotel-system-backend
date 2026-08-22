@@ -1,9 +1,15 @@
-import { IsDateString, IsEnum, IsNumberString, IsOptional, IsString } from 'class-validator';
+import { IsDateString, IsEnum, IsIn, IsNumberString, IsOptional, IsString } from 'class-validator';
 
 export class ListarEstadiasQueryDto {
   @IsOptional()
   @IsEnum(['pendiente', 'en_curso', 'finalizada'])
   estado?: string;
+
+  // Solo estadías con saldo pendiente (adeudan algo). El frontend solo
+  // manda este parámetro cuando el filtro está activado.
+  @IsOptional()
+  @IsIn(['true'])
+  conSaldo?: string;
 
   @IsOptional()
   @IsString()
