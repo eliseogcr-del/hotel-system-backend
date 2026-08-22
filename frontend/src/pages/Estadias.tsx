@@ -356,7 +356,6 @@ function exportarEstadiasPDF(
       <td>${escapeHtml(f.reservas?.huespedes?.razon_social || '—')}</td>
       <td>${formatoFechaHora(f.fecha_hora_checkin_prevista)}</td>
       <td>${formatoFechaHora(f.estadias.checkout_real)}</td>
-      <td>${formatoFechaHora(f.fecha_hora_checkout_prevista)}</td>
       <td>${f.incluye_desayuno ? 'Sí' : 'No'}</td>
       <td style="text-align:right">${fmt(f.tarifa_dia)}</td>
       <td style="text-align:right; font-weight:${Number(f.estadias.saldo) > 0 ? '700' : '400'}">${fmt(f.estadias.saldo)}</td>
@@ -381,7 +380,7 @@ function exportarEstadiasPDF(
   table { width: 100%; border-collapse: collapse; font-size: 11px; }
   th { text-align: left; font-size: 10px; text-transform: uppercase; color: #5f6068; padding: 5px 6px; border-bottom: 1px solid #1a1a1a; white-space: nowrap; }
   td { padding: 5px 6px; border-bottom: 1px solid #e2e2e2; white-space: nowrap; }
-  th:nth-child(11), td:nth-child(11), th:nth-child(12), td:nth-child(12) { text-align: right; }
+  th:nth-child(10), td:nth-child(10), th:nth-child(11), td:nth-child(11) { text-align: right; }
   tfoot td { font-weight: 700; border-top: 1.5px solid #1a1a1a; border-bottom: none; padding-top: 8px; }
   @media print {
     body { padding: 10mm; }
@@ -402,12 +401,12 @@ function exportarEstadiasPDF(
     <thead>
       <tr>
         <th>Hab.</th><th>Huésped</th><th>DNI</th><th>Teléfono</th><th>RUC</th><th>Empresa</th>
-        <th>Check-in</th><th>Check-out real</th><th>Salida programada</th><th>Desayuno</th><th>Tarifa/día</th><th>Saldo (S/)</th><th>Estado</th>
+        <th>Check-in</th><th>Check-out real</th><th>Desayuno</th><th>Tarifa/día</th><th>Saldo (S/)</th><th>Estado</th>
       </tr>
     </thead>
     <tbody>${filasHtml}</tbody>
     <tfoot>
-      <tr><td colspan="11">Total saldo pendiente</td><td style="text-align:right">${fmt(totalSaldo)}</td><td></td></tr>
+      <tr><td colspan="10">Total saldo pendiente</td><td style="text-align:right">${fmt(totalSaldo)}</td><td></td></tr>
     </tfoot>
   </table>
 </body>
