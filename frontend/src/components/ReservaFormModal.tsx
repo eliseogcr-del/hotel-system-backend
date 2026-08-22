@@ -69,6 +69,8 @@ interface Props {
   modo: 'crear' | 'editar';
   fechaInicial?: string; // YYYY-MM-DD, solo modo 'crear'
   horaSugerida?: string; // HH:MM, hora_checkin del hotel
+  horaCheckoutHotel?: string; // HH:MM, hora_checkout del hotel
+  modo24h?: boolean;
   reservaId?: string; // solo modo 'editar'
   lineaId?: string; // solo modo 'editar'
   onClose: () => void;
@@ -114,11 +116,28 @@ function diffDatosHuesped(
   return cambios;
 }
 
-function calcularCheckout(fecha: string, hora: string, dias: number): Date | null {
+// El check-out previsto se ancla a la hora_checkout del hotel (no a la hora
+// de llegada) -- mismo criterio que calcularCheckoutPrevisto() en
+// estadias.service.ts. En modo 24h no hay una hora institucional de salida,
+// así que se mantiene la hora de check-in N días después.
+function calcularCheckout(
+  fecha: string,
+  hora: string,
+  dias: number,
+  horaCheckoutHotel: string | undefined,
+  modo24h: boolean,
+): Date | null {
   if (!fecha || !hora || !dias) return null;
   const checkin = new Date(`${fecha}T${hora}:00`);
   if (Number.isNaN(checkin.getTime())) return null;
-  return new Date(checkin.getTime() + dias * 24 * 60 * 60 * 1000);
+  if (modo24h || !horaCheckoutHotel) {
+    return new Date(checkin.getTime() + dias * 24 * 60 * 60 * 1000);
+  }
+  const checkout = new Date(checkin);
+  checkout.setDate(checkout.getDate() + dias);
+  const [hh, mm] = horaCheckoutHotel.split(':').map(Number);
+  checkout.setHours(hh, mm, 0, 0);
+  return checkout;
 }
 
 export function ReservaFormModal({
@@ -131,6 +150,8 @@ export function ReservaFormModal({
   modo,
   fechaInicial,
   horaSugerida,
+  horaCheckoutHotel,
+  modo24h,
   reservaId,
   lineaId,
   onClose,
@@ -436,7 +457,7 @@ export function ReservaFormModal({
   // duplicado de alguien que ya está registrado.
   const sinResultados = buscado && !huespedId && !empresaId && resultados.length === 0;
 
-  const checkoutCalculado = calcularCheckout(fecha, hora, dias);
+  const checkoutCalculado = calcularCheckout(fecha, hora, dias, horaCheckoutHotel, !!modo24h);
   const cobroMascotaTotal = conMascota ? precioMascotaDia * dias : 0;
   const importeTotal = tarifaDia * dias + cobroMascotaTotal;
   const excedeAforo = aforoMax > 0 && nroPersonas > aforoMax;

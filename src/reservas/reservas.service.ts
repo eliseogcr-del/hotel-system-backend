@@ -28,6 +28,10 @@ function desdeRelojLima(relojLima: Date): Date {
   return new Date(relojLima.getTime() + PERU_UTC_OFFSET_MS);
 }
 
+function comoRelojLima(fecha: Date): Date {
+  return new Date(fecha.getTime() - PERU_UTC_OFFSET_MS);
+}
+
 // Medianoche de "hoy" en hora Lima, como instante UTC real.
 function inicioDeHoyLima(): Date {
   const relojLimaAhora = new Date(Date.now() - PERU_UTC_OFFSET_MS);
@@ -581,9 +585,7 @@ export class ReservasService {
 
     const checkinNuevo = dto.checkinPrevisto ?? rhData.fecha_hora_checkin_prevista;
     const diasNuevo = dto.diasManual ?? rhData.dias;
-    const checkoutNuevo = new Date(
-      new Date(checkinNuevo).getTime() + diasNuevo * 24 * 60 * 60 * 1000,
-    ).toISOString();
+    const checkoutNuevo = await this.calcularCheckoutPrevisto(client, hotelId, checkinNuevo, diasNuevo);
 
     if (dto.checkinPrevisto !== undefined || dto.diasManual !== undefined) {
       const resultado = await this.disponibilidad.validar(client, {
@@ -821,6 +823,36 @@ export class ReservasService {
       .maybeSingle();
     if (error) throw error;
     return Number((data as any)?.precio_mascota ?? 0);
+  }
+
+  // El check-out previsto se ancla a la hora_checkout del hotel (no a la
+  // hora de check-in) -- mismo criterio que
+  // EstadiasService.calcularCheckoutPrevisto(). En modo 24h no hay una hora
+  // institucional de salida, así que se mantiene la hora de check-in N días
+  // después.
+  private async calcularCheckoutPrevisto(
+    client: SupabaseClient,
+    hotelId: string,
+    checkinIso: string,
+    dias: number,
+  ): Promise<string> {
+    const checkinDate = new Date(checkinIso);
+    const { data: hotel, error } = await client
+      .from('hoteles')
+      .select('hora_checkout, modo_24h')
+      .eq('id', hotelId)
+      .maybeSingle();
+    if (error) throw error;
+
+    if (!hotel || hotel.modo_24h) {
+      return new Date(checkinDate.getTime() + dias * 24 * 60 * 60 * 1000).toISOString();
+    }
+
+    const [hh, mm] = hotel.hora_checkout.split(':').map(Number);
+    const salidaLima = comoRelojLima(checkinDate);
+    salidaLima.setUTCDate(salidaLima.getUTCDate() + dias);
+    salidaLima.setUTCHours(hh, mm, 0, 0);
+    return desdeRelojLima(salidaLima).toISOString();
   }
 
   /**

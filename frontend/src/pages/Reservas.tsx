@@ -135,6 +135,8 @@ export function Reservas() {
   const [avisoBloqueada, setAvisoBloqueada] = useState<string | null>(null);
   const [precioMascotaDia, setPrecioMascotaDia] = useState(0);
   const [horaCheckinHotel, setHoraCheckinHotel] = useState<string | undefined>(undefined);
+  const [horaCheckoutHotel, setHoraCheckoutHotel] = useState<string | undefined>(undefined);
+  const [modo24h, setModo24h] = useState(false);
 
   const [formulario, setFormulario] = useState<{
     modo: 'crear' | 'editar';
@@ -178,10 +180,14 @@ export function Reservas() {
       .then(setTiposHabitacion)
       .catch(() => {});
     api
-      .get<{ precio_mascota: number; hora_checkin: string }>(`/hoteles/${hotelActual.hotelId}`)
+      .get<{ precio_mascota: number; hora_checkin: string; hora_checkout: string; modo_24h: boolean }>(
+        `/hoteles/${hotelActual.hotelId}`,
+      )
       .then((h) => {
         setPrecioMascotaDia(Number(h.precio_mascota ?? 0));
         setHoraCheckinHotel(h.hora_checkin?.slice(0, 5));
+        setHoraCheckoutHotel(h.hora_checkout?.slice(0, 5));
+        setModo24h(!!h.modo_24h);
       })
       .catch(() => {});
   }, [hotelActual]);
@@ -297,6 +303,8 @@ export function Reservas() {
           }
           precioMascotaDia={precioMascotaDia}
           horaSugerida={horaCheckinHotel}
+          horaCheckoutHotel={horaCheckoutHotel}
+          modo24h={modo24h}
           modo={formulario.modo}
           fechaInicial={formulario.fechaInicial}
           reservaId={formulario.reservaId}

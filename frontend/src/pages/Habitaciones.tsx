@@ -151,6 +151,8 @@ export function Habitaciones() {
   const [checkinHab, setCheckinHab] = useState<Habitacion | null>(null);
   const [reservaModal, setReservaModal] = useState<Habitacion | null>(null);
   const [precioMascotaDia, setPrecioMascotaDia] = useState(0);
+  const [horaCheckoutHotel, setHoraCheckoutHotel] = useState<string | undefined>(undefined);
+  const [modo24h, setModo24h] = useState(false);
   const [vista, setVista] = useState<Vista>(
     () => (localStorage.getItem('habitaciones_vista') as Vista | null) ?? 'tabla',
   );
@@ -207,8 +209,12 @@ export function Habitaciones() {
       .then(setProximasLlegadas)
       .catch(() => {});
     api
-      .get<{ precio_mascota: number }>(`/hoteles/${hotelActual.hotelId}`)
-      .then((h) => setPrecioMascotaDia(Number(h.precio_mascota ?? 0)))
+      .get<{ precio_mascota: number; hora_checkout: string; modo_24h: boolean }>(`/hoteles/${hotelActual.hotelId}`)
+      .then((h) => {
+        setPrecioMascotaDia(Number(h.precio_mascota ?? 0));
+        setHoraCheckoutHotel(h.hora_checkout?.slice(0, 5));
+        setModo24h(!!h.modo_24h);
+      })
       .catch(() => {});
   }
 
@@ -652,6 +658,8 @@ export function Habitaciones() {
           aforoMax={reservaModal.tipos_habitacion?.aforo_max ?? 0}
           tarifaSugerida={preciosDe(reservaModal.tipos_habitacion?.id)?.precio_normal ?? 0}
           precioMascotaDia={precioMascotaDia}
+          horaCheckoutHotel={horaCheckoutHotel}
+          modo24h={modo24h}
           modo="editar"
           reservaId={reservaModal.reservaHoy.reservaId}
           lineaId={reservaModal.reservaHoy.lineaId}
