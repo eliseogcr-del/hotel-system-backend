@@ -101,13 +101,26 @@ export function Estadias() {
       .finally(() => setLoading(false));
   }, [hotelActual, filtroEstado, busquedaAplicada, habNumeroAplicado, checkinDesde, checkinHasta, soloConSaldo, filtroFacturable]);
 
-  const filasOrdenadas = useMemo(
-    () =>
-      [...filas].sort(
-        (a, b) => new Date(b.fecha_hora_checkout_prevista).getTime() - new Date(a.fecha_hora_checkout_prevista).getTime(),
-      ),
-    [filas],
-  );
+  const filasOrdenadas = useMemo(() => {
+    // En curso: por check-in (de mayor a menor). Finalizada: por check-out
+    // real (de mayor a menor). El resto (pendiente / todos los estados)
+    // sigue por salida programada, que es lo único con sentido temporal
+    // para una reserva que todavía no tuvo check-in.
+    if (filtroEstado === 'en_curso') {
+      return [...filas].sort(
+        (a, b) => new Date(b.fecha_hora_checkin_prevista).getTime() - new Date(a.fecha_hora_checkin_prevista).getTime(),
+      );
+    }
+    if (filtroEstado === 'finalizada') {
+      return [...filas].sort(
+        (a, b) =>
+          new Date(b.estadias.checkout_real ?? 0).getTime() - new Date(a.estadias.checkout_real ?? 0).getTime(),
+      );
+    }
+    return [...filas].sort(
+      (a, b) => new Date(b.fecha_hora_checkout_prevista).getTime() - new Date(a.fecha_hora_checkout_prevista).getTime(),
+    );
+  }, [filas, filtroEstado]);
 
   if (!hotelActual) return null;
 
