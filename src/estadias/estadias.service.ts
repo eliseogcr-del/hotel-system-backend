@@ -123,7 +123,7 @@ export class EstadiasService {
         id, habitacion_id, subtotal, tarifa_dia, dias, cargo_aforo_extra,
         cobro_early, cobro_late, cobro_mascota, fecha_hora_checkin_prevista,
         habitaciones(estado),
-        reservas!inner(id, hotel_id, estado)
+        reservas!inner(id, hotel_id, estado, moneda)
       `,
       )
       .eq('id', dto.reservaHabitacionId)
@@ -213,16 +213,52 @@ export class EstadiasService {
       estadiaId = creada.id;
     }
 
+    // Si la reserva se cotizó en dólares, la tarifa (y el cargo por aforo
+    // extra, si lo hubiera) se convierten a soles al tipo de cambio vigente
+    // en este instante -- el del día del check-in, no el del día en que se
+    // hizo la reserva -- y esa conversión se guarda en la propia línea
+    // (reserva_habitacion.tarifa_dia) para que de acá en adelante todo el
+    // libro de la estadía quede en soles sin ambigüedad: extensiones de
+    // días, "Editar estadía", el cierre automático de salidas vencidas
+    // (ver extenderSalidasVencidas más abajo), todos leen tarifa_dia
+    // directo sin volver a mirar reservas.moneda.
+    const rhData = rh as any;
+    const diasLinea = Number(rhData.dias);
+    let tarifaDiaConvertida = Number(rhData.tarifa_dia);
+    let aforoExtraConvertido = Number(rhData.cargo_aforo_extra ?? 0);
+    let montoOriginalUsd: number | undefined;
+    let tipoCambioAplicado: number | undefined;
+
+    if (reserva.moneda === 'USD') {
+      const tc = await this.tipoCambioService.obtenerVigente(client);
+      if (!tc) {
+        throw new BadRequestException(
+          'Esta reserva está cotizada en dólares pero no hay un tipo de cambio configurado; el administrador debe ingresarlo en Configuración → Tipo de cambio antes de hacer el check-in.',
+        );
+      }
+      tipoCambioAplicado = Number(tc.valor_compra);
+      montoOriginalUsd = tarifaDiaConvertida * diasLinea + aforoExtraConvertido;
+      tarifaDiaConvertida = Number((tarifaDiaConvertida * tipoCambioAplicado).toFixed(2));
+      aforoExtraConvertido = Number((aforoExtraConvertido * tipoCambioAplicado).toFixed(2));
+
+      const { error: convError } = await client
+        .from('reserva_habitacion')
+        .update({ tarifa_dia: tarifaDiaConvertida, cargo_aforo_extra: aforoExtraConvertido })
+        .eq('id', dto.reservaHabitacionId);
+      if (convError) throw convError;
+    }
+
     // Cargo inicial de alquiler (tarifa*días + aforo extra, sin early/late
     // para que cada tipo de cargo se vea aparte en el libro de movimientos).
-    const rhData = rh as any;
-    const cargoAlquiler =
-      Number(rhData.tarifa_dia) * Number(rhData.dias) + Number(rhData.cargo_aforo_extra ?? 0);
+    const cargoAlquiler = tarifaDiaConvertida * diasLinea + aforoExtraConvertido;
     await this.insertarMovimiento(client, estadiaId, {
       tipo: 'alquiler',
       monto: cargoAlquiler,
       notas: 'Cargo inicial de alquiler al check-in',
       registradoPor: personalId,
+      monedaPago: montoOriginalUsd !== undefined ? 'USD' : undefined,
+      montoOriginal: montoOriginalUsd,
+      tipoCambioAplicado,
     });
 
     const cobroEarly = Number(rhData.cobro_early ?? 0);
