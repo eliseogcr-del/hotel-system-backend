@@ -45,6 +45,15 @@ export class CrearReservaDto {
   @IsBoolean()
   deducibleImpuestos?: boolean;
 
+  // Si se le va a emitir boleta/factura al cliente. No confundir con la
+  // tabla `comprobantes` (el comprobante ya emitido en sí) -- esto es solo
+  // la intención, útil para filtrar/planificar. Se copia a estadias.facturable
+  // al hacer check-in (ver EstadiasService.checkin()) y queda editable
+  // aparte desde ahí en adelante.
+  @IsOptional()
+  @IsBoolean()
+  facturable?: boolean;
+
   @IsOptional()
   @IsNumber()
   @Min(0)

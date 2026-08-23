@@ -51,6 +51,12 @@ export class ActualizarEstadiaDto {
   @IsBoolean()
   incluyeDesayuno?: boolean;
 
+  // Si se le va a emitir boleta/factura al cliente -- se copia de la
+  // reserva al hacer check-in, pero queda editable aparte desde acá.
+  @IsOptional()
+  @IsBoolean()
+  facturable?: boolean;
+
   // Reasigna esta reserva a otro huésped YA EXISTENTE en el hotel (ej. el
   // recepcionista se equivocó y dejó la habitación bajo el contacto de un
   // grupo en vez de la persona real que se hospeda). A diferencia de editar

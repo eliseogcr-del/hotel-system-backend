@@ -149,6 +149,7 @@ export class ReservasService {
         fecha_salida_prog: fechaSalidaProg,
         moneda: dto.moneda ?? 'PEN',
         deducible_impuestos: dto.deducibleImpuestos ?? true,
+        facturable: dto.facturable ?? true,
         descuento_total: descuentoTotal,
         importe_final: importeFinal,
         estado: 'confirmada',
@@ -664,6 +665,7 @@ export class ReservasService {
     const cambiosReserva: Record<string, unknown> = {};
     if (dto.origen !== undefined) cambiosReserva.origen = dto.origen;
     if (dto.moneda !== undefined) cambiosReserva.moneda = dto.moneda;
+    if (dto.facturable !== undefined) cambiosReserva.facturable = dto.facturable;
     if (Object.keys(cambiosReserva).length > 0) {
       const { error } = await client.from('reservas').update(cambiosReserva).eq('id', reservaId);
       if (error) throw error;

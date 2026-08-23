@@ -104,6 +104,11 @@ export class CheckinRapidoDto {
   @IsBoolean()
   incluyeDesayuno?: boolean;
 
+  // Si se le va a emitir boleta/factura al cliente. Por defecto true.
+  @IsOptional()
+  @IsBoolean()
+  facturable?: boolean;
+
   @IsOptional()
   @IsUUID()
   cocheraId?: string;

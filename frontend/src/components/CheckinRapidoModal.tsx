@@ -88,6 +88,7 @@ export function CheckinRapidoModal({
   const [fechaNacimiento, setFechaNacimiento] = useState('');
   const [ruc, setRuc] = useState('');
   const [razonSocial, setRazonSocial] = useState('');
+  const [facturable, setFacturable] = useState(true);
 
   const [nroPersonas, setNroPersonas] = useState(1);
   const [tipoCliente, setTipoCliente] = useState<TipoCliente>('normal');
@@ -208,6 +209,7 @@ export function CheckinRapidoModal({
         fechaNacimiento: fechaNacimiento || undefined,
         ruc: ruc.trim() || undefined,
         razonSocial: razonSocial.trim() || undefined,
+        facturable,
         nroPersonas,
         tarifaDia,
         dias,
@@ -392,6 +394,10 @@ export function CheckinRapidoModal({
                 RUC y razón social: del propio huésped si pidió factura a su nombre, o de la empresa que paga su
                 estadía. Déjalo vacío si no aplica.
               </p>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, marginTop: 8 }}>
+                <input type="checkbox" checked={facturable} onChange={(e) => setFacturable(e.target.checked)} />
+                Facturable (se le emitirá boleta/factura)
+              </label>
             </div>
           </div>
 

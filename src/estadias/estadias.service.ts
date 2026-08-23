@@ -63,6 +63,7 @@ interface EstadiaConReserva {
   saldo: number;
   checkin_real: string | null;
   checkout_real: string | null;
+  facturable: boolean;
   reserva_habitacion: {
     id: string;
     habitacion_id: string;
@@ -123,7 +124,7 @@ export class EstadiasService {
         id, habitacion_id, subtotal, tarifa_dia, dias, cargo_aforo_extra,
         cobro_early, cobro_late, cobro_mascota, fecha_hora_checkin_prevista,
         habitaciones(estado),
-        reservas!inner(id, hotel_id, estado, moneda)
+        reservas!inner(id, hotel_id, estado, moneda, facturable)
       `,
       )
       .eq('id', dto.reservaHabitacionId)
@@ -189,10 +190,14 @@ export class EstadiasService {
     const ahora = new Date().toISOString();
     let estadiaId: string;
 
+    // facturable se copia de la reserva al check-in (queda editable aparte
+    // desde "Editar estadía" de ahí en adelante -- ver actualizar()).
+    const facturable = reserva.facturable ?? true;
+
     if (existente) {
       const { data: actualizada, error: updError } = await client
         .from('estadias')
-        .update({ checkin_real: ahora, estado_actual: 'en_curso' })
+        .update({ checkin_real: ahora, estado_actual: 'en_curso', facturable })
         .eq('id', existente.id)
         .select('id')
         .single();
@@ -206,6 +211,7 @@ export class EstadiasService {
           checkin_real: ahora,
           estado_actual: 'en_curso',
           saldo: 0,
+          facturable,
         })
         .select('id')
         .single();
@@ -536,6 +542,7 @@ export class EstadiasService {
     const reservaDto: CrearReservaDto = {
       huespedId,
       origen: 'walkin',
+      facturable: dto.facturable,
       habitaciones: [
         {
           habitacionId: dto.habitacionId,
@@ -759,7 +766,7 @@ export class EstadiasService {
         fecha_hora_checkin_prevista, fecha_hora_checkout_prevista,
         habitaciones!inner(hab_numero, piso),
         reservas!inner(hotel_id, huesped_id, ${embedHuespedes}(nombres, apellidos, tipo_doc, nro_doc, telefono, ruc, razon_social)),
-        estadias!inner(id, estado_actual, saldo, checkin_real, checkout_real)
+        estadias!inner(id, estado_actual, saldo, checkin_real, checkout_real, facturable)
       `,
       )
       .eq('reservas.hotel_id', hotelId);
@@ -776,6 +783,9 @@ export class EstadiasService {
     }
     if (filtros.conSaldo) {
       query = query.gt('estadias.saldo', 0);
+    }
+    if (filtros.facturable !== undefined) {
+      query = query.eq('estadias.facturable', filtros.facturable === 'true');
     }
     if (filtros.habNumero) {
       query = query.eq('habitaciones.hab_numero', Number(filtros.habNumero));
@@ -1011,7 +1021,8 @@ export class EstadiasService {
       dto.vehiculoPlaca === undefined &&
       dto.nroPersonas === undefined &&
       dto.incluyeDesayuno === undefined &&
-      dto.nuevoHuespedId === undefined
+      dto.nuevoHuespedId === undefined &&
+      dto.facturable === undefined
     ) {
       throw new BadRequestException('No se enviaron cambios');
     }
@@ -1122,6 +1133,14 @@ export class EstadiasService {
         .update(cambiosLinea)
         .eq('id', estadia.reserva_habitacion.id);
       if (updError) throw updError;
+    }
+
+    if (dto.facturable !== undefined) {
+      const { error: facturableError } = await client
+        .from('estadias')
+        .update({ facturable: dto.facturable })
+        .eq('id', estadiaId);
+      if (facturableError) throw facturableError;
     }
 
     if (dto.diasAdicionales) {
@@ -1238,7 +1257,7 @@ export class EstadiasService {
       .from('estadias')
       .select(
         `
-        id, estado_actual, saldo, checkin_real, checkout_real,
+        id, estado_actual, saldo, checkin_real, checkout_real, facturable,
         reserva_habitacion!inner(
           id, habitacion_id, subtotal, tarifa_dia, dias, nro_personas, incluye_desayuno, cochera_id,
           habitaciones(hab_numero, piso, tipo_id),

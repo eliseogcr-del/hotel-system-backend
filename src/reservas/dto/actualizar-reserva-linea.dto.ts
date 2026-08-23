@@ -35,6 +35,10 @@ export class ActualizarReservaLineaDto {
   moneda?: 'PEN' | 'USD';
 
   @IsOptional()
+  @IsBoolean()
+  facturable?: boolean;
+
+  @IsOptional()
   @IsInt()
   @Min(1)
   nroPersonas?: number;

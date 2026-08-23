@@ -28,6 +28,7 @@ interface FilaEstadia {
     saldo: number;
     checkin_real: string | null;
     checkout_real: string | null;
+    facturable: boolean;
   };
 }
 
@@ -66,6 +67,7 @@ export function Estadias() {
   const [checkinDesde, setCheckinDesde] = useState('');
   const [checkinHasta, setCheckinHasta] = useState('');
   const [soloConSaldo, setSoloConSaldo] = useState(false);
+  const [filtroFacturable, setFiltroFacturable] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -90,13 +92,14 @@ export function Estadias() {
     if (checkinDesde) params.set('checkinDesde', checkinDesde);
     if (checkinHasta) params.set('checkinHasta', checkinHasta);
     if (soloConSaldo) params.set('conSaldo', 'true');
+    if (filtroFacturable) params.set('facturable', filtroFacturable);
     const query = params.toString() ? `?${params.toString()}` : '';
     api
       .get<FilaEstadia[]>(`/hoteles/${hotelActual.hotelId}/estadias${query}`)
       .then(setFilas)
       .catch((err) => setError(err instanceof ApiError ? err.message : 'Error al cargar'))
       .finally(() => setLoading(false));
-  }, [hotelActual, filtroEstado, busquedaAplicada, habNumeroAplicado, checkinDesde, checkinHasta, soloConSaldo]);
+  }, [hotelActual, filtroEstado, busquedaAplicada, habNumeroAplicado, checkinDesde, checkinHasta, soloConSaldo, filtroFacturable]);
 
   const filasOrdenadas = useMemo(
     () =>
@@ -171,7 +174,16 @@ export function Estadias() {
           <input type="checkbox" checked={soloConSaldo} onChange={(e) => setSoloConSaldo(e.target.checked)} />
           Solo con saldo pendiente
         </label>
-        {(habNumero || checkinDesde || checkinHasta || soloConSaldo) && (
+        <select
+          value={filtroFacturable}
+          onChange={(e) => setFiltroFacturable(e.target.value)}
+          style={{ padding: '8px 10px', border: '1px solid var(--border)', borderRadius: 'var(--radius)', fontSize: 13 }}
+        >
+          <option value="">Facturable: todas</option>
+          <option value="true">Solo facturables</option>
+          <option value="false">Solo no facturables</option>
+        </select>
+        {(habNumero || checkinDesde || checkinHasta || soloConSaldo || filtroFacturable) && (
           <button
             type="button"
             onClick={() => {
@@ -179,6 +191,7 @@ export function Estadias() {
               setCheckinDesde('');
               setCheckinHasta('');
               setSoloConSaldo(false);
+              setFiltroFacturable('');
             }}
             style={{ padding: '8px 10px', background: 'transparent', border: '1px solid var(--border)', borderRadius: 'var(--radius)', fontSize: 13, color: 'var(--text-secondary)', cursor: 'pointer' }}
           >
@@ -195,6 +208,7 @@ export function Estadias() {
               checkinDesde,
               checkinHasta,
               soloConSaldo,
+              filtroFacturable,
             })
           }
           disabled={filasOrdenadas.length === 0}
@@ -218,7 +232,7 @@ export function Estadias() {
 
       {!loading && !error && (
         <div style={{ overflowX: 'auto', border: '1px solid var(--border)', borderRadius: 12 }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, minWidth: 1420 }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, minWidth: 1520 }}>
             <thead>
               <tr
                 style={{
@@ -242,7 +256,8 @@ export function Estadias() {
                 <th style={thStyle}>Desayuno</th>
                 <th style={{ ...thStyle, textAlign: 'right' }}>Tarifa/día</th>
                 <th style={{ ...thStyle, textAlign: 'right' }}>Saldo</th>
-                <th style={{ ...thStyle, borderRight: 'none' }}>Estado</th>
+                <th style={thStyle}>Estado</th>
+                <th style={{ ...thStyle, borderRight: 'none' }}>Facturable</th>
               </tr>
             </thead>
             <tbody>
@@ -281,7 +296,7 @@ export function Estadias() {
                   >
                     PEN {Number(f.estadias.saldo).toFixed(2)}
                   </td>
-                  <td style={{ ...tdStyle, borderRight: 'none' }}>
+                  <td style={tdStyle}>
                     <span
                       style={{
                         fontSize: 11,
@@ -294,6 +309,7 @@ export function Estadias() {
                       {ESTADO_LABEL[f.estadias.estado_actual] ?? f.estadias.estado_actual}
                     </span>
                   </td>
+                  <td style={{ ...tdStyle, borderRight: 'none' }}>{f.estadias.facturable ? 'Sí' : 'No'}</td>
                 </tr>
               ))}
             </tbody>
@@ -318,6 +334,7 @@ function describirFiltros(f: {
   checkinDesde: string;
   checkinHasta: string;
   soloConSaldo: boolean;
+  filtroFacturable: string;
 }): string {
   const partes: string[] = [];
   partes.push(f.filtroEstado ? `Estado: ${ESTADO_LABEL[f.filtroEstado] ?? f.filtroEstado}` : 'Todos los estados');
@@ -326,9 +343,15 @@ function describirFiltros(f: {
   if (f.checkinDesde) partes.push(`Check-in desde: ${formatoFecha(f.checkinDesde + 'T00:00:00')}`);
   if (f.checkinHasta) partes.push(`Check-in hasta: ${formatoFecha(f.checkinHasta + 'T00:00:00')}`);
   if (f.soloConSaldo) partes.push('Solo con saldo pendiente');
+  if (f.filtroFacturable === 'true') partes.push('Solo facturables');
+  if (f.filtroFacturable === 'false') partes.push('Solo no facturables');
   return partes.join(' · ');
 }
 
+// El dato "Facturable" no se incluye en las filas de este PDF a propósito
+// (se ve en pantalla, no impreso) -- solo se menciona en la línea de
+// filtros de arriba si se usó ese filtro, para dejar constancia de qué se
+// exportó, sin listar el estado de cada estadía una por una.
 function exportarEstadiasPDF(
   filas: FilaEstadia[],
   hotelNombre: string,
@@ -339,6 +362,7 @@ function exportarEstadiasPDF(
     checkinDesde: string;
     checkinHasta: string;
     soloConSaldo: boolean;
+    filtroFacturable: string;
   },
 ): void {
   const fmt = (n: number) => Number(n).toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });

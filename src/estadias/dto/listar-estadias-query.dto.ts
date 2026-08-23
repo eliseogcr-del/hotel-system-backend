@@ -11,6 +11,12 @@ export class ListarEstadiasQueryDto {
   @IsIn(['true'])
   conSaldo?: string;
 
+  // 'true' = solo facturables, 'false' = solo no facturables, ausente =
+  // todas.
+  @IsOptional()
+  @IsIn(['true', 'false'])
+  facturable?: string;
+
   @IsOptional()
   @IsString()
   busqueda?: string;

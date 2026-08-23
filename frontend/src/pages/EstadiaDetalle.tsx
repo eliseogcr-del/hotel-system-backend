@@ -42,6 +42,7 @@ interface EstadiaDetalleData {
   saldo: number;
   checkin_real: string | null;
   checkout_real: string | null;
+  facturable: boolean;
   movimientos: MovimientoCuenta[];
   reserva_habitacion: {
     tarifa_dia: number;
@@ -354,6 +355,7 @@ export function EstadiaDetalle() {
           diasActuales={estadia.reserva_habitacion.dias}
           nroPersonasActual={estadia.reserva_habitacion.nro_personas}
           incluyeDesayunoActual={estadia.reserva_habitacion.incluye_desayuno}
+          facturableActual={estadia.facturable}
           tipoHabitacionId={estadia.reserva_habitacion.habitaciones?.tipo_id}
           precios={tiposHabitacion.find((t) => t.id === estadia.reserva_habitacion.habitaciones?.tipo_id) ?? null}
           huespedId={estadia.reserva_habitacion.reservas?.huesped_id ?? ''}
@@ -567,6 +569,7 @@ function EditarEstadiaModal({
   diasActuales,
   nroPersonasActual,
   incluyeDesayunoActual,
+  facturableActual,
   precios,
   huespedId,
   huesped,
@@ -582,6 +585,7 @@ function EditarEstadiaModal({
   diasActuales: number;
   nroPersonasActual: number;
   incluyeDesayunoActual: boolean;
+  facturableActual: boolean;
   tipoHabitacionId?: string;
   precios: TipoHabitacionPrecios | null;
   huespedId: string;
@@ -617,6 +621,7 @@ function EditarEstadiaModal({
   const [tarifaDiaNueva, setTarifaDiaNueva] = useState(String(tarifaActual));
   const [diasAdicionales, setDiasAdicionales] = useState('');
   const [incluyeDesayuno, setIncluyeDesayuno] = useState(incluyeDesayunoActual);
+  const [facturable, setFacturable] = useState(facturableActual);
 
   const [tieneVehiculo, setTieneVehiculo] = useState(!!vehiculoActual);
   const [vehiculoMarca, setVehiculoMarca] = useState(vehiculoActual?.marca ?? '');
@@ -722,6 +727,7 @@ function EditarEstadiaModal({
       if (diasAdicionales) cambiosEstadia.diasAdicionales = Number(diasAdicionales);
       if (nroPersonas !== nroPersonasActual) cambiosEstadia.nroPersonas = nroPersonas;
       if (incluyeDesayuno !== incluyeDesayunoActual) cambiosEstadia.incluyeDesayuno = incluyeDesayuno;
+      if (facturable !== facturableActual) cambiosEstadia.facturable = facturable;
       if (tieneVehiculo) {
         if (vehiculoMarca !== (vehiculoActual?.marca ?? '')) cambiosEstadia.vehiculoMarca = vehiculoMarca;
         if (vehiculoTipo !== (vehiculoActual?.tipo ?? '')) cambiosEstadia.vehiculoTipo = vehiculoTipo;
@@ -1005,9 +1011,13 @@ function EditarEstadiaModal({
                   No se puede editar: es el momento real en que ingresó el huésped.
                 </p>
               </div>
-              <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13 }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, marginBottom: 6 }}>
                 <input type="checkbox" checked={incluyeDesayuno} onChange={(e) => setIncluyeDesayuno(e.target.checked)} />
                 Incluye desayuno (cortesía, no se cobra)
+              </label>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13 }}>
+                <input type="checkbox" checked={facturable} onChange={(e) => setFacturable(e.target.checked)} />
+                Facturable (se le emitirá boleta/factura)
               </label>
             </div>
 

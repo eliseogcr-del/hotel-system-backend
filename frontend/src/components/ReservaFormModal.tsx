@@ -44,6 +44,7 @@ interface ReservaDetalle {
   id: string;
   origen: string;
   moneda: 'PEN' | 'USD';
+  facturable: boolean;
   estado: string;
   huespedes: {
     id: string;
@@ -203,6 +204,7 @@ export function ReservaFormModal({
 
   const [origen, setOrigen] = useState('directo');
   const [moneda, setMoneda] = useState<'PEN' | 'USD'>('PEN');
+  const [facturable, setFacturable] = useState(true);
   const [fecha, setFecha] = useState(fechaInicial || hoyYMD());
   const [hora, setHora] = useState(horaSugerida || horaActual());
   const [dias, setDias] = useState(1);
@@ -234,6 +236,7 @@ export function ReservaFormModal({
         const linea = reserva.reserva_habitacion.find((l) => l.id === lineaId);
         setOrigen(reserva.origen);
         setMoneda(reserva.moneda);
+        setFacturable(reserva.facturable);
         setReservaEstado(reserva.estado);
         setHuespedNombre(
           reserva.huespedes
@@ -512,6 +515,7 @@ export function ReservaFormModal({
           empresaId: idEmpresa ?? undefined,
           origen,
           moneda,
+          facturable,
           habitaciones: [
             {
               habitacionId,
@@ -545,6 +549,7 @@ export function ReservaFormModal({
         await api.patch(`/hoteles/${hotelId}/reservas/${reservaId}/habitaciones/${lineaId}`, {
           origen,
           moneda,
+          facturable,
           nroPersonas,
           incluyeDesayuno,
           conMascota,
@@ -991,6 +996,10 @@ export function ReservaFormModal({
                     />
                   </div>
                 </div>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, marginTop: 8 }}>
+                  <input type="checkbox" checked={facturable} onChange={(e) => setFacturable(e.target.checked)} />
+                  Facturable (se le emitirá boleta/factura)
+                </label>
                 <p style={{ fontSize: 11, color: excedeAforo ? 'var(--danger)' : 'var(--text-muted)', margin: '6px 0 0' }}>
                   {aforoMax > 0
                     ? `Aforo máximo de esta habitación: ${aforoMax} persona(s)${excedeAforo ? ' — supera la referencia' : ''}`
