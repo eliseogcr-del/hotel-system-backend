@@ -68,6 +68,7 @@ export class BookingInboxService {
           const parsed = await simpleParser(msg.source);
           const asunto = parsed.subject ?? '';
           const texto = parsed.text ?? '';
+          const messageId = parsed.messageId ?? null;
 
           const resultado = this.parser.parsear(asunto, texto);
 
@@ -75,6 +76,16 @@ export class BookingInboxService {
             // No se toca -- se deja sin leer para no perder de vista que
             // hay un correo de Booking de un tipo que todavía no se
             // reconoce, por si vale la pena calibrar el parser con él.
+            continue;
+          }
+
+          // Gmail puede tardar unos segundos en reflejar en SEARCH un
+          // \Seen que ya se guardó de verdad (índice con retraso, ver
+          // conversación) -- si el ciclo anterior ya avisó este mismo
+          // correo (mismo Message-ID) antes de que el índice se pusiera al
+          // día, no se reenvía el WhatsApp de nuevo.
+          if (!dryRun && messageId && (await this.yaFueAvisado(messageId))) {
+            await client.messageFlagsAdd({ uid: String(uid) }, ['\\Seen'], { uid: true });
             continue;
           }
 
@@ -92,7 +103,7 @@ export class BookingInboxService {
             // próxima revisión lo reintente, en vez de perder el aviso
             // para siempre o llenar la tabla de reintentos repetidos.
             if (whatsappEnviado) {
-              await this.registrarImportacion(asunto, texto, resultado, whatsappEnviado, whatsappError);
+              await this.registrarImportacion(asunto, texto, resultado, messageId, whatsappEnviado, whatsappError);
               await client.messageFlagsAdd({ uid: String(uid) }, ['\\Seen'], { uid: true });
             } else {
               this.logger.warn(`Aviso de WhatsApp no enviado para "${asunto}": ${whatsappError}`);
@@ -147,10 +158,27 @@ export class BookingInboxService {
     ].join('\n');
   }
 
+  private async yaFueAvisado(messageId: string): Promise<boolean> {
+    const service = this.supabase.getServiceClient();
+    const { data, error } = await service
+      .from('importaciones_canal')
+      .select('id')
+      .eq('canal', 'booking')
+      .eq('datos_crudos->>messageId', messageId)
+      .limit(1)
+      .maybeSingle();
+    if (error) {
+      this.logger.error(`No se pudo verificar si el correo ya fue avisado: ${error.message}`);
+      return false;
+    }
+    return !!data;
+  }
+
   private async registrarImportacion(
     asunto: string,
     cuerpo: string,
     resultado: ReturnType<ParserBookingInboxService['parsear']>,
+    messageId: string | null,
     whatsappEnviado: boolean | null,
     whatsappError: string | null,
   ) {
@@ -173,6 +201,7 @@ export class BookingInboxService {
       datos_crudos: {
         tipo: resultado.tipo,
         resId: resultado.resId,
+        messageId,
         datosParseados: resultado.datos,
         whatsappEnviado,
         whatsappError,
