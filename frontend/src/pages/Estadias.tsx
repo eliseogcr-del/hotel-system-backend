@@ -265,7 +265,12 @@ export function Estadias() {
                   onClick={() => navigate(`/estadias/${f.estadias.id}`)}
                   style={{
                     borderTop: '2px solid var(--table-border)',
-                    background: i % 2 === 1 ? 'var(--surface-1)' : 'transparent',
+                    background:
+                      f.estadias.saldo > 0
+                        ? 'var(--ocupada-bg)'
+                        : i % 2 === 1
+                          ? 'var(--surface-1)'
+                          : 'transparent',
                     cursor: 'pointer',
                   }}
                 >
