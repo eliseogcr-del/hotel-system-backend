@@ -1,8 +1,7 @@
-import { useEffect, useMemo, useState, type CSSProperties, type FormEvent } from 'react';
+import { useEffect, useMemo, useState, type CSSProperties } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { api, ApiError } from '../lib/api';
 import { useHotel } from '../contexts/HotelContext';
-import { buscarHuespedPorDni, crearHuesped } from '../lib/huespedes';
 import { ReservaFormModal } from '../components/ReservaFormModal';
 
 interface Habitacion {
@@ -22,20 +21,6 @@ interface TipoHabitacionPrecios {
   precio_costo: number;
 }
 
-type TipoCliente = 'normal' | 'corporativo' | 'web';
-
-function precioSegunTipoCliente(
-  precios: TipoHabitacionPrecios | undefined,
-  tipoCliente: TipoCliente,
-  tipoAlquiler: 'pernocte' | 'por_horas',
-): number {
-  if (!precios) return 0;
-  if (tipoAlquiler === 'por_horas') return Number(precios.precio_por_hora ?? 0);
-  if (tipoCliente === 'corporativo') return Number(precios.precio_corporativo);
-  if (tipoCliente === 'web') return Number(precios.precio_web);
-  return Number(precios.precio_normal);
-}
-
 interface Reserva {
   id: string;
   origen: string;
@@ -49,7 +34,6 @@ interface Reserva {
 }
 
 const ESTADOS = ['pendiente_revision', 'confirmada', 'cancelada'];
-const ORIGENES = ['telefono', 'whatsapp', 'booking', 'airbnb', 'directo', 'walkin'];
 
 interface ReservaCalendario {
   id: string;
@@ -104,7 +88,6 @@ export function Reservas() {
   const [filtroEstado, setFiltroEstado] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [mostrarForm, setMostrarForm] = useState(false);
 
   const [vista, setVista] = useState<'calendario' | 'lista'>('calendario');
   // Persistido en localStorage (igual que la vista de Habitaciones.tsx):
@@ -239,25 +222,7 @@ export function Reservas() {
 
   return (
     <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-        <h1 style={{ fontSize: 20 }}>Reservas</h1>
-        <button style={btnPrimary} onClick={() => setMostrarForm((v) => !v)}>
-          {mostrarForm ? 'Cancelar' : '+ Nueva reserva'}
-        </button>
-      </div>
-
-      {mostrarForm && (
-        <NuevaReservaForm
-          hotelId={hotelActual.hotelId}
-          habitaciones={habitaciones}
-          tiposHabitacion={tiposHabitacion}
-          onCreada={() => {
-            setMostrarForm(false);
-            cargarReservas();
-            recargarCalendario();
-          }}
-        />
-      )}
+      <h1 style={{ fontSize: 20, marginBottom: 16 }}>Reservas</h1>
 
       <div style={{ display: 'flex', gap: 6, marginBottom: 16 }}>
         <button
@@ -829,259 +794,6 @@ export function EstadoBadge({ estado }: { estado: string }) {
   );
 }
 
-function NuevaReservaForm({
-  hotelId,
-  habitaciones,
-  tiposHabitacion,
-  onCreada,
-}: {
-  hotelId: string;
-  habitaciones: Habitacion[];
-  tiposHabitacion: TipoHabitacionPrecios[];
-  onCreada: () => void;
-}) {
-  const [dni, setDni] = useState('');
-  const [huespedId, setHuespedId] = useState<string | null>(null);
-  const [huespedNombre, setHuespedNombre] = useState('');
-  const [nombres, setNombres] = useState('');
-  const [apellidos, setApellidos] = useState('');
-  const [buscando, setBuscando] = useState(false);
-  const [origen, setOrigen] = useState('directo');
-  const [habitacionId, setHabitacionId] = useState('');
-  const [nroPersonas, setNroPersonas] = useState(2);
-  const [tipoAlquiler, setTipoAlquiler] = useState<'pernocte' | 'por_horas'>('pernocte');
-  const [tipoCliente, setTipoCliente] = useState<TipoCliente>('normal');
-  const [tarifaDia, setTarifaDia] = useState(0);
-  const [checkin, setCheckin] = useState('');
-  const [checkout, setCheckout] = useState('');
-  const [enviando, setEnviando] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  function preciosDe(habId: string): TipoHabitacionPrecios | undefined {
-    const hab = habitaciones.find((h) => h.id === habId);
-    if (!hab?.tipos_habitacion) return undefined;
-    return tiposHabitacion.find((t) => t.id === hab.tipos_habitacion!.id);
-  }
-
-  function recalcularTarifa(habId: string, tc: TipoCliente, ta: 'pernocte' | 'por_horas') {
-    setTarifaDia(precioSegunTipoCliente(preciosDe(habId), tc, ta));
-  }
-
-  const precioCosto = Number(preciosDe(habitacionId)?.precio_costo ?? 0);
-  const tarifaBajoCosto = precioCosto > 0 && tarifaDia < precioCosto;
-
-  async function buscar() {
-    if (!dni) return;
-    setBuscando(true);
-    setError(null);
-    try {
-      const h = await buscarHuespedPorDni(hotelId, dni);
-      if (h) {
-        setHuespedId(h.id);
-        setHuespedNombre(`${h.nombres} ${h.apellidos}`);
-      } else {
-        setHuespedId(null);
-        setHuespedNombre('');
-      }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Error al buscar huésped');
-    } finally {
-      setBuscando(false);
-    }
-  }
-
-  async function handleSubmit(e: FormEvent) {
-    e.preventDefault();
-    setError(null);
-    setEnviando(true);
-    try {
-      let idHuesped = huespedId;
-      if (!idHuesped) {
-        if (!nombres || !apellidos || !dni) {
-          throw new Error('Completa nombres, apellidos y DNI para crear al huésped');
-        }
-        const creado = await crearHuesped(hotelId, { nombres, apellidos, tipoDoc: 'dni', nroDoc: dni });
-        idHuesped = creado.id;
-      }
-
-      await api.post(`/hoteles/${hotelId}/reservas`, {
-        huespedId: idHuesped,
-        origen,
-        habitaciones: [
-          {
-            habitacionId,
-            nroPersonas,
-            tipoAlquiler,
-            tipoCliente,
-            tarifaDiaManual: tarifaDia,
-            checkinPrevisto: new Date(checkin).toISOString(),
-            checkoutPrevisto: new Date(checkout).toISOString(),
-          },
-        ],
-      });
-      onCreada();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'No se pudo crear la reserva');
-    } finally {
-      setEnviando(false);
-    }
-  }
-
-  return (
-    <form
-      onSubmit={handleSubmit}
-      style={{
-        background: 'var(--surface-1)',
-        border: '1px solid var(--border)',
-        borderRadius: 12,
-        padding: 16,
-        marginBottom: 16,
-        display: 'flex',
-        flexDirection: 'column',
-        gap: 10,
-      }}
-    >
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'flex-end' }}>
-        <div style={{ flex: 1, minWidth: 140 }}>
-          <label style={labelStyle}>DNI del huésped</label>
-          <input value={dni} onChange={(e) => setDni(e.target.value)} style={inputStyle} required />
-        </div>
-        <button type="button" onClick={buscar} disabled={buscando} style={btnSecondary}>
-          {buscando ? 'Buscando...' : 'Buscar'}
-        </button>
-      </div>
-
-      {huespedId ? (
-        <p style={{ fontSize: 12, color: 'var(--text-secondary)' }}>Huésped encontrado: {huespedNombre}</p>
-      ) : (
-        dni && (
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-            <div style={{ flex: 1, minWidth: 140 }}>
-              <label style={labelStyle}>Nombres (huésped nuevo)</label>
-              <input value={nombres} onChange={(e) => setNombres(e.target.value)} style={inputStyle} />
-            </div>
-            <div style={{ flex: 1, minWidth: 140 }}>
-              <label style={labelStyle}>Apellidos</label>
-              <input value={apellidos} onChange={(e) => setApellidos(e.target.value)} style={inputStyle} />
-            </div>
-          </div>
-        )
-      )}
-
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-        <div style={{ flex: 1, minWidth: 120 }}>
-          <label style={labelStyle}>Origen</label>
-          <select value={origen} onChange={(e) => setOrigen(e.target.value)} style={selectStyle}>
-            {ORIGENES.map((o) => (
-              <option key={o} value={o}>
-                {o}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div style={{ flex: 1, minWidth: 160 }}>
-          <label style={labelStyle}>Habitación</label>
-          <select
-            value={habitacionId}
-            onChange={(e) => {
-              setHabitacionId(e.target.value);
-              recalcularTarifa(e.target.value, tipoCliente, tipoAlquiler);
-            }}
-            style={selectStyle}
-            required
-          >
-            <option value="">Selecciona...</option>
-            {habitaciones.map((h) => (
-              <option key={h.id} value={h.id}>
-                {h.hab_numero} · {h.tipos_habitacion?.nombre}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div style={{ width: 90 }}>
-          <label style={labelStyle}># personas</label>
-          <input
-            type="number"
-            min={1}
-            value={nroPersonas}
-            onChange={(e) => setNroPersonas(Number(e.target.value))}
-            style={inputStyle}
-          />
-        </div>
-        <div style={{ width: 130 }}>
-          <label style={labelStyle}>Tipo</label>
-          <select
-            value={tipoAlquiler}
-            onChange={(e) => {
-              const valor = e.target.value as 'pernocte' | 'por_horas';
-              setTipoAlquiler(valor);
-              recalcularTarifa(habitacionId, tipoCliente, valor);
-            }}
-            style={selectStyle}
-          >
-            <option value="pernocte">Pernocte</option>
-            <option value="por_horas">Por horas</option>
-          </select>
-        </div>
-      </div>
-
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'flex-end' }}>
-        <div style={{ width: 150 }}>
-          <label style={labelStyle}>Tipo de cliente</label>
-          <select
-            value={tipoCliente}
-            onChange={(e) => {
-              const valor = e.target.value as TipoCliente;
-              setTipoCliente(valor);
-              recalcularTarifa(habitacionId, valor, tipoAlquiler);
-            }}
-            style={selectStyle}
-          >
-            <option value="normal">Normal</option>
-            <option value="corporativo">Corporativo</option>
-            <option value="web">Web</option>
-          </select>
-        </div>
-        <div style={{ width: 150 }}>
-          <label style={labelStyle}>Tarifa/día (S/.)</label>
-          <input
-            type="number"
-            min={0}
-            step={0.01}
-            value={tarifaDia}
-            onChange={(e) => setTarifaDia(Number(e.target.value))}
-            style={{ ...inputStyle, ...(tarifaBajoCosto ? { borderColor: 'var(--danger)' } : {}) }}
-            required
-          />
-        </div>
-        {precioCosto > 0 && (
-          <p style={{ fontSize: 11, color: tarifaBajoCosto ? 'var(--danger)' : 'var(--text-muted)', margin: 0 }}>
-            Costo: S/. {precioCosto}
-            {tarifaBajoCosto ? ' — la tarifa no puede quedar por debajo' : ''}
-          </p>
-        )}
-      </div>
-
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-        <div style={{ flex: 1, minWidth: 160 }}>
-          <label style={labelStyle}>Check-in</label>
-          <input type="datetime-local" value={checkin} onChange={(e) => setCheckin(e.target.value)} style={inputStyle} required />
-        </div>
-        <div style={{ flex: 1, minWidth: 160 }}>
-          <label style={labelStyle}>Check-out</label>
-          <input type="datetime-local" value={checkout} onChange={(e) => setCheckout(e.target.value)} style={inputStyle} required />
-        </div>
-      </div>
-
-      {error && <p style={{ color: 'var(--danger)', fontSize: 12 }}>{error}</p>}
-
-      <button type="submit" disabled={enviando || tarifaBajoCosto} style={btnPrimary}>
-        {enviando ? 'Creando...' : 'Crear reserva'}
-      </button>
-    </form>
-  );
-}
-
 const inputStyle: CSSProperties = {
   width: '100%',
   padding: '8px 10px',
@@ -1097,16 +809,6 @@ const labelStyle: CSSProperties = {
   color: 'var(--text-secondary)',
   display: 'block',
   marginBottom: 3,
-};
-
-const btnPrimary: CSSProperties = {
-  padding: '8px 14px',
-  background: 'var(--brand)',
-  color: '#fff',
-  border: 'none',
-  borderRadius: 'var(--radius)',
-  fontSize: 13,
-  fontWeight: 500,
 };
 
 const btnSecondary: CSSProperties = {
