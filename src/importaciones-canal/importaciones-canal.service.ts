@@ -117,7 +117,7 @@ export class ImportacionesCanalService {
   async listar(client: SupabaseClient, hotelId: string, filtros: ListarImportacionesQueryDto) {
     let query = client
       .from('importaciones_canal')
-      .select('id, canal, correo_origen, fecha_recibido, estado_parseo, reserva_id, error_detalle')
+      .select('id, canal, correo_origen, fecha_recibido, estado_parseo, reserva_id, error_detalle, datos_crudos')
       .eq('hotel_id', hotelId)
       .order('fecha_recibido', { ascending: false });
 

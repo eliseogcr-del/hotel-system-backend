@@ -1,6 +1,10 @@
 import { Injectable } from '@nestjs/common';
 
-export type TipoCorreoBooking = 'nueva_reserva' | 'peticion_confirmada' | 'desconocido';
+export type TipoCorreoBooking =
+  | 'nueva_reserva'
+  | 'peticion_confirmada'
+  | 'reserva_cancelada'
+  | 'desconocido';
 
 export interface DatosPeticionConfirmada {
   nombreHuesped: string;
@@ -10,10 +14,15 @@ export interface DatosPeticionConfirmada {
   totalHabitaciones: number | null;
 }
 
+export interface DatosCancelacion {
+  gastoCancelacion: string | null; // texto tal cual viene, ej. "US$0"
+}
+
 export interface CorreoBookingParseado {
   tipo: TipoCorreoBooking;
   resId: string | null;
   datos: DatosPeticionConfirmada | null;
+  datosCancelacion: DatosCancelacion | null;
 }
 
 const MESES: Record<string, string> = {
@@ -24,7 +33,7 @@ const MESES: Record<string, string> = {
 /**
  * Calibrado contra correos REALES de Booking.com de este hotel (no una
  * suposición del formato -- ver conversación donde el usuario los pasó).
- * Booking manda al menos 3 tipos de correo distintos:
+ * Booking manda al menos 4 tipos de correo distintos:
  *  - "Nueva reserva de última hora (...)" / "¡Nueva reserva! (...)": solo
  *    avisan que llegó una reserva, con el número de confirmación y un
  *    enlace al extranet -- NUNCA traen huésped/fechas/tipo de habitación
@@ -34,9 +43,13 @@ const MESES: Record<string, string> = {
  *    cuando llega SÍ trae un bloque "Datos de la reserva" con nombre,
  *    check-in, check-out y totales de personas/habitaciones (el tipo de
  *    habitación tampoco viene acá).
- * Cualquier otro asunto de Booking (cancelación, modificación, mensaje del
- * huésped, etc.) se clasifica 'desconocido' y se ignora a propósito -- no
- * hay muestra real de esos todavía, mejor no arriesgar falsos avisos.
+ *  - "¡Reserva cancelada!": igual de escueto que "nueva reserva" (solo
+ *    número de confirmación + enlace), pero a veces trae el monto del
+ *    gasto de cancelación ("los gastos de cancelación actuales son de
+ *    US$0").
+ * Cualquier otro asunto de Booking (modificación, mensaje del huésped,
+ * etc.) se clasifica 'desconocido' y se ignora a propósito -- no hay
+ * muestra real de esos todavía, mejor no arriesgar falsos avisos.
  */
 @Injectable()
 export class ParserBookingInboxService {
@@ -46,6 +59,15 @@ export class ParserBookingInboxService {
         tipo: 'peticion_confirmada',
         resId: this.buscarResId(texto),
         datos: this.parsearPeticionConfirmada(texto),
+        datosCancelacion: null,
+      };
+    }
+    if (/reserva cancelada/i.test(asunto)) {
+      return {
+        tipo: 'reserva_cancelada',
+        resId: this.buscarResId(texto),
+        datos: null,
+        datosCancelacion: this.parsearCancelacion(texto),
       };
     }
     if (/nueva reserva/i.test(asunto)) {
@@ -53,9 +75,10 @@ export class ParserBookingInboxService {
         tipo: 'nueva_reserva',
         resId: this.buscarResId(texto),
         datos: null,
+        datosCancelacion: null,
       };
     }
-    return { tipo: 'desconocido', resId: this.buscarResId(texto), datos: null };
+    return { tipo: 'desconocido', resId: this.buscarResId(texto), datos: null, datosCancelacion: null };
   }
 
   private buscarResId(texto: string): string | null {
@@ -83,6 +106,12 @@ export class ParserBookingInboxService {
       totalPersonas: this.aNumero(this.buscarValorEnLineaSiguiente(texto, /Total de personas:/i)),
       totalHabitaciones: this.aNumero(this.buscarValorEnLineaSiguiente(texto, /Total de habitaciones:/i)),
     };
+  }
+
+  // "los gastos de cancelación actuales son de US$0." -> "US$0"
+  private parsearCancelacion(texto: string): DatosCancelacion {
+    const m = texto.match(/gastos de cancelaci[oó]n actuales son de\s*([^.\n]+)/i);
+    return { gastoCancelacion: m ? m[1].trim() : null };
   }
 
   private buscarValorEnLineaSiguiente(texto: string, etiqueta: RegExp): string | null {

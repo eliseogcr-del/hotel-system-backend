@@ -89,7 +89,7 @@ export function Reservas() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const [vista, setVista] = useState<'calendario' | 'lista'>('calendario');
+  const [vista, setVista] = useState<'calendario' | 'lista' | 'avisos-booking'>('calendario');
   // Persistido en localStorage (igual que la vista de Habitaciones.tsx):
   // si alguien deja el rango en, por ejemplo, la semana que viene y la
   // página se recarga de verdad (no solo el bug de sesión ya corregido en
@@ -234,6 +234,12 @@ export function Reservas() {
         <button onClick={() => setVista('lista')} style={vista === 'lista' ? btnToggleActivo : btnToggle}>
           Lista
         </button>
+        <button
+          onClick={() => setVista('avisos-booking')}
+          style={vista === 'avisos-booking' ? btnToggleActivo : btnToggle}
+        >
+          Avisos Booking
+        </button>
       </div>
 
       {avisoBloqueada && (
@@ -335,9 +341,169 @@ export function Reservas() {
           )}
         </>
       )}
+
+      {vista === 'avisos-booking' && <AvisosBookingTab hotelId={hotelActual.hotelId} />}
     </div>
   );
 }
+
+interface ImportacionCanal {
+  id: string;
+  fecha_recibido: string;
+  correo_origen: string | null;
+  datos_crudos: {
+    tipo: 'nueva_reserva' | 'peticion_confirmada' | 'reserva_cancelada';
+    resId: string | null;
+    enlaceBooking?: string;
+    datosParseados: {
+      nombreHuesped: string;
+      checkin: string | null;
+      checkout: string | null;
+      totalPersonas: number | null;
+      totalHabitaciones: number | null;
+    } | null;
+    datosCancelacion: { gastoCancelacion: string | null } | null;
+    whatsappEnviado: boolean;
+  } | null;
+}
+
+const TIPO_AVISO_LABEL: Record<string, string> = {
+  nueva_reserva: 'Nueva reserva',
+  peticion_confirmada: 'Con datos',
+  reserva_cancelada: 'Cancelada',
+};
+
+// Mismo semáforo que ya se usa en el resto de la app (Habitaciones):
+// celeste para "hay que revisar" (reservada), verde cuando ya trae datos
+// completos (disponible), rojo para cancelaciones (ocupada).
+const TIPO_AVISO_COLOR: Record<string, string> = {
+  nueva_reserva: 'reservada',
+  peticion_confirmada: 'disponible',
+  reserva_cancelada: 'ocupada',
+};
+
+function formatoFechaHoraAviso(iso: string): string {
+  return new Date(iso).toLocaleString('es-PE', { dateStyle: 'short', timeStyle: 'short' });
+}
+
+// Lista de solo lectura de lo que este sistema detectó en la bandeja de
+// correo de Booking (nunca crea la reserva sola -- ver BookingInboxService
+// en el backend, los correos de Booking casi nunca traen tipo de
+// habitación). Reusa GET /importaciones-canal, que ya ordena por
+// fecha_recibido descendente.
+function AvisosBookingTab({ hotelId }: { hotelId: string }) {
+  const [avisos, setAvisos] = useState<ImportacionCanal[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setLoading(true);
+    setError(null);
+    api
+      .get<ImportacionCanal[]>(`/hoteles/${hotelId}/importaciones-canal?canal=booking`)
+      .then(setAvisos)
+      .catch((err) => setError(err instanceof ApiError ? err.message : 'Error al cargar'))
+      .finally(() => setLoading(false));
+  }, [hotelId]);
+
+  if (loading) return <p style={{ color: 'var(--text-muted)' }}>Cargando...</p>;
+  if (error) return <p style={{ color: 'var(--danger)' }}>{error}</p>;
+
+  return (
+    <div style={{ overflowX: 'auto', border: '1px solid var(--border)', borderRadius: 12 }}>
+      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, minWidth: 900 }}>
+        <thead>
+          <tr style={{ textAlign: 'left', fontSize: 11, textTransform: 'uppercase', letterSpacing: 0.3 }}>
+            <th style={thAvisoStyle}>Fecha</th>
+            <th style={thAvisoStyle}>Tipo</th>
+            <th style={thAvisoStyle}>Detalle</th>
+            <th style={thAvisoStyle}>N° confirmación</th>
+            <th style={thAvisoStyle}>WhatsApp</th>
+            <th style={{ ...thAvisoStyle, borderRight: 'none' }}></th>
+          </tr>
+        </thead>
+        <tbody>
+          {avisos.map((a, i) => {
+            const d = a.datos_crudos;
+            const tipo = d?.tipo ?? 'nueva_reserva';
+            const color = TIPO_AVISO_COLOR[tipo] ?? 'reservada';
+            let detalle = '—';
+            if (tipo === 'peticion_confirmada' && d?.datosParseados) {
+              const dp = d.datosParseados;
+              const partes = [
+                dp.nombreHuesped,
+                dp.checkin && dp.checkout ? `${dp.checkin} → ${dp.checkout}` : null,
+                dp.totalPersonas != null ? `${dp.totalPersonas} pers.` : null,
+              ].filter(Boolean);
+              detalle = partes.join(' · ');
+            } else if (tipo === 'reserva_cancelada' && d?.datosCancelacion?.gastoCancelacion) {
+              detalle = `Gasto de cancelación: ${d.datosCancelacion.gastoCancelacion}`;
+            }
+            return (
+              <tr
+                key={a.id}
+                style={{
+                  borderTop: '1px solid var(--border)',
+                  background: i % 2 === 1 ? 'var(--surface-1)' : 'transparent',
+                }}
+              >
+                <td style={tdAvisoStyle}>{formatoFechaHoraAviso(a.fecha_recibido)}</td>
+                <td style={tdAvisoStyle}>
+                  <span
+                    style={{
+                      background: `var(--${color}-bg)`,
+                      color: `var(--${color}-text)`,
+                      fontWeight: 700,
+                      padding: '2px 8px',
+                      borderRadius: 999,
+                      fontSize: 11,
+                    }}
+                  >
+                    {TIPO_AVISO_LABEL[tipo] ?? tipo}
+                  </span>
+                </td>
+                <td style={tdAvisoStyle}>{detalle}</td>
+                <td style={{ ...tdAvisoStyle, fontFamily: 'monospace' }}>{d?.resId ?? '—'}</td>
+                <td style={tdAvisoStyle}>{d?.whatsappEnviado ? 'Sí' : 'No'}</td>
+                <td style={{ ...tdAvisoStyle, borderRight: 'none' }}>
+                  {d?.enlaceBooking && (
+                    <a href={d.enlaceBooking} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--brand)', fontSize: 12 }}>
+                      Abrir en Booking →
+                    </a>
+                  )}
+                </td>
+              </tr>
+            );
+          })}
+          {avisos.length === 0 && (
+            <tr>
+              <td colSpan={6} style={{ ...tdAvisoStyle, textAlign: 'center', color: 'var(--text-muted)', borderRight: 'none' }}>
+                Todavía no llegó ningún correo de Booking.
+              </td>
+            </tr>
+          )}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+const thAvisoStyle: CSSProperties = {
+  padding: '10px 14px',
+  whiteSpace: 'nowrap',
+  fontWeight: 700,
+  background: 'var(--table-header-bg)',
+  color: 'var(--table-header-text)',
+  borderRight: '2px solid var(--table-header-border)',
+  borderBottom: '2px solid var(--table-header-border)',
+};
+
+const tdAvisoStyle: CSSProperties = {
+  padding: '10px 14px',
+  color: 'var(--text-secondary)',
+  whiteSpace: 'nowrap',
+  borderRight: '2px solid var(--table-border)',
+};
 
 interface SegmentoCelda {
   span: number;

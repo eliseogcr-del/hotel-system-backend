@@ -103,7 +103,15 @@ export class BookingInboxService {
             // próxima revisión lo reintente, en vez de perder el aviso
             // para siempre o llenar la tabla de reintentos repetidos.
             if (whatsappEnviado) {
-              await this.registrarImportacion(asunto, texto, resultado, messageId, whatsappEnviado, whatsappError);
+              await this.registrarImportacion(
+                asunto,
+                texto,
+                resultado,
+                messageId,
+                this.construirEnlaceBooking(resultado.resId),
+                whatsappEnviado,
+                whatsappError,
+              );
               await client.messageFlagsAdd({ uid: String(uid) }, ['\\Seen'], { uid: true });
             } else {
               this.logger.warn(`Aviso de WhatsApp no enviado para "${asunto}": ${whatsappError}`);
@@ -129,11 +137,14 @@ export class BookingInboxService {
     return { procesados, total: procesados.length };
   }
 
-  private armarMensajeWhatsapp(resultado: ReturnType<ParserBookingInboxService['parsear']>): string {
+  private construirEnlaceBooking(resId: string | null): string {
+    if (!resId) return 'https://admin.booking.com';
     const hotelIdExterno = this.config.get<string>('BOOKING_HOTEL_ID_EXTERNO', '');
-    const enlace = resultado.resId
-      ? `https://admin.booking.com/hotel/hoteladmin/extranet_ng/manage/booking.html?res_id=${resultado.resId}&hotel_id=${hotelIdExterno}&lang=es`
-      : 'https://admin.booking.com';
+    return `https://admin.booking.com/hotel/hoteladmin/extranet_ng/manage/booking.html?res_id=${resId}&hotel_id=${hotelIdExterno}&lang=es`;
+  }
+
+  private armarMensajeWhatsapp(resultado: ReturnType<ParserBookingInboxService['parsear']>): string {
+    const enlace = this.construirEnlaceBooking(resultado.resId);
 
     if (resultado.tipo === 'peticion_confirmada' && resultado.datos) {
       const d = resultado.datos;
@@ -146,6 +157,18 @@ export class BookingInboxService {
         d.totalHabitaciones != null ? `Habitaciones: ${d.totalHabitaciones}` : null,
         resultado.resId ? `N° confirmación: ${resultado.resId}` : null,
         `Revisa y crea la reserva: ${enlace}`,
+      ].filter(Boolean);
+      return lineas.join('\n');
+    }
+
+    if (resultado.tipo === 'reserva_cancelada') {
+      const lineas = [
+        '❌ Reserva de Booking cancelada',
+        resultado.resId ? `N° confirmación: ${resultado.resId}` : 'Sin número de confirmación detectado',
+        resultado.datosCancelacion?.gastoCancelacion
+          ? `Gasto de cancelación: ${resultado.datosCancelacion.gastoCancelacion}`
+          : null,
+        `Revisa el detalle: ${enlace}`,
       ].filter(Boolean);
       return lineas.join('\n');
     }
@@ -179,6 +202,7 @@ export class BookingInboxService {
     cuerpo: string,
     resultado: ReturnType<ParserBookingInboxService['parsear']>,
     messageId: string | null,
+    enlaceBooking: string,
     whatsappEnviado: boolean | null,
     whatsappError: string | null,
   ) {
@@ -192,17 +216,26 @@ export class BookingInboxService {
       hotel_id: hotelId,
       canal: 'booking',
       correo_origen: asunto,
+      // No es un error de verdad -- este módulo nunca crea la reserva sola
+      // (ver comentario de la clase), 'error' es el único valor del check
+      // constraint que no implica "reserva creada", así que se reusa para
+      // todo lo que solo generó un aviso. El detalle real de qué pasó vive
+      // en error_detalle/datos_crudos.tipo, no en este estado.
       estado_parseo: 'error',
       error_detalle:
         resultado.tipo === 'peticion_confirmada'
           ? 'Correo con datos parciales (sin tipo de habitación) -- solo se envió aviso de WhatsApp, no se creó reserva'
-          : 'Correo de aviso sin datos de reserva -- solo se envió aviso de WhatsApp con enlace al extranet',
+          : resultado.tipo === 'reserva_cancelada'
+            ? 'Aviso de cancelación -- solo se envió WhatsApp, no se modificó ninguna reserva'
+            : 'Correo de aviso sin datos de reserva -- solo se envió aviso de WhatsApp con enlace al extranet',
       reserva_id: null,
       datos_crudos: {
         tipo: resultado.tipo,
         resId: resultado.resId,
         messageId,
+        enlaceBooking,
         datosParseados: resultado.datos,
+        datosCancelacion: resultado.datosCancelacion,
         whatsappEnviado,
         whatsappError,
         cuerpo,
