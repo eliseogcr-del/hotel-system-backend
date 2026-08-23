@@ -34,6 +34,11 @@
   --egreso: #e24b4a;
   --egreso-bg: #fcebeb;
 
+  /* Fila de Estadías con saldo por cobrar: rojo más intenso que
+     --ocupada-bg (esa se comparte con otros usos, ej. badge "cancelada"
+     de Reservas, y debe seguir siendo tenue ahí). */
+  --saldo-pendiente-bg: #f6c6c5;
+
   /* Franja de navegación (sidebar + header): azul, distinto del teal de
      --brand que sigue usándose en botones primarios y acentos. */
   --chrome-bg: #1c4d94;

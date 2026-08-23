@@ -104,7 +104,7 @@ export function Estadias() {
   const filasOrdenadas = useMemo(
     () =>
       [...filas].sort(
-        (a, b) => new Date(a.fecha_hora_checkin_prevista).getTime() - new Date(b.fecha_hora_checkin_prevista).getTime(),
+        (a, b) => new Date(b.fecha_hora_checkout_prevista).getTime() - new Date(a.fecha_hora_checkout_prevista).getTime(),
       ),
     [filas],
   );
@@ -267,7 +267,7 @@ export function Estadias() {
                     borderTop: '2px solid var(--table-border)',
                     background:
                       f.estadias.saldo > 0
-                        ? 'var(--ocupada-bg)'
+                        ? 'var(--saldo-pendiente-bg)'
                         : i % 2 === 1
                           ? 'var(--surface-1)'
                           : 'transparent',
