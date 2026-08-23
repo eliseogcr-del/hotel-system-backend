@@ -192,7 +192,7 @@ export class EstadiasService {
 
     // facturable se copia de la reserva al check-in (queda editable aparte
     // desde "Editar estadía" de ahí en adelante -- ver actualizar()).
-    const facturable = reserva.facturable ?? true;
+    const facturable = reserva.facturable ?? false;
 
     if (existente) {
       const { data: actualizada, error: updError } = await client

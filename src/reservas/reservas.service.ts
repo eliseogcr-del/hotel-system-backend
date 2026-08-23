@@ -149,7 +149,7 @@ export class ReservasService {
         fecha_salida_prog: fechaSalidaProg,
         moneda: dto.moneda ?? 'PEN',
         deducible_impuestos: dto.deducibleImpuestos ?? true,
-        facturable: dto.facturable ?? true,
+        facturable: dto.facturable ?? false,
         descuento_total: descuentoTotal,
         importe_final: importeFinal,
         estado: 'confirmada',

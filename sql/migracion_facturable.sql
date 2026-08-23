@@ -5,5 +5,5 @@
 -- y presentarse. No confundir con la tabla `comprobantes` (que registra el
 -- boleta/factura ya emitido en sí): esto es solo la intención/bandera de si
 -- corresponde emitirlo.
-alter table reservas add column if not exists facturable boolean not null default true;
-alter table estadias add column if not exists facturable boolean not null default true;
+alter table reservas add column if not exists facturable boolean not null default false;
+alter table estadias add column if not exists facturable boolean not null default false;

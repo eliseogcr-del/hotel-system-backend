@@ -204,7 +204,7 @@ export function ReservaFormModal({
 
   const [origen, setOrigen] = useState('directo');
   const [moneda, setMoneda] = useState<'PEN' | 'USD'>('PEN');
-  const [facturable, setFacturable] = useState(true);
+  const [facturable, setFacturable] = useState(false);
   const [fecha, setFecha] = useState(fechaInicial || hoyYMD());
   const [hora, setHora] = useState(horaSugerida || horaActual());
   const [dias, setDias] = useState(1);

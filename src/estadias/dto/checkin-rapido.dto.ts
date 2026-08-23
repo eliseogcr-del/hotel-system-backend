@@ -104,7 +104,7 @@ export class CheckinRapidoDto {
   @IsBoolean()
   incluyeDesayuno?: boolean;
 
-  // Si se le va a emitir boleta/factura al cliente. Por defecto true.
+  // Si se le va a emitir boleta/factura al cliente. Por defecto false.
   @IsOptional()
   @IsBoolean()
   facturable?: boolean;

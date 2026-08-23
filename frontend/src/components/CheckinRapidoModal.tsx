@@ -88,7 +88,7 @@ export function CheckinRapidoModal({
   const [fechaNacimiento, setFechaNacimiento] = useState('');
   const [ruc, setRuc] = useState('');
   const [razonSocial, setRazonSocial] = useState('');
-  const [facturable, setFacturable] = useState(true);
+  const [facturable, setFacturable] = useState(false);
 
   const [nroPersonas, setNroPersonas] = useState(1);
   const [tipoCliente, setTipoCliente] = useState<TipoCliente>('normal');
