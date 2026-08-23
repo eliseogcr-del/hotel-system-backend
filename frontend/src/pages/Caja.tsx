@@ -672,8 +672,8 @@ const thStyle: CSSProperties = {
   fontWeight: 700,
   background: 'var(--table-header-bg-caja)',
   color: 'var(--table-header-text-caja)',
-  borderRight: '2px solid var(--table-border)',
-  borderBottom: '2px solid var(--table-border)',
+  borderRight: '2px solid var(--table-header-border-caja)',
+  borderBottom: '2px solid var(--table-header-border-caja)',
 };
 const tdStyle: CSSProperties = {
   padding: '8px',

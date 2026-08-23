@@ -456,8 +456,8 @@ const thStyle: CSSProperties = {
   fontWeight: 700,
   background: 'var(--table-header-bg)',
   color: 'var(--table-header-text)',
-  borderRight: '2px solid var(--table-border)',
-  borderBottom: '2px solid var(--table-border)',
+  borderRight: '2px solid var(--table-header-border)',
+  borderBottom: '2px solid var(--table-header-border)',
 };
 
 const tdStyle: CSSProperties = {

@@ -53,14 +53,21 @@
   --radius: 8px;
 
   /* Cabeceras de tablas de listados (Huéspedes, Estadías, etc.) y las
-     líneas divisorias más marcadas que las separan del resto de la UI. */
+     líneas divisorias más marcadas que las separan del resto de la UI.
+     --table-header-border es más oscuro/saturado que --table-border porque
+     contra el celeste claro de la cabecera el tono del cuerpo no contrasta
+     lo suficiente para notarse. */
   --table-header-bg: #dcedf8;
   --table-header-text: #0b3a4a;
+  --table-header-border: #6fa2c2;
   --table-border: #b9b7ac;
 
-  /* Variante de cabecera para Caja: verde oscuro con texto blanco. */
+  /* Variante de cabecera para Caja: verde oscuro con texto blanco; borde
+     claro porque el oscuro del resto de cabeceras no se vería contra el
+     fondo verde. */
   --table-header-bg-caja: #0b4a3a;
   --table-header-text-caja: #ffffff;
+  --table-header-border-caja: #4f8f78;
 
   font-family: system-ui, 'Segoe UI', Roboto, sans-serif;
   color-scheme: light;
