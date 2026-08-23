@@ -721,7 +721,7 @@ function VistaTarjetas({
                 </span>
                 <span style={{ fontSize: 10, fontWeight: 700, color: ESTADO_COLOR_INTENSO[color].text }}>{etiqueta}</span>
               </div>
-              <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{h.tipos_habitacion?.nombre ?? '—'}</span>
+              <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-secondary)' }}>{h.tipos_habitacion?.nombre ?? '—'}</span>
               {(h.huesped || h.reservaHoy?.huesped) && (
                 <span
                   style={{
@@ -737,7 +737,7 @@ function VistaTarjetas({
                 </span>
               )}
               {h.huesped && h.checkoutPrevisto && (
-                <span style={{ fontSize: 11, color: 'var(--text-secondary)' }}>
+                <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-secondary)' }}>
                   Chk out: {formatoFechaHora(h.checkoutPrevisto)}
                 </span>
               )}
