@@ -16,6 +16,7 @@ import { TiposDesayunoModule } from './tipos-desayuno/tipos-desayuno.module';
 import { TurnosModule } from './turnos/turnos.module';
 import { TipoCambioModule } from './tipo-cambio/tipo-cambio.module';
 import { ReportesModule } from './reportes/reportes.module';
+import { BookingInboxModule } from './booking-inbox/booking-inbox.module';
 
 @Module({
   imports: [
@@ -36,6 +37,7 @@ import { ReportesModule } from './reportes/reportes.module';
     TurnosModule,
     TipoCambioModule,
     ReportesModule,
+    BookingInboxModule,
   ],
 })
 export class AppModule {}
