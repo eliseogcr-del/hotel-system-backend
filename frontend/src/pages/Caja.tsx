@@ -365,17 +365,17 @@ function ResumenSesion({
 
       {error && <p style={{ color: 'var(--danger)', fontSize: 12, marginBottom: 8 }}>{error}</p>}
 
-      <div style={{ overflowX: 'auto' }}>
+      <div style={{ overflowX: 'auto', border: '2px solid var(--table-border)', borderRadius: 12 }}>
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, minWidth: 680 }}>
           <thead>
-            <tr style={{ textAlign: 'left', color: 'var(--text-secondary)', fontSize: 11 }}>
+            <tr style={{ textAlign: 'left', fontSize: 11 }}>
               <th style={thStyle}>Tipo</th>
               <th style={thStyle}>Concepto</th>
               <th style={thStyle}>Método</th>
               <th style={thStyle}>Monto</th>
               <th style={thStyle}>Hora</th>
-              <th style={thStyle}>Notas</th>
-              {esAdmin && <th style={thStyle}></th>}
+              <th style={esAdmin ? thStyle : { ...thStyle, borderRight: 'none' }}>Notas</th>
+              {esAdmin && <th style={{ ...thStyle, borderRight: 'none' }}></th>}
             </tr>
           </thead>
           <tbody>
@@ -383,7 +383,7 @@ function ResumenSesion({
               const color = m.tipo === 'ingreso' ? 'var(--ingreso)' : 'var(--egreso)';
               const bg = m.tipo === 'ingreso' ? 'var(--ingreso-bg)' : 'var(--egreso-bg)';
               return (
-                <tr key={m.id} style={{ borderTop: '1px solid var(--border)', background: bg }}>
+                <tr key={m.id} style={{ borderTop: '2px solid var(--table-border)', background: bg }}>
                   <td style={{ ...tdStyle, color, fontWeight: 500 }}>{m.tipo}</td>
                   <td style={{ ...tdStyle, color }}>{m.concepto}</td>
                   <td style={{ ...tdStyle, color }}>
@@ -425,7 +425,7 @@ function ResumenSesion({
                     )}
                   </td>
                   <td style={{ ...tdStyle, color }}>{new Date(m.created_at).toLocaleTimeString()}</td>
-                  <td style={{ ...tdStyle, color }}>
+                  <td style={esAdmin ? { ...tdStyle, color } : { ...tdStyle, color, borderRight: 'none' }}>
                     {editandoId === m.id ? (
                       <input
                         value={notasEdicion}
@@ -437,7 +437,7 @@ function ResumenSesion({
                     )}
                   </td>
                   {esAdmin && (
-                    <td style={tdStyle}>
+                    <td style={{ ...tdStyle, borderRight: 'none' }}>
                       {editandoId === m.id ? (
                         <span style={{ display: 'flex', gap: 8 }}>
                           <button
@@ -667,8 +667,19 @@ function MetricCard({ label, value, destacado }: { label: string; value: string;
   );
 }
 
-const thStyle: CSSProperties = { padding: '6px 8px' };
-const tdStyle: CSSProperties = { padding: '8px', color: 'var(--text-secondary)' };
+const thStyle: CSSProperties = {
+  padding: '8px',
+  fontWeight: 700,
+  background: 'var(--table-header-bg-caja)',
+  color: 'var(--table-header-text-caja)',
+  borderRight: '2px solid var(--table-border)',
+  borderBottom: '2px solid var(--table-border)',
+};
+const tdStyle: CSSProperties = {
+  padding: '8px',
+  color: 'var(--text-secondary)',
+  borderRight: '2px solid var(--table-border)',
+};
 
 const inputStyle: CSSProperties = {
   padding: '8px 10px',

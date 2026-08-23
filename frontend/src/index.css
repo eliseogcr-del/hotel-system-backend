@@ -52,6 +52,16 @@
   --border-strong: #d3d1c7;
   --radius: 8px;
 
+  /* Cabeceras de tablas de listados (Huéspedes, Estadías, etc.) y las
+     líneas divisorias más marcadas que las separan del resto de la UI. */
+  --table-header-bg: #dcedf8;
+  --table-header-text: #0b3a4a;
+  --table-border: #b9b7ac;
+
+  /* Variante de cabecera para Caja: verde oscuro con texto blanco. */
+  --table-header-bg-caja: #0b4a3a;
+  --table-header-text-caja: #ffffff;
+
   font-family: system-ui, 'Segoe UI', Roboto, sans-serif;
   color-scheme: light;
   color: var(--text-primary);

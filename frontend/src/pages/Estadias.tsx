@@ -237,11 +237,9 @@ export function Estadias() {
               <tr
                 style={{
                   textAlign: 'left',
-                  color: 'var(--text-secondary)',
                   fontSize: 11,
                   textTransform: 'uppercase',
                   letterSpacing: 0.3,
-                  background: 'var(--surface-1)',
                 }}
               >
                 <th style={thStyle}>Habitación</th>
@@ -266,7 +264,7 @@ export function Estadias() {
                   key={f.estadias.id}
                   onClick={() => navigate(`/estadias/${f.estadias.id}`)}
                   style={{
-                    borderTop: '1px solid var(--border)',
+                    borderTop: '2px solid var(--table-border)',
                     background: i % 2 === 1 ? 'var(--surface-1)' : 'transparent',
                     cursor: 'pointer',
                   }}
@@ -455,15 +453,18 @@ function escapeHtml(texto: string): string {
 const thStyle: CSSProperties = {
   padding: '10px 14px',
   whiteSpace: 'nowrap',
-  fontWeight: 600,
-  borderRight: '1px solid var(--border)',
+  fontWeight: 700,
+  background: 'var(--table-header-bg)',
+  color: 'var(--table-header-text)',
+  borderRight: '2px solid var(--table-border)',
+  borderBottom: '2px solid var(--table-border)',
 };
 
 const tdStyle: CSSProperties = {
   padding: '10px 14px',
   color: 'var(--text-secondary)',
   whiteSpace: 'nowrap',
-  borderRight: '1px solid var(--border)',
+  borderRight: '2px solid var(--table-border)',
 };
 
 const labelStyle: CSSProperties = {

@@ -110,11 +110,9 @@ export function Huespedes() {
               <tr
                 style={{
                   textAlign: 'left',
-                  color: 'var(--text-secondary)',
                   fontSize: 11,
                   textTransform: 'uppercase',
                   letterSpacing: 0.3,
-                  background: 'var(--surface-1)',
                 }}
               >
                 <th style={thStyle}>Documento</th>
@@ -125,7 +123,7 @@ export function Huespedes() {
                 <th style={thStyle}>F. nacimiento</th>
                 <th style={thStyle}>RUC</th>
                 <th style={thStyle}>Razón social</th>
-                <th style={{ ...thStyle, textAlign: 'right' }}>Acciones</th>
+                <th style={{ ...thStyle, textAlign: 'right', borderRight: 'none' }}>Acciones</th>
               </tr>
             </thead>
             <tbody>
@@ -133,7 +131,7 @@ export function Huespedes() {
                 <tr
                   key={h.id}
                   style={{
-                    borderTop: '1px solid var(--border)',
+                    borderTop: '2px solid var(--table-border)',
                     background: i % 2 === 1 ? 'var(--surface-1)' : 'transparent',
                   }}
                 >
@@ -169,7 +167,7 @@ export function Huespedes() {
                   <td style={tdStyle}>{formatoFechaNacimiento(h.fecha_nacimiento)}</td>
                   <td style={{ ...tdStyle, fontFamily: 'monospace' }}>{h.ruc ?? '—'}</td>
                   <td style={tdStyle}>{h.razon_social ?? '—'}</td>
-                  <td style={{ ...tdStyle, textAlign: 'right' }}>
+                  <td style={{ ...tdStyle, textAlign: 'right', borderRight: 'none' }}>
                     <button onClick={() => abrirEditar(h)} style={btnSecondary}>
                       Editar
                     </button>
@@ -390,12 +388,21 @@ const modalStyle: CSSProperties = {
   maxWidth: 560,
 };
 
-const thStyle: CSSProperties = { padding: '10px 14px', whiteSpace: 'nowrap', fontWeight: 600 };
+const thStyle: CSSProperties = {
+  padding: '10px 14px',
+  whiteSpace: 'nowrap',
+  fontWeight: 700,
+  background: 'var(--table-header-bg)',
+  color: 'var(--table-header-text)',
+  borderRight: '2px solid var(--table-border)',
+  borderBottom: '2px solid var(--table-border)',
+};
 const tdStyle: CSSProperties = {
   padding: '10px 14px',
   color: 'var(--text-secondary)',
   whiteSpace: 'nowrap',
   fontSize: 13,
+  borderRight: '2px solid var(--table-border)',
 };
 
 const labelStyle: CSSProperties = {
