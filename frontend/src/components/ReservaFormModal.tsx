@@ -18,6 +18,13 @@ type ResultadoCliente = { tipo: 'huesped'; data: Huesped } | { tipo: 'empresa'; 
 
 const ORIGENES = ['telefono', 'whatsapp', 'booking', 'airbnb', 'directo', 'walkin'];
 const METODOS_PAGO = ['efectivo', 'yape', 'transferencia', 'tarjeta'];
+const TIPOS_DOC = [
+  { value: 'dni', label: 'DNI' },
+  { value: 'pasaporte', label: 'Pasaporte' },
+  { value: 'carnet_extranjeria', label: 'Carnet de extranjería' },
+  { value: 'cedula', label: 'Cédula' },
+  { value: 'otro', label: 'Otro' },
+];
 
 interface ReservaHabitacionDetalle {
   id: string;
@@ -177,6 +184,11 @@ export function ReservaFormModal({
   const [correo, setCorreo] = useState('');
   const [huespedRuc, setHuespedRuc] = useState('');
   const [huespedRazonSocial, setHuespedRazonSocial] = useState('');
+  // Solo para registrar un huésped nuevo (sinResultados): el documento real
+  // muchas veces todavía no se sabe en esta etapa (se confirma en el
+  // check-in), así que el número queda opcional -- ver documentoNuevoHuesped().
+  const [tipoDocNuevo, setTipoDocNuevo] = useState('dni');
+  const [nroDocNuevo, setNroDocNuevo] = useState('');
   const [razonSocial, setRazonSocial] = useState('');
   const [rucEmpresa, setRucEmpresa] = useState('');
   const [resultados, setResultados] = useState<ResultadoCliente[]>([]);
@@ -413,6 +425,19 @@ export function ReservaFormModal({
     setHuespedId(null);
     setEmpresaId(null);
     setResultados([]);
+    // Limpia lo que haya quedado de una búsqueda anterior (encontrada o
+    // escrita a mano) para que un resultado nuevo -- o "no se encontró
+    // nada" -- no se mezcle con datos de otra persona.
+    setNombres('');
+    setApellidos('');
+    setTelefono('');
+    setCorreo('');
+    setHuespedRuc('');
+    setHuespedRazonSocial('');
+    setRazonSocial('');
+    setRucEmpresa('');
+    setTipoDocNuevo('dni');
+    setNroDocNuevo('');
     try {
       if (/^\d{11}$/.test(q)) {
         const huespedPorRuc = await buscarHuespedPorRuc(hotelId, q);
@@ -460,6 +485,17 @@ export function ReservaFormModal({
   // duplicado de alguien que ya está registrado.
   const sinResultados = buscado && !huespedId && !empresaId && resultados.length === 0;
 
+  // Documento del huésped nuevo cuando aún no se sabe (nroDocNuevo vacío):
+  // teléfono -> RUC -> nombre completo, en ese orden -- lo único que hay
+  // seguro en ese momento es cómo se llama la persona. Es solo un
+  // identificador provisional; el documento real se confirma en el check-in.
+  function documentoNuevoHuesped(): string {
+    if (nroDocNuevo.trim()) return nroDocNuevo.trim();
+    if (telefono.trim()) return telefono.trim();
+    if (huespedRuc.trim()) return huespedRuc.trim();
+    return `${nombres.trim()} ${apellidos.trim()}`.trim();
+  }
+
   const checkoutCalculado = calcularCheckout(fecha, hora, dias, horaCheckoutHotel, !!modo24h);
   const cobroMascotaTotal = conMascota ? precioMascotaDia * dias : 0;
   const importeTotal = tarifaDia * dias + cobroMascotaTotal;
@@ -490,8 +526,8 @@ export function ReservaFormModal({
           const creado = await crearHuesped(hotelId, {
             nombres: nombres.trim(),
             apellidos: apellidos.trim(),
-            tipoDoc: 'dni',
-            nroDoc: busqueda.trim(),
+            tipoDoc: tipoDocNuevo,
+            nroDoc: documentoNuevoHuesped(),
             telefono: telefono.trim() || undefined,
             correo: correo.trim() || undefined,
             ruc: huespedRuc.trim() || undefined,
@@ -706,7 +742,7 @@ export function ReservaFormModal({
               <div>
                 {modo === 'crear' && (
                   <>
-                    <label style={labelStyle}>DNI, RUC (empresa) o nombre del cliente</label>
+                    <label style={labelStyle}>DNI, RUC (empresa), nombre o teléfono del cliente</label>
                     <input
                       value={busqueda}
                       onChange={(e) => {
@@ -719,7 +755,7 @@ export function ReservaFormModal({
                           buscarCliente();
                         }
                       }}
-                      placeholder="Ej. 45678912, 20601234567 o RIOS — Enter para buscar"
+                      placeholder="Ej. 45678912, 20601234567, RIOS o 987654321 — Enter para buscar"
                       style={inputStyle}
                       required={!huespedId && !empresaId}
                     />
@@ -926,10 +962,39 @@ export function ReservaFormModal({
                       />
                     </div>
                     {modo === 'crear' && sinResultados && (
+                      <>
+                        <div>
+                          <label style={labelStyle}>Tipo de documento</label>
+                          <select
+                            value={tipoDocNuevo}
+                            onChange={(e) => setTipoDocNuevo(e.target.value)}
+                            style={inputStyle}
+                          >
+                            {TIPOS_DOC.map((t) => (
+                              <option key={t.value} value={t.value}>
+                                {t.label}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                        <div>
+                          <label style={labelStyle}>Número de documento (opcional)</label>
+                          <input
+                            value={nroDocNuevo}
+                            onChange={(e) => setNroDocNuevo(e.target.value)}
+                            placeholder="Si no lo sabes aún, déjalo vacío"
+                            style={inputStyle}
+                          />
+                        </div>
+                      </>
+                    )}
+                    {modo === 'crear' && sinResultados && (
                       <p style={{ fontSize: 11, color: 'var(--text-muted)', gridColumn: '1 / -1', margin: 0 }}>
-                        Se registrará como huésped nuevo usando "{busqueda.trim()}" como documento. RUC y razón
-                        social: del propio huésped si pidió factura a su nombre, o de la empresa que paga su
-                        estadía. Déjalo vacío si no aplica.
+                        Se registrará como huésped nuevo usando "{documentoNuevoHuesped() || '—'}" como documento
+                        provisional (número de documento si lo escribiste, si no el teléfono, si no el RUC, si no
+                        el nombre completo) — se confirma obligatoriamente en el check-in. RUC y razón social: del
+                        propio huésped si pidió factura a su nombre, o de la empresa que paga su estadía. Déjalo
+                        vacío si no aplica.
                       </p>
                     )}
                     {modo === 'crear' && huespedId && (

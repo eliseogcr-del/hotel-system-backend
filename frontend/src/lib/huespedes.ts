@@ -115,7 +115,7 @@ export async function buscarHuespedesPorNombre(hotelId: string, texto: string): 
     .from('huespedes')
     .select(HUESPED_SELECT)
     .eq('hotel_id', hotelId)
-    .or(`nombres.ilike.%${q}%,apellidos.ilike.%${q}%`)
+    .or(`nombres.ilike.%${q}%,apellidos.ilike.%${q}%,telefono.ilike.%${q}%`)
     .order('nombres', { ascending: true })
     .limit(10);
   if (error) throw error;
