@@ -1,6 +1,7 @@
 import {
   Controller,
   ForbiddenException,
+  Get,
   Headers,
   Post,
   Query,
@@ -13,6 +14,11 @@ import { BookingInboxService } from './booking-inbox.service';
  * hay un usuario logueado en ese momento, así que no usa AuthGuard/RolesGuard
  * como el resto de la API; se protege con un secreto compartido simple
  * (BOOKING_WEBHOOK_SECRET) en vez de un JWT de Supabase.
+ *
+ * Acepta GET además de POST a propósito: el plan gratis de cron-job.org
+ * arma la URL en un formulario simple y esconde método/cabeceras
+ * personalizadas detrás de una pestaña "Avanzado" -- con GET + el secreto
+ * como query param, la URL sola alcanza, sin tener que configurar nada más.
  */
 @Controller('webhooks/booking-inbox')
 export class BookingInboxController {
@@ -21,6 +27,7 @@ export class BookingInboxController {
     private readonly config: ConfigService,
   ) {}
 
+  @Get('revisar')
   @Post('revisar')
   async revisar(
     @Query('secret') secretQuery: string | undefined,
