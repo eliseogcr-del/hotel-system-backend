@@ -3,10 +3,14 @@ import { IsBoolean, IsInt, IsNumber, IsOptional, IsString, IsUUID, Min } from 'c
 /**
  * Editar una estadía en curso: cambiar la tarifa diaria (aplica hacia
  * adelante -- no recalcula cargos ya registrados, para eso está 'ajuste'
- * en el libro de movimientos) y/o agregar días (extiende el checkout
- * previsto y genera el cargo de alquiler correspondiente por los días
- * nuevos). También permite asignar/quitar la cochera del huésped y
- * registrar los datos de su vehículo.
+ * en el libro de movimientos) y/o agregar o quitar días (extiende o acorta
+ * el checkout previsto). Agregar días genera un cargo de alquiler normal
+ * por los días nuevos; quitar días (valor negativo, ej. un error de
+ * digitación al hacer el check-in) genera un 'ajuste' negativo que
+ * reversa exactamente lo que se cobró de más -- nunca se edita/borra el
+ * cargo original ya registrado (ver EstadiasService.actualizar()).
+ * También permite asignar/quitar la cochera del huésped y registrar los
+ * datos de su vehículo.
  */
 export class ActualizarEstadiaDto {
   @IsOptional()
@@ -16,7 +20,7 @@ export class ActualizarEstadiaDto {
 
   @IsOptional()
   @IsInt()
-  @Min(1)
+  @Min(-90)
   diasAdicionales?: number;
 
   // Cochera a asignar (debe estar 'disponible', o ser la que ya tiene esta

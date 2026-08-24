@@ -1078,11 +1078,29 @@ export class EstadiasService {
         .single();
       if (rhError) throw rhError;
 
-      cambiosLinea.dias = Number(rhActual.dias) + dto.diasAdicionales;
+      const diasNuevos = Number(rhActual.dias) + dto.diasAdicionales;
+      if (diasNuevos < 1) {
+        throw new BadRequestException(
+          `No se puede reducir: la estadía quedaría con ${diasNuevos} día(s). El mínimo es 1 día.`,
+        );
+      }
+
       const nuevoCheckout = new Date(
         new Date(rhActual.fecha_hora_checkout_prevista).getTime() +
           dto.diasAdicionales * 24 * 60 * 60 * 1000,
       );
+      if (dto.diasAdicionales < 0 && nuevoCheckout.getTime() <= Date.now()) {
+        // Si el checkout corregido quedara en el pasado, procesarSalidasVencidas()
+        // (que corre solo, ver más abajo) lo volvería a extender apenas
+        // pase 1 hora -- deshaciendo la corrección sin que nadie se dé
+        // cuenta. Mejor rechazarlo con un mensaje claro que dejar ese
+        // comportamiento confuso.
+        throw new BadRequestException(
+          'No se puede reducir tantos días: la salida programada quedaría en el pasado (el sistema la volvería a extender sola). Reduce menos días o corrige la hora de check-in primero.',
+        );
+      }
+
+      cambiosLinea.dias = diasNuevos;
       cambiosLinea.fecha_hora_checkout_prevista = nuevoCheckout.toISOString();
     }
 
@@ -1144,12 +1162,25 @@ export class EstadiasService {
     }
 
     if (dto.diasAdicionales) {
-      await this.insertarMovimiento(client, estadiaId, {
-        tipo: 'alquiler',
-        monto: tarifaFinal * dto.diasAdicionales,
-        notas: `Extensión de estadía: +${dto.diasAdicionales} día(s)`,
-        registradoPor: personalId,
-      });
+      if (dto.diasAdicionales > 0) {
+        await this.insertarMovimiento(client, estadiaId, {
+          tipo: 'alquiler',
+          monto: tarifaFinal * dto.diasAdicionales,
+          notas: `Extensión de estadía: +${dto.diasAdicionales} día(s)`,
+          registradoPor: personalId,
+        });
+      } else {
+        // Reducción de días (ej. error de digitación en el check-in): se
+        // reversa con un 'ajuste' negativo por el monto exacto de más que
+        // se había cobrado, en vez de tocar el cargo de 'alquiler' original
+        // ya registrado (nunca se editan movimientos ya posteados).
+        await this.insertarMovimiento(client, estadiaId, {
+          tipo: 'ajuste',
+          monto: tarifaFinal * dto.diasAdicionales,
+          notas: `Corrección de estadía: ${dto.diasAdicionales} día(s) (se cobraron de más)`,
+          registradoPor: personalId,
+        });
+      }
     }
 
     // Los datos del vehículo son independientes de la cochera (se pueden

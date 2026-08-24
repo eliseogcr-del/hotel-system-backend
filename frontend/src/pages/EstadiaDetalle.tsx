@@ -984,10 +984,9 @@ function EditarEstadiaModal({
                   </select>
                 </div>
                 <div style={{ width: 150 }}>
-                  <label style={labelStyle}>Días adicionales</label>
+                  <label style={labelStyle}>Días a agregar/quitar</label>
                   <input
                     type="number"
-                    min={1}
                     placeholder="0"
                     value={diasAdicionales}
                     onChange={(e) => setDiasAdicionales(e.target.value)}
@@ -996,8 +995,9 @@ function EditarEstadiaModal({
                 </div>
               </div>
               <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: '0 0 8px' }}>
-                Días actuales: {diasActuales}. Los días adicionales extienden la salida programada y generan el
-                cargo de alquiler correspondiente (no se puede reducir).
+                Días actuales: {diasActuales}. Un número positivo (ej. 2) extiende la salida programada y genera
+                el cargo de alquiler correspondiente; uno negativo (ej. -2) la acorta y revierte lo cobrado de
+                más con un ajuste — para corregir un error al registrar los días, ej. en el check-in.
               </p>
               <div style={{ marginBottom: 8 }}>
                 <label style={labelStyle}>Fecha y hora de check-in</label>
