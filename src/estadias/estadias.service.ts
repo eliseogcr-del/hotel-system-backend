@@ -244,8 +244,12 @@ export class EstadiasService {
       }
       tipoCambioAplicado = Number(tc.valor_compra);
       montoOriginalUsd = tarifaDiaConvertida * diasLinea + aforoExtraConvertido;
-      tarifaDiaConvertida = Number((tarifaDiaConvertida * tipoCambioAplicado).toFixed(2));
-      aforoExtraConvertido = Number((aforoExtraConvertido * tipoCambioAplicado).toFixed(2));
+      // Conversión USD -> PEN redondeada al sol entero más próximo (nunca
+      // decimales): 69.4 -> 69, 69.5 -> 70. Solo aplica a este paso de
+      // conversión de moneda -- montos ya en soles (mascota, ajustes, etc.)
+      // conservan sus decimales normales.
+      tarifaDiaConvertida = Math.round(tarifaDiaConvertida * tipoCambioAplicado);
+      aforoExtraConvertido = Math.round(aforoExtraConvertido * tipoCambioAplicado);
 
       const { error: convError } = await client
         .from('reserva_habitacion')
