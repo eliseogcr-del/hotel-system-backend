@@ -42,19 +42,32 @@ export class HabitacionesService {
 
     if (error) throw error;
 
-    const { data: tareasEnProceso, error: tareasError } = await client
+    // 'planificado' además de 'en_proceso': HK puede dejar una nota (ej.
+    // "faltan toallas") antes de darle "Iniciar" a la tarea, y esa nota
+    // debe verse en Habitaciones apenas se escribe, no recién cuando
+    // arranca. El estado va aparte en el mapa para que el frontend solo
+    // muestre el texto "En proceso de X" cuando de verdad está en_proceso
+    // (una tarea recién planificada -- ej. justo después de un checkout --
+    // no debe aparentar que HK ya empezó).
+    const { data: tareasActivas, error: tareasError } = await client
       .from('tareas_hk')
-      .select('habitacion_id, tipo, notas')
+      .select('habitacion_id, tipo, estado, notas')
       .eq('hotel_id', hotelId)
-      .eq('estado', 'en_proceso');
+      .in('estado', ['planificado', 'en_proceso']);
     if (tareasError) throw tareasError;
 
     const tareaEnProcesoPorHabitacion = new Map<
       string,
-      { tipo: 'limpieza' | 'mantenimiento'; notas: string | null }
+      { tipo: 'limpieza' | 'mantenimiento'; estado: 'planificado' | 'en_proceso'; notas: string | null }
     >();
-    for (const t of tareasEnProceso ?? []) {
-      tareaEnProcesoPorHabitacion.set(t.habitacion_id, { tipo: t.tipo, notas: t.notas });
+    for (const t of tareasActivas ?? []) {
+      // Si por algún motivo hay más de una tarea activa para la misma
+      // habitación (no debería pasar en operación normal), la en_proceso
+      // manda sobre la planificado.
+      const actual = tareaEnProcesoPorHabitacion.get(t.habitacion_id);
+      if (!actual || t.estado === 'en_proceso') {
+        tareaEnProcesoPorHabitacion.set(t.habitacion_id, { tipo: t.tipo, estado: t.estado, notas: t.notas });
+      }
     }
 
     const { data: lineasActivas, error: lineasError } = await client

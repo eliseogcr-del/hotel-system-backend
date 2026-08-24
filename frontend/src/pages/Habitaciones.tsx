@@ -17,7 +17,11 @@ interface Habitacion {
   estado: Estado;
   mantenimiento_planificado: boolean;
   reservaHoy: { reservaId: string; lineaId: string; huesped: string | null } | null;
-  tareaHkEnProceso: { tipo: 'limpieza' | 'mantenimiento'; notas: string | null } | null;
+  tareaHkEnProceso: {
+    tipo: 'limpieza' | 'mantenimiento';
+    estado: 'planificado' | 'en_proceso';
+    notas: string | null;
+  } | null;
   tipos_habitacion: { id: string; nombre: string; aforo_max: number } | null;
   estadiaId: string | null;
   huesped: string | null;
@@ -281,8 +285,24 @@ export function Habitaciones() {
 
   function etiquetaEstado(h: Habitacion): string {
     if (h.reservaHoy) return 'Reservada';
-    if (h.tareaHkEnProceso?.tipo === 'limpieza' && h.estado === 'limpieza') return 'En proceso de limpieza';
-    if (h.tareaHkEnProceso?.tipo === 'mantenimiento' && h.estado === 'ocupada') return 'En proceso de mantenimiento';
+    // tareaHkEnProceso también puede traer una tarea apenas 'planificado'
+    // (para mostrar su nota antes de que HK le dé Iniciar, ver
+    // HabitacionesService) -- el texto "En proceso de X" solo debe salir
+    // cuando de verdad está en_proceso, si no un checkout recién hecho
+    // (habitación en 'limpieza' con su tarea todavía sin iniciar) diría
+    // "en proceso" sin que nadie haya empezado nada.
+    if (
+      h.tareaHkEnProceso?.tipo === 'limpieza' &&
+      h.tareaHkEnProceso?.estado === 'en_proceso' &&
+      h.estado === 'limpieza'
+    )
+      return 'En proceso de limpieza';
+    if (
+      h.tareaHkEnProceso?.tipo === 'mantenimiento' &&
+      h.tareaHkEnProceso?.estado === 'en_proceso' &&
+      h.estado === 'ocupada'
+    )
+      return 'En proceso de mantenimiento';
     return ESTADO_LABEL[h.estado];
   }
 
