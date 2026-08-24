@@ -497,8 +497,16 @@ export function ReservaFormModal({
   }
 
   const checkoutCalculado = calcularCheckout(fecha, hora, dias, horaCheckoutHotel, !!modo24h);
+  // precio_mascota siempre está en soles (config del hotel, nunca en
+  // dólares -- ver EstadiasService.checkin()), así que si la reserva es en
+  // USD no se puede sumar directo con la tarifa sin mezclar monedas. La
+  // conversión real de la tarifa a soles recién pasa en el check-in (tipo
+  // de cambio del día), así que acá no hay forma de dar un total exacto en
+  // una sola moneda -- se muestran por separado en vez de un número
+  // engañoso.
+  const alquilerTotal = tarifaDia * dias;
   const cobroMascotaTotal = conMascota ? precioMascotaDia * dias : 0;
-  const importeTotal = tarifaDia * dias + cobroMascotaTotal;
+  const importeTotal = moneda === 'PEN' ? alquilerTotal + cobroMascotaTotal : alquilerTotal;
   const excedeAforo = aforoMax > 0 && nroPersonas > aforoMax;
   const totalAnticipos = anticiposExistentes.reduce((acc, a) => acc + Number(a.monto), 0);
 
@@ -1176,12 +1184,28 @@ export function ReservaFormModal({
                     padding: '10px 12px',
                   }}
                 >
-                  <p style={{ fontSize: 13, fontWeight: 600, margin: 0 }}>
-                    Importe total: {moneda} {importeTotal.toFixed(2)}
-                  </p>
-                  <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: '2px 0 0' }}>
-                    Tarifa × días{conMascota ? ' + cobro de mascota' : ''}
-                  </p>
+                  {moneda === 'PEN' ? (
+                    <>
+                      <p style={{ fontSize: 13, fontWeight: 600, margin: 0 }}>
+                        Importe total: PEN {importeTotal.toFixed(2)}
+                      </p>
+                      <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: '2px 0 0' }}>
+                        Tarifa × días{conMascota ? ' + cobro de mascota' : ''}
+                      </p>
+                    </>
+                  ) : (
+                    <>
+                      <p style={{ fontSize: 13, fontWeight: 600, margin: 0 }}>
+                        Alquiler: USD {alquilerTotal.toFixed(2)}
+                        {conMascota && ` + Mascota: S/. ${cobroMascotaTotal.toFixed(2)}`}
+                      </p>
+                      <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: '2px 0 0' }}>
+                        {conMascota
+                          ? 'Montos en monedas distintas -- el alquiler se convierte a soles recién en el check-in (tipo de cambio del día) y ahí se le suma la mascota.'
+                          : 'Se convierte a soles en el check-in, con el tipo de cambio del día.'}
+                      </p>
+                    </>
+                  )}
                 </div>
               </div>
 
