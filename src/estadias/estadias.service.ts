@@ -244,11 +244,16 @@ export class EstadiasService {
       }
       tipoCambioAplicado = Number(tc.valor_compra);
       montoOriginalUsd = tarifaDiaConvertida * diasLinea + aforoExtraConvertido;
-      // Conversión USD -> PEN redondeada al sol entero más próximo (nunca
-      // decimales): 69.4 -> 69, 69.5 -> 70. Solo aplica a este paso de
-      // conversión de moneda -- montos ya en soles (mascota, ajustes, etc.)
-      // conservan sus decimales normales.
-      tarifaDiaConvertida = Math.round(tarifaDiaConvertida * tipoCambioAplicado);
+      // La tarifa diaria en USD se convierte a soles con el TC vigente y se
+      // redondea SIEMPRE HACIA ARRIBA al medio sol (0.50) más cercano --
+      // nunca hacia abajo, nunca al entero más próximo: 45.49 -> 45.50,
+      // 45.51 -> 46.00, 45.50 -> 45.50 (ya es múltiplo, no cambia). El
+      // importe total a cobrar sale de multiplicar esta tarifa diaria YA
+      // redondeada por la cantidad de días -- no se redondea el total y
+      // se divide después. Montos ya en soles (mascota, ajustes, etc.) no
+      // pasan por esta regla, conservan sus decimales normales.
+      const tarifaDiaSolesSinRedondear = Math.round(tarifaDiaConvertida * tipoCambioAplicado * 100) / 100;
+      tarifaDiaConvertida = Math.ceil(tarifaDiaSolesSinRedondear * 2) / 2;
       aforoExtraConvertido = Math.round(aforoExtraConvertido * tipoCambioAplicado);
 
       const { error: convError } = await client
