@@ -441,15 +441,15 @@ function AvisosBookingTab({ hotelId }: { hotelId: string }) {
 
       {!loading && !error && (
     <div style={{ overflowX: 'auto', border: '1px solid var(--border)', borderRadius: 12 }}>
-      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, minWidth: 900 }}>
+      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, tableLayout: 'fixed', minWidth: 720 }}>
         <thead>
           <tr style={{ textAlign: 'left', fontSize: 11, textTransform: 'uppercase', letterSpacing: 0.3 }}>
-            <th style={thAvisoStyle}>Fecha</th>
-            <th style={thAvisoStyle}>Tipo</th>
+            <th style={{ ...thAvisoStyle, width: 110 }}>Fecha</th>
+            <th style={{ ...thAvisoStyle, width: 100 }}>Tipo</th>
             <th style={thAvisoStyle}>Detalle</th>
-            <th style={thAvisoStyle}>N° confirmación</th>
-            <th style={thAvisoStyle}>WhatsApp</th>
-            <th style={{ ...thAvisoStyle, borderRight: 'none' }}></th>
+            <th style={{ ...thAvisoStyle, width: 110 }}>N° confirm.</th>
+            <th style={{ ...thAvisoStyle, width: 80 }}>WhatsApp</th>
+            <th style={{ ...thAvisoStyle, width: 130, borderRight: 'none' }}></th>
           </tr>
         </thead>
         <tbody>
@@ -492,10 +492,10 @@ function AvisosBookingTab({ hotelId }: { hotelId: string }) {
                     {TIPO_AVISO_LABEL[tipo] ?? tipo}
                   </span>
                 </td>
-                <td style={tdAvisoStyle}>{detalle}</td>
-                <td style={{ ...tdAvisoStyle, fontFamily: 'monospace' }}>{d?.resId ?? '—'}</td>
+                <td style={{ ...tdAvisoStyle, whiteSpace: 'normal' }}>{detalle}</td>
+                <td style={{ ...tdAvisoStyle, fontFamily: 'monospace', fontSize: 12 }}>{d?.resId ?? '—'}</td>
                 <td style={tdAvisoStyle}>{d?.whatsappEnviado ? 'Sí' : 'No'}</td>
-                <td style={{ ...tdAvisoStyle, borderRight: 'none' }}>
+                <td style={{ ...tdAvisoStyle, whiteSpace: 'normal', borderRight: 'none' }}>
                   {d?.enlaceBooking && (
                     <a href={d.enlaceBooking} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--brand)', fontSize: 12 }}>
                       Abrir en Booking →
@@ -521,7 +521,7 @@ function AvisosBookingTab({ hotelId }: { hotelId: string }) {
 }
 
 const thAvisoStyle: CSSProperties = {
-  padding: '10px 14px',
+  padding: '8px 10px',
   whiteSpace: 'nowrap',
   fontWeight: 700,
   background: 'var(--table-header-bg)',
@@ -531,7 +531,7 @@ const thAvisoStyle: CSSProperties = {
 };
 
 const tdAvisoStyle: CSSProperties = {
-  padding: '10px 14px',
+  padding: '8px 10px',
   color: 'var(--text-secondary)',
   whiteSpace: 'nowrap',
   borderRight: '2px solid var(--table-border)',
