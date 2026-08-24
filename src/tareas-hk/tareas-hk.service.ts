@@ -2,6 +2,7 @@ import { BadRequestException, Injectable, NotFoundException } from '@nestjs/comm
 import { SupabaseClient } from '@supabase/supabase-js';
 import { CrearTareaHkDto } from './dto/crear-tarea-hk.dto';
 import { AsignarTareaHkDto } from './dto/asignar-tarea-hk.dto';
+import { ActualizarNotasTareaHkDto } from './dto/actualizar-notas-tarea-hk.dto';
 import { ListarTareasHkQueryDto } from './dto/listar-tareas-hk-query.dto';
 
 // Perú (America/Lima) es UTC-5 todo el año -- mismo criterio que en
@@ -42,6 +43,7 @@ interface TareaHk {
   estado: 'planificado' | 'en_proceso' | 'terminado';
   con_huesped_dentro: boolean;
   asignado_a: string | null;
+  notas: string | null;
 }
 
 @Injectable()
@@ -136,10 +138,10 @@ export class TareasHkService {
         estado: 'en_proceso',
         iniciado_en: new Date().toISOString(),
         asignado_a: tarea.asignado_a ?? personalId,
-        // Mensaje corto que recepción ve en la columna Notas de
-        // Habitaciones mientras la habitación no tiene huésped activo
-        // (limpieza post-checkout, sin fila de huésped que mostrar).
-        notas: tarea.tipo === 'limpieza' ? 'Empezó la limpieza' : null,
+        // Si HK ya había dejado una nota propia (ej. "faltan toallas")
+        // antes de arrancar, no se pisa con el mensaje automático -- esa
+        // nota es más útil para recepción que "Empezó la limpieza".
+        notas: tarea.notas || (tarea.tipo === 'limpieza' ? 'Empezó la limpieza' : null),
       })
       .eq('id', tareaId);
     if (updError) throw updError;
@@ -222,6 +224,31 @@ export class TareasHkService {
     if (updError) throw updError;
   }
 
+  // Nota libre que HK deja sobre la tarea (ej. "faltan toallas") -- se
+  // muestra en la columna Notas de Habitaciones mientras la habitación no
+  // tiene huésped activo (ver HabitacionesService.listarConEstado()), para
+  // que recepción la vea sin tener que entrar a Tareas HK. Se sobreescribe
+  // el mensaje automático de iniciar() ("Empezó la limpieza") si HK escribe
+  // algo -- mismo criterio simple que ya usa el resto de las notas del
+  // sistema (habitaciones/:id/notas, estadias/:id/notas), sin restringir
+  // por estado de la tarea.
+  async actualizarNotas(
+    client: SupabaseClient,
+    hotelId: string,
+    tareaId: string,
+    dto: ActualizarNotasTareaHkDto,
+  ) {
+    await this.cargarTareaHotel(client, hotelId, tareaId);
+
+    const { error } = await client
+      .from('tareas_hk')
+      .update({ notas: dto.notas || null })
+      .eq('id', tareaId);
+    if (error) throw error;
+
+    return this.obtenerDetalle(client, hotelId, tareaId);
+  }
+
   async asignar(client: SupabaseClient, hotelId: string, tareaId: string, dto: AsignarTareaHkDto) {
     await this.cargarTareaHotel(client, hotelId, tareaId);
 
@@ -278,7 +305,7 @@ export class TareasHkService {
   ): Promise<TareaHk> {
     const { data, error } = await client
       .from('tareas_hk')
-      .select('id, hotel_id, habitacion_id, tipo, estado, con_huesped_dentro, asignado_a')
+      .select('id, hotel_id, habitacion_id, tipo, estado, con_huesped_dentro, asignado_a, notas')
       .eq('id', tareaId)
       .eq('hotel_id', hotelId)
       .maybeSingle();

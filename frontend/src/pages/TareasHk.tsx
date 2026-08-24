@@ -49,6 +49,7 @@ interface TareaHk {
   estado: 'planificado' | 'en_proceso' | 'terminado';
   prioridad: number;
   con_huesped_dentro: boolean;
+  notas: string | null;
   habitaciones: { hab_numero: number; piso: number } | null;
 }
 
@@ -140,6 +141,19 @@ export function TareasHk() {
       setError(err instanceof ApiError ? err.message : 'No se pudo terminar');
     } finally {
       setAccionando(null);
+    }
+  }
+
+  // Se refleja en la columna Notas de Habitaciones mientras la habitación
+  // no tiene huésped activo (ver HabitacionesService.listarConEstado()),
+  // para que recepción la vea sin entrar a Tareas HK.
+  async function guardarNotas(tareaId: string, notas: string) {
+    if (!hotelActual) return;
+    try {
+      await api.patch(`/hoteles/${hotelActual.hotelId}/tareas-hk/${tareaId}/notas`, { notas });
+      setTareas((prev) => prev.map((t) => (t.id === tareaId ? { ...t, notas: notas || null } : t)));
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'No se pudieron guardar las notas');
     }
   }
 
@@ -243,10 +257,8 @@ export function TareasHk() {
               key={t.id}
               style={{
                 display: 'flex',
-                flexWrap: 'wrap',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-                gap: '4px 12px',
+                flexDirection: 'column',
+                gap: 8,
                 padding: '10px 14px',
                 background: 'var(--surface-1)',
                 border: '1px solid var(--border)',
@@ -254,36 +266,40 @@ export function TareasHk() {
                 fontSize: 13,
               }}
             >
-              <span>
-                Habitación {t.habitaciones?.hab_numero} · {TIPO_LABEL[t.tipo] ?? t.tipo}
-                {t.con_huesped_dentro && (
-                  <span style={{ color: 'var(--text-muted)' }}> (con huésped dentro)</span>
-                )}
-              </span>
-              <span style={{ color: 'var(--text-secondary)' }}>Prioridad {t.prioridad}</span>
-              <span
-                style={{
-                  fontSize: 11,
-                  padding: '2px 8px',
-                  borderRadius: 999,
-                  border: '1px solid var(--border)',
-                  color: t.estado === 'terminado' ? 'var(--disponible-text)' : 'var(--text-secondary)',
-                }}
-              >
-                {ESTADO_LABEL[t.estado] ?? t.estado}
-              </span>
-              <span>
-                {t.estado === 'planificado' && (
-                  <button onClick={() => iniciar(t.id)} disabled={accionando === t.id} style={btnSecondary}>
-                    Iniciar
-                  </button>
-                )}
-                {t.estado === 'en_proceso' && (
-                  <button onClick={() => terminar(t.id)} disabled={accionando === t.id} style={btnSecondary}>
-                    Terminar
-                  </button>
-                )}
-              </span>
+              <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', gap: '4px 12px' }}>
+                <span>
+                  Habitación {t.habitaciones?.hab_numero} · {TIPO_LABEL[t.tipo] ?? t.tipo}
+                  {t.con_huesped_dentro && (
+                    <span style={{ color: 'var(--text-muted)' }}> (con huésped dentro)</span>
+                  )}
+                </span>
+                {/* Prioridad oculta por el momento (no se usa todavía) --
+                    ver t.prioridad si hay que reactivarla. */}
+                <span
+                  style={{
+                    fontSize: 11,
+                    padding: '2px 8px',
+                    borderRadius: 999,
+                    border: '1px solid var(--border)',
+                    color: t.estado === 'terminado' ? 'var(--disponible-text)' : 'var(--text-secondary)',
+                  }}
+                >
+                  {ESTADO_LABEL[t.estado] ?? t.estado}
+                </span>
+                <span>
+                  {t.estado === 'planificado' && (
+                    <button onClick={() => iniciar(t.id)} disabled={accionando === t.id} style={btnSecondary}>
+                      Iniciar
+                    </button>
+                  )}
+                  {t.estado === 'en_proceso' && (
+                    <button onClick={() => terminar(t.id)} disabled={accionando === t.id} style={btnSecondary}>
+                      Terminar
+                    </button>
+                  )}
+                </span>
+              </div>
+              <NotasTareaCelda notas={t.notas ?? ''} onGuardar={(n) => guardarNotas(t.id, n)} />
             </div>
           ))}
           {tareas.length === 0 && <p style={{ color: 'var(--text-muted)' }}>No hay tareas.</p>}
@@ -416,6 +432,64 @@ function VistaHabitacionesSoloLectura({
         </div>
       )}
     </div>
+  );
+}
+
+// Mismo patrón "clic para editar, guarda al perder foco" que NotasCelda en
+// Habitaciones.tsx -- se duplica acá a propósito (archivos distintos, poco
+// código) en vez de compartir un componente.
+function NotasTareaCelda({ notas, onGuardar }: { notas: string; onGuardar: (valor: string) => void }) {
+  const [editando, setEditando] = useState(false);
+  const [valor, setValor] = useState(notas);
+
+  useEffect(() => setValor(notas), [notas]);
+
+  if (!editando) {
+    return (
+      <button
+        onClick={() => setEditando(true)}
+        style={{
+          background: 'none',
+          border: 'none',
+          padding: 0,
+          textAlign: 'left',
+          fontSize: 12.5,
+          fontWeight: notas ? 700 : undefined,
+          color: notas ? 'var(--nota-texto)' : 'var(--text-muted)',
+          cursor: 'pointer',
+        }}
+        title={notas || 'Agregar nota'}
+      >
+        {notas || '+ nota'}
+      </button>
+    );
+  }
+
+  return (
+    <input
+      autoFocus
+      value={valor}
+      onChange={(e) => setValor(e.target.value)}
+      onBlur={() => {
+        setEditando(false);
+        if (valor !== notas) onGuardar(valor);
+      }}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter') e.currentTarget.blur();
+        if (e.key === 'Escape') {
+          setValor(notas);
+          setEditando(false);
+        }
+      }}
+      style={{
+        width: '100%',
+        boxSizing: 'border-box',
+        padding: '4px 8px',
+        border: '1px solid var(--border-strong)',
+        borderRadius: 4,
+        fontSize: 12.5,
+      }}
+    />
   );
 }
 

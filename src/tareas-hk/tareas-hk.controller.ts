@@ -18,6 +18,7 @@ import { SupabaseService } from '../common/supabase/supabase.service';
 import { TareasHkService } from './tareas-hk.service';
 import { CrearTareaHkDto } from './dto/crear-tarea-hk.dto';
 import { AsignarTareaHkDto } from './dto/asignar-tarea-hk.dto';
+import { ActualizarNotasTareaHkDto } from './dto/actualizar-notas-tarea-hk.dto';
 import { ListarTareasHkQueryDto } from './dto/listar-tareas-hk-query.dto';
 
 @Controller('hoteles/:hotelId/tareas-hk')
@@ -93,6 +94,18 @@ export class TareasHkController {
   ) {
     const client = this.supabase.getClientForRequest(user.accessToken);
     return this.tareasHkService.asignar(client, hotelId, id, dto);
+  }
+
+  @Patch(':id/notas')
+  @Roles('admin', 'recepcion', 'hk')
+  async actualizarNotas(
+    @Param('hotelId') hotelId: string,
+    @Param('id') id: string,
+    @Body() dto: ActualizarNotasTareaHkDto,
+    @CurrentUser() user: RequestUser,
+  ) {
+    const client = this.supabase.getClientForRequest(user.accessToken);
+    return this.tareasHkService.actualizarNotas(client, hotelId, id, dto);
   }
 
   @Delete(':id')
