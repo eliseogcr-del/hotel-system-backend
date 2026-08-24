@@ -395,21 +395,51 @@ function AvisosBookingTab({ hotelId }: { hotelId: string }) {
   const [avisos, setAvisos] = useState<ImportacionCanal[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [desde, setDesde] = useState(hoyYMD);
+  const [hasta, setHasta] = useState(hoyYMD);
 
   useEffect(() => {
     setLoading(true);
     setError(null);
+    const params = new URLSearchParams({ canal: 'booking' });
+    if (desde) params.set('desde', desde);
+    if (hasta) params.set('hasta', hasta);
     api
-      .get<ImportacionCanal[]>(`/hoteles/${hotelId}/importaciones-canal?canal=booking`)
+      .get<ImportacionCanal[]>(`/hoteles/${hotelId}/importaciones-canal?${params.toString()}`)
       .then(setAvisos)
       .catch((err) => setError(err instanceof ApiError ? err.message : 'Error al cargar'))
       .finally(() => setLoading(false));
-  }, [hotelId]);
-
-  if (loading) return <p style={{ color: 'var(--text-muted)' }}>Cargando...</p>;
-  if (error) return <p style={{ color: 'var(--danger)' }}>{error}</p>;
+  }, [hotelId, desde, hasta]);
 
   return (
+    <div>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, alignItems: 'flex-end', margin: '0 0 16px' }}>
+        <div>
+          <label style={labelStyle}>Desde</label>
+          <input type="date" value={desde} onChange={(e) => setDesde(e.target.value)} style={inputStyle} />
+        </div>
+        <div>
+          <label style={labelStyle}>Hasta</label>
+          <input type="date" value={hasta} onChange={(e) => setHasta(e.target.value)} style={inputStyle} />
+        </div>
+        {(desde || hasta) && (
+          <button
+            type="button"
+            onClick={() => {
+              setDesde('');
+              setHasta('');
+            }}
+            style={btnSecondary}
+          >
+            Limpiar filtro
+          </button>
+        )}
+      </div>
+
+      {loading && <p style={{ color: 'var(--text-muted)' }}>Cargando...</p>}
+      {error && <p style={{ color: 'var(--danger)' }}>{error}</p>}
+
+      {!loading && !error && (
     <div style={{ overflowX: 'auto', border: '1px solid var(--border)', borderRadius: 12 }}>
       <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, minWidth: 900 }}>
         <thead>
@@ -484,6 +514,8 @@ function AvisosBookingTab({ hotelId }: { hotelId: string }) {
           )}
         </tbody>
       </table>
+    </div>
+      )}
     </div>
   );
 }

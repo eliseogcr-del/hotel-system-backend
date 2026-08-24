@@ -1,4 +1,4 @@
-import { IsEnum, IsOptional } from 'class-validator';
+import { IsDateString, IsEnum, IsOptional } from 'class-validator';
 
 export class ListarImportacionesQueryDto {
   @IsOptional()
@@ -8,4 +8,12 @@ export class ListarImportacionesQueryDto {
   @IsOptional()
   @IsEnum(['pendiente', 'ok', 'error'])
   estadoParseo?: string;
+
+  @IsOptional()
+  @IsDateString()
+  desde?: string;
+
+  @IsOptional()
+  @IsDateString()
+  hasta?: string;
 }

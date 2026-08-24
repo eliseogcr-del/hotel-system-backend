@@ -123,10 +123,29 @@ export class ImportacionesCanalService {
 
     if (filtros.canal) query = query.eq('canal', filtros.canal);
     if (filtros.estadoParseo) query = query.eq('estado_parseo', filtros.estadoParseo);
+    if (filtros.desde) {
+      query = query.gte('fecha_recibido', this.fechaLimaAInstante(filtros.desde).toISOString());
+    }
+    if (filtros.hasta) {
+      const hastaExclusivo = new Date(
+        this.fechaLimaAInstante(filtros.hasta).getTime() + 24 * 60 * 60 * 1000,
+      );
+      query = query.lt('fecha_recibido', hastaExclusivo.toISOString());
+    }
 
     const { data, error } = await query;
     if (error) throw error;
     return data;
+  }
+
+  // Convierte una fecha 'YYYY-MM-DD' (elegida en un <input type="date">, que
+  // el recepcionista piensa en hora Lima) al instante UTC real de esa
+  // medianoche en Lima -- mismo criterio que EstadiasService.
+  private fechaLimaAInstante(fechaYMD: string): Date {
+    const [anio, mes, dia] = fechaYMD.split('-').map(Number);
+    const PERU_UTC_OFFSET_MS = 5 * 60 * 60 * 1000;
+    const relojLima = new Date(Date.UTC(anio, mes - 1, dia, 0, 0, 0, 0));
+    return new Date(relojLima.getTime() + PERU_UTC_OFFSET_MS);
   }
 
   async obtenerDetalle(client: SupabaseClient, hotelId: string, id: string) {
