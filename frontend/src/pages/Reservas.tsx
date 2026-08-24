@@ -441,15 +441,15 @@ function AvisosBookingTab({ hotelId }: { hotelId: string }) {
 
       {!loading && !error && (
     <div style={{ overflowX: 'auto', border: '1px solid var(--border)', borderRadius: 12 }}>
-      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, tableLayout: 'fixed', minWidth: 720 }}>
+      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, tableLayout: 'fixed', minWidth: 780 }}>
         <thead>
           <tr style={{ textAlign: 'left', fontSize: 11, textTransform: 'uppercase', letterSpacing: 0.3 }}>
             <th style={{ ...thAvisoStyle, width: 110 }}>Fecha</th>
             <th style={{ ...thAvisoStyle, width: 100 }}>Tipo</th>
-            <th style={thAvisoStyle}>Detalle</th>
+            <th style={{ ...thAvisoStyle, width: 260 }}>Detalle</th>
             <th style={{ ...thAvisoStyle, width: 110 }}>N° confirm.</th>
             <th style={{ ...thAvisoStyle, width: 80 }}>WhatsApp</th>
-            <th style={{ ...thAvisoStyle, width: 130, borderRight: 'none' }}></th>
+            <th style={{ ...thAvisoStyle, width: 140, borderRight: 'none' }}>Acción</th>
           </tr>
         </thead>
         <tbody>
