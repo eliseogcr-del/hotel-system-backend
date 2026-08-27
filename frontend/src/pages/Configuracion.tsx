@@ -1692,6 +1692,10 @@ const formInlineStyle: CSSProperties = {
   gap: 8,
   flexWrap: 'wrap',
   alignItems: 'center',
+  background: 'var(--form-bg)',
+  border: '1px solid var(--border)',
+  borderRadius: 'var(--radius)',
+  padding: 12,
 };
 
 const inputStyle: CSSProperties = {
@@ -1699,6 +1703,7 @@ const inputStyle: CSSProperties = {
   border: '1px solid var(--border)',
   borderRadius: 'var(--radius)',
   fontSize: 13,
+  background: 'var(--surface-1)',
 };
 
 const btnPrimary: CSSProperties = {

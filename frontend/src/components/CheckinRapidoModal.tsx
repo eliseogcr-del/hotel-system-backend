@@ -580,7 +580,7 @@ const overlayStyle: CSSProperties = {
 };
 
 const modalStyle: CSSProperties = {
-  background: 'var(--surface-0, var(--surface-1))',
+  background: 'var(--form-bg)',
   border: '1px solid var(--border)',
   borderRadius: 12,
   padding: 24,
@@ -617,6 +617,7 @@ const inputStyle: CSSProperties = {
   borderRadius: 'var(--radius)',
   fontSize: 13,
   boxSizing: 'border-box',
+  background: 'var(--surface-1)',
 };
 
 const btnPrimary: CSSProperties = {

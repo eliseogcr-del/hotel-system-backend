@@ -74,6 +74,12 @@
   --table-header-text-caja: #ffffff;
   --table-header-border-caja: #4f8f78;
 
+  /* Fondo de los formularios (crear/editar registros): celeste claro para
+     diferenciarlos del resto de la página. Los campos/combos/textareas
+     dentro siempre van en blanco (var(--surface-1)) para que contrasten
+     contra este celeste. */
+  --form-bg: #dcedf8;
+
   font-family: system-ui, 'Segoe UI', Roboto, sans-serif;
   color-scheme: light;
   color: var(--text-primary);

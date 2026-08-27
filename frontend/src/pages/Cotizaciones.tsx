@@ -202,7 +202,7 @@ function NuevaCotizacionForm({
     <form
       onSubmit={handleSubmit}
       style={{
-        background: 'var(--surface-1)',
+        background: 'var(--form-bg)',
         border: '1px solid var(--border)',
         borderRadius: 12,
         padding: 16,
@@ -279,6 +279,7 @@ const inputStyle: CSSProperties = {
   border: '1px solid var(--border)',
   borderRadius: 'var(--radius)',
   fontSize: 13,
+  background: 'var(--surface-1)',
 };
 
 const labelStyle: CSSProperties = {

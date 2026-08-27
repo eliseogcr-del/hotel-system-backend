@@ -538,7 +538,7 @@ function NuevaTareaForm({
     <form
       onSubmit={handleSubmit}
       style={{
-        background: 'var(--surface-1)',
+        background: 'var(--form-bg)',
         border: '1px solid var(--border)',
         borderRadius: 12,
         padding: 16,
@@ -599,6 +599,7 @@ const inputStyle: CSSProperties = {
   fontSize: 13,
   width: '100%',
   boxSizing: 'border-box',
+  background: 'var(--surface-1)',
 };
 
 const labelStyle: CSSProperties = {
