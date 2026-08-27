@@ -56,12 +56,24 @@ export class TareasHkService {
   ) {
     const { data: hab, error: habError } = await client
       .from('habitaciones')
-      .select('id')
+      .select('id, estado')
       .eq('id', dto.habitacionId)
       .eq('hotel_id', hotelId)
       .maybeSingle();
     if (habError) throw habError;
     if (!hab) throw new NotFoundException('La habitación no existe en este hotel');
+
+    // "Con huésped dentro" existe para que, al terminar la tarea, la
+    // habitación se quede 'ocupada' en vez de pasar a 'disponible' (ver
+    // terminar() más abajo) -- solo tiene sentido si de verdad hay un
+    // huésped ahí en este momento. Si se permite marcarlo con la
+    // habitación libre, la tarea la deja 'ocupada' sin ningún huésped real
+    // al terminar (bug real detectado en producción, habitación 202).
+    if (dto.conHuespedDentro && hab.estado !== 'ocupada') {
+      throw new BadRequestException(
+        `No se puede marcar "con huésped dentro": la habitación está en estado '${hab.estado}', no 'ocupada'.`,
+      );
+    }
 
     const { data, error } = await client
       .from('tareas_hk')

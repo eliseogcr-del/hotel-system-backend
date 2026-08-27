@@ -508,12 +508,24 @@ function NuevaTareaForm({
   const [enviando, setEnviando] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const habitacionSeleccionada = habitaciones.find((h) => h.id === habitacionId);
+  // "Con huésped dentro" hace que, al terminar la tarea, la habitación se
+  // quede 'ocupada' en vez de pasar a 'disponible' -- solo tiene sentido si
+  // de verdad hay un huésped ahí. El backend ya lo rechaza igual, esto es
+  // para que ni se pueda marcar por error desde acá (bug real que dejó la
+  // habitación 202 atascada en 'ocupada' sin huésped).
+  const puedeConHuesped = habitacionSeleccionada?.estado === 'ocupada';
+
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     setEnviando(true);
     setError(null);
     try {
-      await api.post(`/hoteles/${hotelId}/tareas-hk`, { habitacionId, tipo, conHuespedDentro });
+      await api.post(`/hoteles/${hotelId}/tareas-hk`, {
+        habitacionId,
+        tipo,
+        conHuespedDentro: puedeConHuesped && conHuespedDentro,
+      });
       onCreada();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'No se pudo crear la tarea');
@@ -554,8 +566,22 @@ function NuevaTareaForm({
           <option value="mantenimiento">Mantenimiento</option>
         </select>
       </div>
-      <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13 }}>
-        <input type="checkbox" checked={conHuespedDentro} onChange={(e) => setConHuespedDentro(e.target.checked)} />
+      <label
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 6,
+          fontSize: 13,
+          opacity: puedeConHuesped ? 1 : 0.5,
+        }}
+        title={puedeConHuesped ? undefined : 'Solo se puede marcar si la habitación está ocupada'}
+      >
+        <input
+          type="checkbox"
+          checked={puedeConHuesped && conHuespedDentro}
+          disabled={!puedeConHuesped}
+          onChange={(e) => setConHuespedDentro(e.target.checked)}
+        />
         Con huésped dentro
       </label>
       <button type="submit" disabled={enviando} style={btnPrimary}>
