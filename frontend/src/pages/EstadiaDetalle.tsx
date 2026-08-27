@@ -1129,7 +1129,7 @@ function TrasladoHabitacionModal({
 }) {
   const [habitaciones, setHabitaciones] = useState<HabitacionDisponible[]>([]);
   const [nuevaHabitacionId, setNuevaHabitacionId] = useState('');
-  const [habitacionQuedaLimpia, setHabitacionQuedaLimpia] = useState(true);
+  const [habitacionQuedaLimpia, setHabitacionQuedaLimpia] = useState(false);
   const [motivo, setMotivo] = useState('');
   const [enviando, setEnviando] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -1212,7 +1212,7 @@ function TrasladoHabitacionModal({
             </label>
             <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: '4px 0 0' }}>
               {habitacionQuedaLimpia
-                ? `Si está desmarcado, la ${habitacionActualNumero} queda disponible de inmediato.`
+                ? `La habitación ${habitacionActualNumero} queda disponible de inmediato.`
                 : `La habitación ${habitacionActualNumero} pasará a "limpieza" y se generará una tarea para HK.`}
             </p>
           </div>

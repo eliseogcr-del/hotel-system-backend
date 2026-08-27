@@ -467,7 +467,38 @@ export class EstadiasService {
       .eq('id', estadia.reserva_habitacion.id);
     if (rhError) throw rhError;
 
-    if (dto.habitacionQuedaLimpia) {
+    // Si la habitación que se deja tiene una tarea de mantenimiento todavía
+    // sin terminar (planificado o en_proceso), NO se puede simplemente
+    // dejarla 'disponible' ni crearle una segunda tarea de limpieza aparte
+    // -- esa tarea vieja sigue "con huésped dentro" y, si HK la termina
+    // después del traslado, terminar() la dejaría 'ocupada' de nuevo sin
+    // huésped real (bug real detectado en producción, habitación 202). En
+    // vez de eso, la tarea existente se reconvierte a limpieza (como si
+    // el traslado fuera un check-out) y HK la sigue viendo en su cola, sin
+    // duplicados.
+    const { data: tareaMantenimientoPendiente, error: tareaPendError } = await client
+      .from('tareas_hk')
+      .select('id')
+      .eq('habitacion_id', habitacionActualId)
+      .eq('tipo', 'mantenimiento')
+      .in('estado', ['planificado', 'en_proceso'])
+      .limit(1)
+      .maybeSingle();
+    if (tareaPendError) throw tareaPendError;
+
+    if (tareaMantenimientoPendiente) {
+      const { error } = await client
+        .from('habitaciones')
+        .update({ estado: 'limpieza' })
+        .eq('id', habitacionActualId);
+      if (error) throw error;
+
+      const { error: convError } = await client
+        .from('tareas_hk')
+        .update({ tipo: 'limpieza', con_huesped_dentro: false })
+        .eq('id', tareaMantenimientoPendiente.id);
+      if (convError) throw convError;
+    } else if (dto.habitacionQuedaLimpia) {
       const { error } = await client
         .from('habitaciones')
         .update({ estado: 'disponible' })
