@@ -71,6 +71,14 @@ interface ReporteVentas {
   totalTipo: number;
 }
 
+interface ReporteOcupabilidad {
+  desde: string;
+  hasta: string;
+  ingresosTotales: number;
+  diasOcupados: number;
+  ocupabilidad: number;
+}
+
 // Mismo criterio que el backend (ver comoRelojLima en estadias.service.ts /
 // caja.service.ts): sesiones_turno.fecha se guarda en hora de Lima, así que
 // "hoy" por defecto también debe calcularse en hora de Lima -- si se usa la
@@ -88,6 +96,10 @@ const METODO_LABEL: Record<string, string> = {
   transferencia: 'Transferencia',
   tarjeta: 'Tarjeta',
 };
+
+function inicioDeMes(fechaYMD: string): string {
+  return `${fechaYMD.slice(0, 7)}-01`;
+}
 
 function sumarDiasYMD(fechaYMD: string, dias: number): string {
   const [anio, mes, dia] = fechaYMD.split('-').map(Number);
@@ -126,6 +138,13 @@ export function Reportes() {
   const [ventas, setVentas] = useState<ReporteVentas | null>(null);
   const [ventasLoading, setVentasLoading] = useState(true);
   const [ventasError, setVentasError] = useState<string | null>(null);
+
+  // Ocupabilidad: por defecto, desde el inicio del mes hasta hoy.
+  const [ocupDesde, setOcupDesde] = useState(inicioDeMes(fechaHoy()));
+  const [ocupHasta, setOcupHasta] = useState(fechaHoy());
+  const [ocupabilidad, setOcupabilidad] = useState<ReporteOcupabilidad | null>(null);
+  const [ocupLoading, setOcupLoading] = useState(true);
+  const [ocupError, setOcupError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!hotelActual || hotelActual.rol !== 'admin') return;
@@ -175,6 +194,29 @@ export function Reportes() {
       vigente = false;
     };
   }, [hotelActual, ventasDesde, ventasHasta]);
+
+  useEffect(() => {
+    if (!hotelActual || hotelActual.rol !== 'admin' || !ocupDesde || !ocupHasta) return;
+    let vigente = true;
+    setOcupLoading(true);
+    setOcupError(null);
+    api
+      .get<ReporteOcupabilidad>(
+        `/hoteles/${hotelActual.hotelId}/reportes/ocupabilidad?desde=${ocupDesde}&hasta=${ocupHasta}`,
+      )
+      .then((data) => {
+        if (vigente) setOcupabilidad(data);
+      })
+      .catch((err) => {
+        if (vigente) setOcupError(err instanceof ApiError ? err.message : 'No se pudo cargar el reporte');
+      })
+      .finally(() => {
+        if (vigente) setOcupLoading(false);
+      });
+    return () => {
+      vigente = false;
+    };
+  }, [hotelActual, ocupDesde, ocupHasta]);
 
   if (!hotelActual) return null;
 
@@ -303,6 +345,52 @@ export function Reportes() {
               filas={ventas.porTipo}
               totalesPorDia={ventas.totalesPorDiaTipo}
               total={ventas.totalTipo}
+            />
+          </div>
+        )}
+      </div>
+
+      <div>
+        <h2 style={{ fontSize: 15, marginBottom: 4 }}>Ocupabilidad</h2>
+        <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '0 0 12px' }}>
+          Ingresos generados entre la suma de días hospedados de las estadías cuyo check-in cayó en el rango
+          seleccionado.
+        </p>
+
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 20 }}>
+          <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 12, color: 'var(--text-secondary)' }}>
+            Desde
+            <input
+              type="date"
+              value={ocupDesde}
+              max={ocupHasta}
+              onChange={(e) => setOcupDesde(e.target.value)}
+              style={inputStyle}
+            />
+          </label>
+          <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 12, color: 'var(--text-secondary)' }}>
+            Hasta
+            <input
+              type="date"
+              value={ocupHasta}
+              min={ocupDesde}
+              onChange={(e) => setOcupHasta(e.target.value)}
+              style={inputStyle}
+            />
+          </label>
+        </div>
+
+        {ocupError && <p style={{ color: 'var(--danger)', fontSize: 12, marginBottom: 12 }}>{ocupError}</p>}
+        {ocupLoading && <p style={{ color: 'var(--text-muted)' }}>Cargando...</p>}
+
+        {!ocupLoading && ocupabilidad && (
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12 }}>
+            <MetricCard label="Ingresos totales" value={`PEN ${formatoPEN(ocupabilidad.ingresosTotales)}`} />
+            <MetricCard label="Días ocupados" value={`${ocupabilidad.diasOcupados}`} />
+            <MetricCard
+              label="Ocupabilidad (PEN / día)"
+              value={`PEN ${formatoPEN(ocupabilidad.ocupabilidad)}`}
+              destacado
             />
           </div>
         )}
