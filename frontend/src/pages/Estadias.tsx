@@ -122,6 +122,14 @@ export function Estadias() {
     );
   }, [filas, filtroEstado]);
 
+  // Suma del saldo pendiente sobre las filas que quedan visibles según los
+  // filtros aplicados (no sobre todas las estadías del hotel).
+  const resumenSaldo = useMemo(() => {
+    const total = filasOrdenadas.reduce((acc, f) => acc + Number(f.estadias.saldo), 0);
+    const cantidadConSaldo = filasOrdenadas.filter((f) => Number(f.estadias.saldo) > 0).length;
+    return { total, cantidadConSaldo };
+  }, [filasOrdenadas]);
+
   if (!hotelActual) return null;
 
   return (
@@ -242,6 +250,34 @@ export function Estadias() {
 
       {loading && <p style={{ color: 'var(--text-muted)' }}>Cargando...</p>}
       {error && <p style={{ color: 'var(--danger)' }}>{error}</p>}
+
+      {!loading && !error && (
+        <div
+          style={{
+            display: 'flex',
+            justifyContent: 'flex-end',
+            alignItems: 'center',
+            gap: 8,
+            marginBottom: 8,
+            fontSize: 13,
+            color: 'var(--text-secondary)',
+          }}
+        >
+          Saldo pendiente de {resumenSaldo.cantidadConSaldo} estadía{resumenSaldo.cantidadConSaldo === 1 ? '' : 's'} (según filtro):
+          <span
+            style={{
+              fontWeight: 700,
+              fontSize: 15,
+              color: resumenSaldo.total > 0 ? 'var(--ocupada-text)' : 'var(--text-primary)',
+              background: resumenSaldo.total > 0 ? 'var(--saldo-pendiente-bg)' : 'transparent',
+              padding: '2px 10px',
+              borderRadius: 999,
+            }}
+          >
+            PEN {resumenSaldo.total.toFixed(2)}
+          </span>
+        </div>
+      )}
 
       {!loading && !error && (
         <div style={{ overflowX: 'auto', border: '1px solid var(--border)', borderRadius: 12 }}>
