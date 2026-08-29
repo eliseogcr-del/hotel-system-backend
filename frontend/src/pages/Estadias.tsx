@@ -70,6 +70,12 @@ export function Estadias() {
   const [filtroFacturable, setFiltroFacturable] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [total, setTotal] = useState(0);
+  // Paginación de 100 en 100: solo tiene efecto (el backend la ignora en
+  // los demás casos) cuando el filtro de estado es 'finalizada', el único
+  // historial que crece sin límite.
+  const [pagina, setPagina] = useState(1);
+  const POR_PAGINA = 100;
 
   useEffect(() => {
     const t = setTimeout(() => setBusquedaAplicada(busqueda.trim()), 300);
@@ -80,6 +86,13 @@ export function Estadias() {
     const t = setTimeout(() => setHabNumeroAplicado(habNumero.trim()), 300);
     return () => clearTimeout(t);
   }, [habNumero]);
+
+  // Cualquier cambio de filtro vuelve a la página 1 -- si no, se podría
+  // quedar mostrando "página 3" de un filtro nuevo que ni siquiera tiene
+  // esa cantidad de páginas.
+  useEffect(() => {
+    setPagina(1);
+  }, [filtroEstado, busquedaAplicada, habNumeroAplicado, checkinDesde, checkinHasta, soloConSaldo, filtroFacturable]);
 
   useEffect(() => {
     if (!hotelActual) return;
@@ -93,13 +106,17 @@ export function Estadias() {
     if (checkinHasta) params.set('checkinHasta', checkinHasta);
     if (soloConSaldo) params.set('conSaldo', 'true');
     if (filtroFacturable) params.set('facturable', filtroFacturable);
+    if (filtroEstado === 'finalizada') params.set('pagina', String(pagina));
     const query = params.toString() ? `?${params.toString()}` : '';
     api
-      .get<FilaEstadia[]>(`/hoteles/${hotelActual.hotelId}/estadias${query}`)
-      .then(setFilas)
+      .get<{ data: FilaEstadia[]; total: number }>(`/hoteles/${hotelActual.hotelId}/estadias${query}`)
+      .then((res) => {
+        setFilas(res.data);
+        setTotal(res.total);
+      })
       .catch((err) => setError(err instanceof ApiError ? err.message : 'Error al cargar'))
       .finally(() => setLoading(false));
-  }, [hotelActual, filtroEstado, busquedaAplicada, habNumeroAplicado, checkinDesde, checkinHasta, soloConSaldo, filtroFacturable]);
+  }, [hotelActual, filtroEstado, busquedaAplicada, habNumeroAplicado, checkinDesde, checkinHasta, soloConSaldo, filtroFacturable, pagina]);
 
   const filasOrdenadas = useMemo(() => {
     // En curso: por check-in (de mayor a menor). Finalizada: por check-out
@@ -255,26 +272,32 @@ export function Estadias() {
         <div
           style={{
             display: 'flex',
-            justifyContent: 'flex-end',
+            justifyContent: 'space-between',
             alignItems: 'center',
             gap: 8,
             marginBottom: 8,
             fontSize: 13,
             color: 'var(--text-secondary)',
+            flexWrap: 'wrap',
           }}
         >
-          Saldo pendiente de {resumenSaldo.cantidadConSaldo} estadía{resumenSaldo.cantidadConSaldo === 1 ? '' : 's'} (según filtro):
-          <span
-            style={{
-              fontWeight: 700,
-              fontSize: 15,
-              color: resumenSaldo.total > 0 ? 'var(--ocupada-text)' : 'var(--text-primary)',
-              background: resumenSaldo.total > 0 ? 'var(--saldo-pendiente-bg)' : 'transparent',
-              padding: '2px 10px',
-              borderRadius: 999,
-            }}
-          >
-            PEN {resumenSaldo.total.toFixed(2)}
+          <span>
+            {total} registro{total === 1 ? '' : 's'} encontrado{total === 1 ? '' : 's'}
+          </span>
+          <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            Saldo pendiente de {resumenSaldo.cantidadConSaldo} estadía{resumenSaldo.cantidadConSaldo === 1 ? '' : 's'} (según filtro):
+            <span
+              style={{
+                fontWeight: 700,
+                fontSize: 15,
+                color: resumenSaldo.total > 0 ? 'var(--ocupada-text)' : 'var(--text-primary)',
+                background: resumenSaldo.total > 0 ? 'var(--saldo-pendiente-bg)' : 'transparent',
+                padding: '2px 10px',
+                borderRadius: 999,
+              }}
+            >
+              PEN {resumenSaldo.total.toFixed(2)}
+            </span>
           </span>
         </div>
       )}
@@ -369,6 +392,48 @@ export function Estadias() {
           {filasOrdenadas.length === 0 && (
             <p style={{ color: 'var(--text-muted)', padding: 16 }}>No hay estadías en este estado.</p>
           )}
+        </div>
+      )}
+
+      {!loading && !error && filtroEstado === 'finalizada' && total > POR_PAGINA && (
+        <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 12, marginTop: 12, fontSize: 13 }}>
+          <button
+            type="button"
+            onClick={() => setPagina((p) => Math.max(1, p - 1))}
+            disabled={pagina <= 1}
+            style={{
+              padding: '6px 12px',
+              background: 'var(--surface-1)',
+              border: '1px solid var(--border)',
+              borderRadius: 'var(--radius)',
+              fontSize: 13,
+              color: 'var(--text-secondary)',
+              cursor: pagina <= 1 ? 'default' : 'pointer',
+              opacity: pagina <= 1 ? 0.5 : 1,
+            }}
+          >
+            ← Anterior
+          </button>
+          <span style={{ color: 'var(--text-secondary)' }}>
+            Página {pagina} de {Math.ceil(total / POR_PAGINA)}
+          </span>
+          <button
+            type="button"
+            onClick={() => setPagina((p) => Math.min(Math.ceil(total / POR_PAGINA), p + 1))}
+            disabled={pagina >= Math.ceil(total / POR_PAGINA)}
+            style={{
+              padding: '6px 12px',
+              background: 'var(--surface-1)',
+              border: '1px solid var(--border)',
+              borderRadius: 'var(--radius)',
+              fontSize: 13,
+              color: 'var(--text-secondary)',
+              cursor: pagina >= Math.ceil(total / POR_PAGINA) ? 'default' : 'pointer',
+              opacity: pagina >= Math.ceil(total / POR_PAGINA) ? 0.5 : 1,
+            }}
+          >
+            Siguiente →
+          </button>
         </div>
       )}
     </div>

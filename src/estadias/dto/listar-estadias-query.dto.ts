@@ -34,4 +34,12 @@ export class ListarEstadiasQueryDto {
   @IsOptional()
   @IsDateString()
   checkinHasta?: string;
+
+  // Solo se usa (y solo tiene efecto en el backend) cuando estado ===
+  // 'finalizada' -- el historial de estadías finalizadas crece sin límite,
+  // a diferencia de pendiente/en_curso que están acotadas a lo que hay
+  // activo hoy. Página 1-indexed, 100 registros por página.
+  @IsOptional()
+  @IsNumberString()
+  pagina?: string;
 }

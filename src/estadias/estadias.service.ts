@@ -798,51 +798,84 @@ export class EstadiasService {
     // nada.
     const embedHuespedes = busqueda ? 'huespedes!inner' : 'huespedes';
 
-    let query = client
-      .from('reserva_habitacion')
-      .select(
-        `
-        id, habitacion_id, tipo_alquiler, incluye_desayuno, tarifa_dia,
-        fecha_hora_checkin_prevista, fecha_hora_checkout_prevista,
-        habitaciones!inner(hab_numero, piso),
-        reservas!inner(hotel_id, huesped_id, ${embedHuespedes}(nombres, apellidos, tipo_doc, nro_doc, telefono, ruc, razon_social)),
-        estadias!inner(id, estado_actual, saldo, checkin_real, checkout_real, facturable)
-      `,
-      )
-      .eq('reservas.hotel_id', hotelId);
+    // Función local para no repetir los mismos filtros dos veces: primero
+    // se usa para contar cuántos registros hay en total (y así saber si la
+    // página pedida existe de verdad) y después, ya acotada, para traer los
+    // datos. PostgREST devuelve error 416 ("Requested range not
+    // satisfiable") si se pide un .range() más allá de las filas que
+    // existen -- por eso el conteo va primero.
+    const construirQuery = (opciones: { count: 'exact' | false; head?: boolean }) => {
+      let q = client
+        .from('reserva_habitacion')
+        .select(
+          `
+          id, habitacion_id, tipo_alquiler, incluye_desayuno, tarifa_dia,
+          fecha_hora_checkin_prevista, fecha_hora_checkout_prevista,
+          habitaciones!inner(hab_numero, piso),
+          reservas!inner(hotel_id, huesped_id, ${embedHuespedes}(nombres, apellidos, tipo_doc, nro_doc, telefono, ruc, razon_social)),
+          estadias!inner(id, estado_actual, saldo, checkin_real, checkout_real, facturable)
+        `,
+          opciones.count ? { count: opciones.count, head: opciones.head ?? false } : {},
+        )
+        .eq('reservas.hotel_id', hotelId);
 
-    if (busqueda) {
-      query = query.or(
-        `nombres.ilike.%${busqueda}%,apellidos.ilike.%${busqueda}%,nro_doc.ilike.%${busqueda}%,ruc.ilike.%${busqueda}%,razon_social.ilike.%${busqueda}%`,
-        { referencedTable: 'reservas.huespedes' },
-      );
+      if (busqueda) {
+        q = q.or(
+          `nombres.ilike.%${busqueda}%,apellidos.ilike.%${busqueda}%,nro_doc.ilike.%${busqueda}%,ruc.ilike.%${busqueda}%,razon_social.ilike.%${busqueda}%`,
+          { referencedTable: 'reservas.huespedes' },
+        );
+      }
+      if (filtros.estado) {
+        q = q.eq('estadias.estado_actual', filtros.estado);
+      }
+      if (filtros.conSaldo) {
+        q = q.gt('estadias.saldo', 0);
+      }
+      if (filtros.facturable !== undefined) {
+        q = q.eq('estadias.facturable', filtros.facturable === 'true');
+      }
+      if (filtros.habNumero) {
+        q = q.eq('habitaciones.hab_numero', Number(filtros.habNumero));
+      }
+      if (filtros.checkinDesde) {
+        q = q.gte('fecha_hora_checkin_prevista', this.fechaLimaAInstante(filtros.checkinDesde).toISOString());
+      }
+      if (filtros.checkinHasta) {
+        const hastaExclusivo = new Date(
+          this.fechaLimaAInstante(filtros.checkinHasta).getTime() + 24 * 60 * 60 * 1000,
+        );
+        q = q.lt('fecha_hora_checkin_prevista', hastaExclusivo.toISOString());
+      }
+      return q;
+    };
+
+    // Paginación de 100 en 100 solo para 'finalizada' -- es el único
+    // estado cuyo historial crece sin límite; pendiente/en_curso siempre
+    // están acotados a lo que hay activo hoy, así que se siguen trayendo
+    // completos.
+    if (filtros.estado === 'finalizada') {
+      const { count, error: countError } = await construirQuery({ count: 'exact', head: true });
+      if (countError) throw countError;
+      const total = count ?? 0;
+      const porPagina = 100;
+
+      if (total === 0) {
+        return { data: [], total: 0 };
+      }
+
+      const totalPaginas = Math.max(1, Math.ceil(total / porPagina));
+      const pagina = Math.min(totalPaginas, Math.max(1, Number(filtros.pagina) || 1));
+
+      const { data, error } = await construirQuery({ count: false })
+        .order('checkout_real', { referencedTable: 'estadias', ascending: false })
+        .range((pagina - 1) * porPagina, pagina * porPagina - 1);
+      if (error) throw error;
+      return { data, total };
     }
 
-    if (filtros.estado) {
-      query = query.eq('estadias.estado_actual', filtros.estado);
-    }
-    if (filtros.conSaldo) {
-      query = query.gt('estadias.saldo', 0);
-    }
-    if (filtros.facturable !== undefined) {
-      query = query.eq('estadias.facturable', filtros.facturable === 'true');
-    }
-    if (filtros.habNumero) {
-      query = query.eq('habitaciones.hab_numero', Number(filtros.habNumero));
-    }
-    if (filtros.checkinDesde) {
-      query = query.gte('fecha_hora_checkin_prevista', this.fechaLimaAInstante(filtros.checkinDesde).toISOString());
-    }
-    if (filtros.checkinHasta) {
-      const hastaExclusivo = new Date(
-        this.fechaLimaAInstante(filtros.checkinHasta).getTime() + 24 * 60 * 60 * 1000,
-      );
-      query = query.lt('fecha_hora_checkin_prevista', hastaExclusivo.toISOString());
-    }
-
-    const { data, error } = await query;
+    const { data, error, count } = await construirQuery({ count: 'exact' });
     if (error) throw error;
-    return data;
+    return { data: data ?? [], total: count ?? data?.length ?? 0 };
   }
 
   // Convierte una fecha 'YYYY-MM-DD' (elegida en un <input type="date">, que
