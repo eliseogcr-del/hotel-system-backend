@@ -274,6 +274,62 @@ export class ReportesService {
     };
   }
 
+  /**
+   * Solo admin: ocupabilidad del hotel entero en un rango de fechas --
+   * ingresos totales generados por las estadías cuyo check-in real cayó en
+   * ese rango, divididos entre la suma de días hospedados de esas mismas
+   * estadías (reserva_habitacion.dias, que se mantiene al día con
+   * extensiones -- ver EstadiasService). Se toma el check-in como fecha
+   * base (no el checkout ni la fecha del movimiento) porque así lo pidió
+   * el negocio: una estadía cuenta para el mes en que empezó, aunque sus
+   * cargos se sigan generando o pagando después.
+   */
+  async reporteOcupabilidad(client: SupabaseClient, hotelId: string, desde: string, hasta: string) {
+    if (hasta < desde) {
+      throw new BadRequestException('La fecha "hasta" no puede ser anterior a "desde".');
+    }
+
+    const desdeInstante = fechaLimaAInstante(desde);
+    const hastaInstanteExclusivo = new Date(fechaLimaAInstante(hasta).getTime() + 24 * 60 * 60 * 1000);
+
+    const { data: lineas, error } = await client
+      .from('reserva_habitacion')
+      .select(
+        `
+        id, dias,
+        reservas!inner(hotel_id),
+        estadias!inner(id, checkin_real)
+      `,
+      )
+      .eq('reservas.hotel_id', hotelId)
+      .gte('estadias.checkin_real', desdeInstante.toISOString())
+      .lt('estadias.checkin_real', hastaInstanteExclusivo.toISOString());
+    if (error) throw error;
+
+    const filas = lineas ?? [];
+    const diasOcupados = filas.reduce((acc, l) => acc + Number(l.dias), 0);
+    const estadiaIds = filas.map((l) => (l as any).estadias.id);
+
+    let ingresosTotales = 0;
+    if (estadiaIds.length > 0) {
+      const { data: movimientos, error: movError } = await client
+        .from('movimientos_cuenta')
+        .select('monto')
+        .neq('tipo', 'pago')
+        .in('estadia_id', estadiaIds);
+      if (movError) throw movError;
+      ingresosTotales = movimientos?.reduce((acc, m) => acc + Number(m.monto), 0) ?? 0;
+    }
+
+    return {
+      desde,
+      hasta,
+      ingresosTotales,
+      diasOcupados,
+      ocupabilidad: diasOcupados > 0 ? ingresosTotales / diasOcupados : 0,
+    };
+  }
+
   private sumar(movimientos: { monto: number }[]) {
     return movimientos.reduce((acc, m) => acc + Number(m.monto), 0);
   }
