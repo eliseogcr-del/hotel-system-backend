@@ -71,12 +71,29 @@ interface ReporteVentas {
   totalTipo: number;
 }
 
+interface FilaMatrizOcupabilidad {
+  habitacionId: string;
+  habNumero: number;
+  piso: number;
+  ocupacionPorDia: boolean[];
+  diasOcupados: number;
+}
+
+interface MatrizOcupabilidad {
+  dias: string[];
+  habitaciones: FilaMatrizOcupabilidad[];
+  totalesPorDia: number[];
+  promedioPorDia: number;
+  promedioPorHabitacion: number;
+}
+
 interface ReporteOcupabilidad {
   desde: string;
   hasta: string;
   ingresosTotales: number;
   diasOcupados: number;
   ocupabilidad: number;
+  matriz: MatrizOcupabilidad;
 }
 
 // Mismo criterio que el backend (ver comoRelojLima en estadias.service.ts /
@@ -384,16 +401,120 @@ export function Reportes() {
         {ocupLoading && <p style={{ color: 'var(--text-muted)' }}>Cargando...</p>}
 
         {!ocupLoading && ocupabilidad && (
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12 }}>
-            <MetricCard label="Ingresos totales" value={`PEN ${formatoPEN(ocupabilidad.ingresosTotales)}`} />
-            <MetricCard label="Días ocupados" value={`${ocupabilidad.diasOcupados}`} />
-            <MetricCard
-              label="Ocupabilidad (PEN / día)"
-              value={`PEN ${formatoPEN(ocupabilidad.ocupabilidad)}`}
-              destacado
-            />
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12 }}>
+              <MetricCard label="Ingresos totales" value={`PEN ${formatoPEN(ocupabilidad.ingresosTotales)}`} />
+              <MetricCard label="Días ocupados" value={`${ocupabilidad.diasOcupados}`} />
+              <MetricCard
+                label="Ocupabilidad (PEN / día)"
+                value={`PEN ${formatoPEN(ocupabilidad.ocupabilidad)}`}
+                destacado
+              />
+            </div>
+
+            <MatrizOcupabilidadTabla matriz={ocupabilidad.matriz} />
+
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12 }}>
+              <MetricCard
+                label="Promedio de ocupabilidad por día"
+                value={`${ocupabilidad.matriz.promedioPorDia.toFixed(1)} hab./día`}
+                destacado
+              />
+              <MetricCard
+                label="Promedio de ocupabilidad por habitación"
+                value={`${ocupabilidad.matriz.promedioPorHabitacion.toFixed(1)} días/hab.`}
+                destacado
+              />
+            </div>
           </div>
         )}
+      </div>
+    </div>
+  );
+}
+
+function MatrizOcupabilidadTabla({ matriz }: { matriz: MatrizOcupabilidad }) {
+  const totalCeldasOcupadas = matriz.totalesPorDia.reduce((a, b) => a + b, 0);
+
+  if (matriz.habitaciones.length === 0) {
+    return <p style={{ color: 'var(--text-muted)' }}>No hay habitaciones disponibles (sin contar bloqueadas).</p>;
+  }
+
+  return (
+    <div>
+      <p style={{ fontSize: 13, fontWeight: 600, margin: '0 0 8px' }}>Ocupación por habitación y día</p>
+      <div style={{ overflowX: 'auto', border: '1px solid var(--border)', borderRadius: 'var(--radius)' }}>
+        <table style={{ borderCollapse: 'collapse', fontSize: 12.5, minWidth: 480 }}>
+          <thead>
+            <tr>
+              <th style={{ ...thVentasStyle, position: 'sticky', left: 0, textAlign: 'left', background: 'var(--surface-2)' }}>
+                Habitación
+              </th>
+              {matriz.dias.map((d) => (
+                <th key={d} style={thVentasStyle}>
+                  {fechaCorta(d)}
+                </th>
+              ))}
+              <th style={{ ...thVentasStyle, background: 'var(--surface-2)' }}>Días ocupados</th>
+            </tr>
+          </thead>
+          <tbody>
+            {matriz.habitaciones.map((h) => (
+              <tr key={h.habitacionId}>
+                <td
+                  style={{
+                    ...tdVentasStyle,
+                    position: 'sticky',
+                    left: 0,
+                    textAlign: 'left',
+                    fontWeight: 600,
+                    background: 'var(--surface-1)',
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  {h.habNumero}
+                </td>
+                {h.ocupacionPorDia.map((ocupado, j) => (
+                  <td
+                    key={j}
+                    style={{
+                      ...tdVentasStyle,
+                      background: ocupado ? 'var(--ocupada-bg)' : 'transparent',
+                      color: ocupado ? 'var(--ocupada-text)' : 'var(--text-muted)',
+                      fontWeight: ocupado ? 700 : 400,
+                    }}
+                  >
+                    {ocupado ? '●' : ''}
+                  </td>
+                ))}
+                <td style={{ ...tdVentasStyle, fontWeight: 700, background: 'var(--brand-bg)' }}>{h.diasOcupados}</td>
+              </tr>
+            ))}
+            <tr style={{ borderTop: '2px solid var(--border-strong)' }}>
+              <td
+                style={{
+                  ...tdVentasStyle,
+                  position: 'sticky',
+                  left: 0,
+                  textAlign: 'left',
+                  fontWeight: 700,
+                  background: 'var(--surface-2)',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                Habitaciones ocupadas
+              </td>
+              {matriz.totalesPorDia.map((v, j) => (
+                <td key={j} style={{ ...tdVentasStyle, fontWeight: 700, background: 'var(--surface-2)' }}>
+                  {v}
+                </td>
+              ))}
+              <td style={{ ...tdVentasStyle, fontWeight: 700, background: 'var(--brand)', color: '#fff' }}>
+                {totalCeldasOcupadas}
+              </td>
+            </tr>
+          </tbody>
+        </table>
       </div>
     </div>
   );

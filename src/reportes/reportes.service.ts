@@ -279,24 +279,39 @@ export class ReportesService {
    * ingresos totales generados por las estadías cuyo check-in real cayó en
    * ese rango, divididos entre la suma de días hospedados de esas mismas
    * estadías (reserva_habitacion.dias, que se mantiene al día con
-   * extensiones -- ver EstadiasService). Se toma el check-in como fecha
-   * base (no el checkout ni la fecha del movimiento) porque así lo pidió
-   * el negocio: una estadía cuenta para el mes en que empezó, aunque sus
-   * cargos se sigan generando o pagando después.
+   * extensiones -- ver EstadiasService), más la matriz habitación x día
+   * para pintar visualmente qué habitación estuvo ocupada cada día. Se
+   * toma el check-in como fecha base (no el checkout ni la fecha del
+   * movimiento) porque así lo pidió el negocio: una estadía cuenta para el
+   * mes en que empezó, aunque sus cargos se sigan generando o pagando
+   * después, y su ocupación se pinta desde el día de check-in.
+   *
+   * Las habitaciones bloqueadas no entran como fila -- se excluyen por su
+   * estado ACTUAL (habitaciones.estado), no hay forma de saber si estaban
+   * bloqueadas día por día en el pasado.
    */
   async reporteOcupabilidad(client: SupabaseClient, hotelId: string, desde: string, hasta: string) {
     if (hasta < desde) {
       throw new BadRequestException('La fecha "hasta" no puede ser anterior a "desde".');
     }
 
+    const dias = rangoDiasYMD(desde, hasta);
     const desdeInstante = fechaLimaAInstante(desde);
     const hastaInstanteExclusivo = new Date(fechaLimaAInstante(hasta).getTime() + 24 * 60 * 60 * 1000);
+
+    const { data: habitaciones, error: habError } = await client
+      .from('habitaciones')
+      .select('id, hab_numero, piso')
+      .eq('hotel_id', hotelId)
+      .neq('estado', 'bloqueada')
+      .order('hab_numero', { ascending: true });
+    if (habError) throw habError;
 
     const { data: lineas, error } = await client
       .from('reserva_habitacion')
       .select(
         `
-        id, dias,
+        id, dias, habitacion_id,
         reservas!inner(hotel_id),
         estadias!inner(id, checkin_real)
       `,
@@ -321,12 +336,52 @@ export class ReportesService {
       ingresosTotales = movimientos?.reduce((acc, m) => acc + Number(m.monto), 0) ?? 0;
     }
 
+    // Días ocupados por habitación (recorta al rango del filtro: una
+    // estadía cuyo check-in cayó en el rango puede seguir varios días
+    // después de "hasta").
+    const ocupadoPorHabitacion = new Map<string, Set<string>>();
+    for (const l of filas) {
+      const habitacionId = (l as any).habitacion_id as string;
+      const checkinYMD = fechaLimaYMD((l as any).estadias.checkin_real);
+      let set = ocupadoPorHabitacion.get(habitacionId);
+      if (!set) {
+        set = new Set();
+        ocupadoPorHabitacion.set(habitacionId, set);
+      }
+      for (let i = 0; i < Number(l.dias); i++) {
+        const diaYMD = sumarDiasYMD(checkinYMD, i);
+        if (diaYMD > hasta) break;
+        set.add(diaYMD);
+      }
+    }
+
+    const matriz = (habitaciones ?? []).map((h) => {
+      const ocupados = ocupadoPorHabitacion.get(h.id) ?? new Set<string>();
+      return {
+        habitacionId: h.id,
+        habNumero: h.hab_numero,
+        piso: h.piso,
+        ocupacionPorDia: dias.map((d) => ocupados.has(d)),
+        diasOcupados: ocupados.size,
+      };
+    });
+
+    const totalesPorDia = dias.map((_, i) => matriz.reduce((acc, f) => acc + (f.ocupacionPorDia[i] ? 1 : 0), 0));
+    const totalCeldasOcupadas = totalesPorDia.reduce((a, b) => a + b, 0);
+
     return {
       desde,
       hasta,
       ingresosTotales,
       diasOcupados,
       ocupabilidad: diasOcupados > 0 ? ingresosTotales / diasOcupados : 0,
+      matriz: {
+        dias,
+        habitaciones: matriz,
+        totalesPorDia,
+        promedioPorDia: dias.length > 0 ? totalCeldasOcupadas / dias.length : 0,
+        promedioPorHabitacion: matriz.length > 0 ? totalCeldasOcupadas / matriz.length : 0,
+      },
     };
   }
 
