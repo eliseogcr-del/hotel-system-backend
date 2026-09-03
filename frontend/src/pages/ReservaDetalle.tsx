@@ -7,7 +7,7 @@ import { EstadoBadge } from './Reservas';
 interface Habitacion {
   id: string;
   hab_numero: number;
-  tipos_habitacion: { nombre: string } | null;
+  tipos_habitacion: { id: string; nombre: string } | null;
 }
 
 interface LineaReserva {
@@ -45,6 +45,7 @@ export function ReservaDetalle() {
   const [error, setError] = useState<string | null>(null);
   const [accionando, setAccionando] = useState(false);
   const [mostrarAgregar, setMostrarAgregar] = useState(false);
+  const [trasladando, setTrasladando] = useState<LineaReserva | null>(null);
 
   function cargar() {
     if (!hotelActual || !id) return;
@@ -188,7 +189,7 @@ export function ReservaDetalle() {
                 <td style={tdStyle}>{l.tarifa_dia}</td>
                 <td style={tdStyle}>{l.dias}</td>
                 <td style={tdStyle}>{l.subtotal}</td>
-                <td style={tdStyle}>
+                <td style={{ ...tdStyle, display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                   {reserva.estado === 'confirmada' && (
                     <button
                       onClick={() => hacerCheckin(l.id)}
@@ -196,6 +197,11 @@ export function ReservaDetalle() {
                       style={btnSecondary}
                     >
                       {haciendoCheckin === l.id ? 'Procesando...' : 'Check-in'}
+                    </button>
+                  )}
+                  {reserva.estado !== 'cancelada' && (
+                    <button onClick={() => setTrasladando(l)} style={btnSecondary}>
+                      Trasladar
                     </button>
                   )}
                 </td>
@@ -214,6 +220,20 @@ export function ReservaDetalle() {
       <p style={{ textAlign: 'right', fontWeight: 500, fontSize: 15, marginTop: 12 }}>
         Total: {reserva.moneda} {reserva.importe_final ?? 0}
       </p>
+
+      {trasladando && (
+        <TrasladarHabitacionModal
+          hotelId={hotelActual.hotelId}
+          reservaId={reserva.id}
+          linea={trasladando}
+          habitaciones={habitaciones}
+          onClose={() => setTrasladando(null)}
+          onTrasladado={() => {
+            setTrasladando(null);
+            cargar();
+          }}
+        />
+      )}
     </div>
   );
 }
@@ -309,6 +329,126 @@ function AgregarHabitacionForm({
     </form>
   );
 }
+
+function TrasladarHabitacionModal({
+  hotelId,
+  reservaId,
+  linea,
+  habitaciones,
+  onClose,
+  onTrasladado,
+}: {
+  hotelId: string;
+  reservaId: string;
+  linea: LineaReserva;
+  habitaciones: Habitacion[];
+  onClose: () => void;
+  onTrasladado: () => void;
+}) {
+  const [nuevaHabitacionId, setNuevaHabitacionId] = useState('');
+  const [enviando, setEnviando] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [aviso, setAviso] = useState<string | null>(null);
+
+  const opciones = habitaciones.filter((h) => h.id !== linea.habitacion_id);
+
+  async function confirmar(e: FormEvent) {
+    e.preventDefault();
+    if (!nuevaHabitacionId) return;
+    setEnviando(true);
+    setError(null);
+    try {
+      const resultado = await api.patch<{ avisoTipoHabitacion: string | null }>(
+        `/hoteles/${hotelId}/reservas/${reservaId}/habitaciones/${linea.id}/trasladar`,
+        { nuevaHabitacionId },
+      );
+      if (resultado.avisoTipoHabitacion) {
+        setAviso(resultado.avisoTipoHabitacion);
+      } else {
+        onTrasladado();
+      }
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'No se pudo trasladar la habitación');
+    } finally {
+      setEnviando(false);
+    }
+  }
+
+  return (
+    <div style={overlayStyle}>
+      <div style={{ ...modalStyle, maxWidth: 440 }}>
+        <h2 style={{ fontSize: 17, marginBottom: 4 }}>Trasladar habitación</h2>
+        <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '0 0 16px' }}>
+          Habitación actual: {linea.habitaciones?.hab_numero}. Se mantienen las mismas fechas de check-in y
+          check-out; solo cambia la habitación.
+        </p>
+
+        {aviso ? (
+          <>
+            <p style={{ fontSize: 13, color: 'var(--limpieza-text)', background: 'var(--limpieza-bg)', border: '1px solid var(--limpieza)', borderRadius: 'var(--radius)', padding: 10, marginBottom: 16 }}>
+              {aviso}
+            </p>
+            <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+              <button type="button" onClick={onTrasladado} style={btnPrimary}>
+                Entendido
+              </button>
+            </div>
+          </>
+        ) : (
+          <form onSubmit={confirmar} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            {error && <p style={{ color: 'var(--danger)', fontSize: 13 }}>{error}</p>}
+            <div>
+              <label style={labelStyle}>Nueva habitación</label>
+              <select
+                value={nuevaHabitacionId}
+                onChange={(e) => setNuevaHabitacionId(e.target.value)}
+                style={inputStyle}
+                required
+              >
+                <option value="">Selecciona una habitación...</option>
+                {opciones.map((h) => (
+                  <option key={h.id} value={h.id}>
+                    {h.hab_numero}
+                    {h.tipos_habitacion ? ` · ${h.tipos_habitacion.nombre}` : ''}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 4 }}>
+              <button type="button" onClick={onClose} style={btnSecondary}>
+                Cancelar
+              </button>
+              <button type="submit" disabled={enviando || !nuevaHabitacionId} style={btnPrimary}>
+                {enviando ? 'Trasladando...' : 'Confirmar traslado'}
+              </button>
+            </div>
+          </form>
+        )}
+      </div>
+    </div>
+  );
+}
+
+const overlayStyle: CSSProperties = {
+  position: 'fixed',
+  inset: 0,
+  background: 'rgba(0,0,0,0.5)',
+  display: 'flex',
+  alignItems: 'flex-start',
+  justifyContent: 'center',
+  padding: '40px 16px',
+  overflowY: 'auto',
+  zIndex: 100,
+};
+
+const modalStyle: CSSProperties = {
+  background: 'var(--form-bg)',
+  border: '1px solid var(--border)',
+  borderRadius: 12,
+  padding: 24,
+  width: '100%',
+};
 
 const thStyle: CSSProperties = { padding: '6px 8px' };
 const tdStyle: CSSProperties = { padding: '8px', color: 'var(--text-secondary)' };
