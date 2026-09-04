@@ -87,7 +87,6 @@ interface Props {
   modo24h?: boolean;
   reservaId?: string; // solo modo 'editar'
   lineaId?: string; // solo modo 'editar'
-  habitaciones?: HabitacionOpcion[]; // solo modo 'editar', para el traslado de habitación
   onClose: () => void;
   onGuardado: () => void;
 }
@@ -169,7 +168,6 @@ export function ReservaFormModal({
   modo24h,
   reservaId,
   lineaId,
-  habitaciones,
   onClose,
   onGuardado,
 }: Props) {
@@ -252,6 +250,20 @@ export function ReservaFormModal({
   const [nuevaHabitacionId, setNuevaHabitacionId] = useState('');
   const [trasladando, setTrasladando] = useState(false);
   const [avisoTraslado, setAvisoTraslado] = useState<string | null>(null);
+  const [opcionesTraslado, setOpcionesTraslado] = useState<HabitacionOpcion[] | null>(null);
+
+  // Solo las habitaciones realmente libres para las mismas fechas de esta
+  // línea (ver ReservasService.habitacionesDisponiblesParaTraslado) -- se
+  // carga recién al abrir la sección, no de entrada, para no pedirle esto
+  // al backend en cada edición de reserva aunque nunca se use.
+  useEffect(() => {
+    if (!mostrarTrasladar || !reservaId || !lineaId) return;
+    setOpcionesTraslado(null);
+    api
+      .get<HabitacionOpcion[]>(`/hoteles/${hotelId}/reservas/${reservaId}/habitaciones/${lineaId}/disponibles-traslado`)
+      .then(setOpcionesTraslado)
+      .catch((err) => setError(err instanceof ApiError ? err.message : 'No se pudo cargar las habitaciones disponibles'));
+  }, [mostrarTrasladar, hotelId, reservaId, lineaId]);
 
   useEffect(() => {
     if (modo !== 'editar' || !reservaId) return;
@@ -728,7 +740,7 @@ export function ReservaFormModal({
                 </button>
               )}
               <button type="button" onClick={() => setMostrarTrasladar((v) => !v)} style={btnSecondary}>
-                Trasladar habitación
+                Trasladar reserva
               </button>
               <button
                 type="button"
@@ -743,10 +755,10 @@ export function ReservaFormModal({
 
         {mostrarTrasladar && (
           <div style={{ ...cardStyle, marginBottom: 16 }}>
-            <p style={cardTitleStyle}>Trasladar habitación</p>
+            <p style={cardTitleStyle}>Trasladar reserva</p>
             <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '0 0 10px' }}>
               Habitación actual: {habNumero}. Se mantienen las mismas fechas de check-in y check-out; solo cambia
-              la habitación.
+              la habitación. Abajo solo aparecen las habitaciones libres para esas fechas.
             </p>
 
             {avisoTraslado ? (
@@ -782,17 +794,23 @@ export function ReservaFormModal({
                   value={nuevaHabitacionId}
                   onChange={(e) => setNuevaHabitacionId(e.target.value)}
                   style={{ ...inputStyle, maxWidth: 280 }}
+                  disabled={!opcionesTraslado}
                 >
-                  <option value="">Selecciona una habitación...</option>
-                  {(habitaciones ?? [])
-                    .filter((h) => h.id !== habitacionId)
-                    .map((h) => (
-                      <option key={h.id} value={h.id}>
-                        {h.hab_numero}
-                        {h.tipos_habitacion ? ` · ${h.tipos_habitacion.nombre}` : ''}
-                      </option>
-                    ))}
+                  <option value="">
+                    {!opcionesTraslado ? 'Cargando habitaciones disponibles...' : 'Selecciona una habitación...'}
+                  </option>
+                  {opcionesTraslado?.map((h) => (
+                    <option key={h.id} value={h.id}>
+                      {h.hab_numero}
+                      {h.tipos_habitacion ? ` · ${h.tipos_habitacion.nombre}` : ''}
+                    </option>
+                  ))}
                 </select>
+                {opcionesTraslado?.length === 0 && (
+                  <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: '4px 0 0' }}>
+                    No hay ninguna otra habitación libre para esas fechas.
+                  </p>
+                )}
                 <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
                   <button type="button" onClick={() => setMostrarTrasladar(false)} style={btnSecondary}>
                     Volver

@@ -201,7 +201,7 @@ export function ReservaDetalle() {
                   )}
                   {reserva.estado !== 'cancelada' && (
                     <button onClick={() => setTrasladando(l)} style={btnSecondary}>
-                      Trasladar
+                      Trasladar reserva
                     </button>
                   )}
                 </td>
@@ -226,7 +226,6 @@ export function ReservaDetalle() {
           hotelId={hotelActual.hotelId}
           reservaId={reserva.id}
           linea={trasladando}
-          habitaciones={habitaciones}
           onClose={() => setTrasladando(null)}
           onTrasladado={() => {
             setTrasladando(null);
@@ -334,14 +333,12 @@ function TrasladarHabitacionModal({
   hotelId,
   reservaId,
   linea,
-  habitaciones,
   onClose,
   onTrasladado,
 }: {
   hotelId: string;
   reservaId: string;
   linea: LineaReserva;
-  habitaciones: Habitacion[];
   onClose: () => void;
   onTrasladado: () => void;
 }) {
@@ -349,8 +346,14 @@ function TrasladarHabitacionModal({
   const [enviando, setEnviando] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [aviso, setAviso] = useState<string | null>(null);
+  const [opciones, setOpciones] = useState<Habitacion[] | null>(null);
 
-  const opciones = habitaciones.filter((h) => h.id !== linea.habitacion_id);
+  useEffect(() => {
+    api
+      .get<Habitacion[]>(`/hoteles/${hotelId}/reservas/${reservaId}/habitaciones/${linea.id}/disponibles-traslado`)
+      .then(setOpciones)
+      .catch((err) => setError(err instanceof ApiError ? err.message : 'No se pudo cargar las habitaciones disponibles'));
+  }, [hotelId, reservaId, linea.id]);
 
   async function confirmar(e: FormEvent) {
     e.preventDefault();
@@ -377,10 +380,10 @@ function TrasladarHabitacionModal({
   return (
     <div style={overlayStyle}>
       <div style={{ ...modalStyle, maxWidth: 440 }}>
-        <h2 style={{ fontSize: 17, marginBottom: 4 }}>Trasladar habitación</h2>
+        <h2 style={{ fontSize: 17, marginBottom: 4 }}>Trasladar reserva</h2>
         <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '0 0 16px' }}>
           Habitación actual: {linea.habitaciones?.hab_numero}. Se mantienen las mismas fechas de check-in y
-          check-out; solo cambia la habitación.
+          check-out; solo cambia la habitación. Abajo solo aparecen las habitaciones libres para esas fechas.
         </p>
 
         {aviso ? (
@@ -404,15 +407,23 @@ function TrasladarHabitacionModal({
                 onChange={(e) => setNuevaHabitacionId(e.target.value)}
                 style={inputStyle}
                 required
+                disabled={!opciones}
               >
-                <option value="">Selecciona una habitación...</option>
-                {opciones.map((h) => (
+                <option value="">
+                  {!opciones ? 'Cargando habitaciones disponibles...' : 'Selecciona una habitación...'}
+                </option>
+                {opciones?.map((h) => (
                   <option key={h.id} value={h.id}>
                     {h.hab_numero}
                     {h.tipos_habitacion ? ` · ${h.tipos_habitacion.nombre}` : ''}
                   </option>
                 ))}
               </select>
+              {opciones?.length === 0 && (
+                <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: '4px 0 0' }}>
+                  No hay ninguna otra habitación libre para esas fechas.
+                </p>
+              )}
             </div>
 
             <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 4 }}>

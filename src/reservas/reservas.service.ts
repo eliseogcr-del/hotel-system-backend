@@ -689,6 +689,62 @@ export class ReservasService {
   }
 
   /**
+   * Habitaciones que se pueden ofrecer como destino de un traslado (ver
+   * trasladarHabitacionLinea): mismo hotel, no bloqueadas, no la actual, y
+   * realmente libres para las MISMAS fechas de la línea -- mismo motor de
+   * disponibilidad que el resto del sistema, así el combo del frontend no
+   * ofrece una habitación que el traslado luego va a rechazar.
+   */
+  async habitacionesDisponiblesParaTraslado(
+    client: SupabaseClient,
+    hotelId: string,
+    reservaId: string,
+    lineaId: string,
+  ) {
+    const { data: rh, error: rhError } = await client
+      .from('reserva_habitacion')
+      .select(
+        `
+        id, habitacion_id, fecha_hora_checkin_prevista, fecha_hora_checkout_prevista,
+        reservas!inner(hotel_id)
+      `,
+      )
+      .eq('id', lineaId)
+      .eq('reserva_id', reservaId)
+      .maybeSingle();
+    if (rhError) throw rhError;
+
+    const rhData = rh as any;
+    if (!rh || rhData.reservas.hotel_id !== hotelId) {
+      throw new NotFoundException('La línea de reserva no existe en este hotel');
+    }
+
+    const { data: habitaciones, error: habError } = await client
+      .from('habitaciones')
+      .select('id, hab_numero, piso, tipos_habitacion(nombre)')
+      .eq('hotel_id', hotelId)
+      .neq('estado', 'bloqueada')
+      .neq('id', rhData.habitacion_id)
+      .order('hab_numero', { ascending: true });
+    if (habError) throw habError;
+
+    const candidatas = await Promise.all(
+      (habitaciones ?? []).map(async (h) => {
+        const resultado = await this.disponibilidad.validar(client, {
+          hotelId,
+          habitacionId: h.id,
+          checkinPrevisto: rhData.fecha_hora_checkin_prevista,
+          checkoutPrevisto: rhData.fecha_hora_checkout_prevista,
+          excluirReservaHabitacionId: lineaId,
+        });
+        return resultado.disponible ? h : null;
+      }),
+    );
+
+    return candidatas.filter((h): h is NonNullable<typeof h> => h !== null);
+  }
+
+  /**
    * Traslado de una línea de reserva (todavía sin check-in) a otra
    * habitación, MISMAS fechas -- solo se reasigna reserva_habitacion.
    * habitacion_id, tarifa y subtotal quedan igual que estaban (mismo

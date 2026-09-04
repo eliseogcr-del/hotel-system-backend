@@ -137,6 +137,18 @@ export class ReservasController {
     );
   }
 
+  @Get(':id/habitaciones/:lineaId/disponibles-traslado')
+  @Roles('admin', 'recepcion')
+  async habitacionesDisponiblesTraslado(
+    @Param('hotelId') hotelId: string,
+    @Param('id') id: string,
+    @Param('lineaId') lineaId: string,
+    @CurrentUser() user: RequestUser,
+  ) {
+    const client = this.supabase.getClientForRequest(user.accessToken);
+    return this.reservasService.habitacionesDisponiblesParaTraslado(client, hotelId, id, lineaId);
+  }
+
   @Patch(':id/habitaciones/:lineaId/trasladar')
   @Roles('admin', 'recepcion')
   async trasladarHabitacion(
