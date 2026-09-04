@@ -71,6 +71,13 @@ interface ReporteVentas {
   totalTipo: number;
 }
 
+interface ReporteAnticipos {
+  dias: string[];
+  porMetodo: FilaVentas[];
+  totalesPorDiaMetodo: number[];
+  totalMetodo: number;
+}
+
 interface FilaMatrizOcupabilidad {
   habitacionId: string;
   habNumero: number;
@@ -156,6 +163,13 @@ export function Reportes() {
   const [ventasLoading, setVentasLoading] = useState(true);
   const [ventasError, setVentasError] = useState<string | null>(null);
 
+  // Anticipos: mismo criterio por defecto que ventas diarias (últimos 7 días).
+  const [anticiposDesde, setAnticiposDesde] = useState(sumarDiasYMD(fechaHoy(), -6));
+  const [anticiposHasta, setAnticiposHasta] = useState(fechaHoy());
+  const [anticipos, setAnticipos] = useState<ReporteAnticipos | null>(null);
+  const [anticiposLoading, setAnticiposLoading] = useState(true);
+  const [anticiposError, setAnticiposError] = useState<string | null>(null);
+
   // Ocupabilidad: por defecto, desde el inicio del mes hasta hoy.
   const [ocupDesde, setOcupDesde] = useState(inicioDeMes(fechaHoy()));
   const [ocupHasta, setOcupHasta] = useState(fechaHoy());
@@ -211,6 +225,29 @@ export function Reportes() {
       vigente = false;
     };
   }, [hotelActual, ventasDesde, ventasHasta]);
+
+  useEffect(() => {
+    if (!hotelActual || hotelActual.rol !== 'admin' || !anticiposDesde || !anticiposHasta) return;
+    let vigente = true;
+    setAnticiposLoading(true);
+    setAnticiposError(null);
+    api
+      .get<ReporteAnticipos>(
+        `/hoteles/${hotelActual.hotelId}/reportes/anticipos?desde=${anticiposDesde}&hasta=${anticiposHasta}`,
+      )
+      .then((data) => {
+        if (vigente) setAnticipos(data);
+      })
+      .catch((err) => {
+        if (vigente) setAnticiposError(err instanceof ApiError ? err.message : 'No se pudo cargar el reporte');
+      })
+      .finally(() => {
+        if (vigente) setAnticiposLoading(false);
+      });
+    return () => {
+      vigente = false;
+    };
+  }, [hotelActual, anticiposDesde, anticiposHasta]);
 
   useEffect(() => {
     if (!hotelActual || hotelActual.rol !== 'admin' || !ocupDesde || !ocupHasta) return;
@@ -364,6 +401,50 @@ export function Reportes() {
               total={ventas.totalTipo}
             />
           </div>
+        )}
+      </div>
+
+      <div>
+        <h2 style={{ fontSize: 15, marginBottom: 4 }}>Anticipos</h2>
+        <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '0 0 12px' }}>
+          Pagos adelantados de reserva de todo el hotel en el rango seleccionado, por método de pago. Los que no son
+          en efectivo no pasan por la caja de ninguna recepcionista, así que no aparecen en "Ventas diarias".
+        </p>
+
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 20 }}>
+          <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 12, color: 'var(--text-secondary)' }}>
+            Desde
+            <input
+              type="date"
+              value={anticiposDesde}
+              max={anticiposHasta}
+              onChange={(e) => setAnticiposDesde(e.target.value)}
+              style={inputStyle}
+            />
+          </label>
+          <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 12, color: 'var(--text-secondary)' }}>
+            Hasta
+            <input
+              type="date"
+              value={anticiposHasta}
+              min={anticiposDesde}
+              onChange={(e) => setAnticiposHasta(e.target.value)}
+              style={inputStyle}
+            />
+          </label>
+        </div>
+
+        {anticiposError && <p style={{ color: 'var(--danger)', fontSize: 12, marginBottom: 12 }}>{anticiposError}</p>}
+        {anticiposLoading && <p style={{ color: 'var(--text-muted)' }}>Cargando...</p>}
+
+        {!anticiposLoading && anticipos && (
+          <TablaVentas
+            titulo="Anticipos por método de pago"
+            dias={anticipos.dias}
+            filas={anticipos.porMetodo.map((f) => ({ ...f, etiqueta: METODO_LABEL[f.etiqueta] ?? f.etiqueta }))}
+            totalesPorDia={anticipos.totalesPorDiaMetodo}
+            total={anticipos.totalMetodo}
+          />
         )}
       </div>
 
