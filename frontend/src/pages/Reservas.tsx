@@ -280,6 +280,7 @@ export function Reservas() {
           fechaInicial={formulario.fechaInicial}
           reservaId={formulario.reservaId}
           lineaId={formulario.lineaId}
+          habitaciones={habitaciones}
           onClose={() => setFormulario(null)}
           onGuardado={recargarCalendario}
         />

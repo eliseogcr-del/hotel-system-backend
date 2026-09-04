@@ -40,6 +40,12 @@ interface ReservaHabitacionDetalle {
   vehiculos: { marca: string | null; tipo: string | null; placa: string | null } | null;
 }
 
+interface HabitacionOpcion {
+  id: string;
+  hab_numero: number;
+  tipos_habitacion: { nombre: string } | null;
+}
+
 interface AnticipoExistente {
   id: string;
   monto: number;
@@ -81,6 +87,7 @@ interface Props {
   modo24h?: boolean;
   reservaId?: string; // solo modo 'editar'
   lineaId?: string; // solo modo 'editar'
+  habitaciones?: HabitacionOpcion[]; // solo modo 'editar', para el traslado de habitación
   onClose: () => void;
   onGuardado: () => void;
 }
@@ -162,6 +169,7 @@ export function ReservaFormModal({
   modo24h,
   reservaId,
   lineaId,
+  habitaciones,
   onClose,
   onGuardado,
 }: Props) {
@@ -239,6 +247,11 @@ export function ReservaFormModal({
   const [mostrarAnular, setMostrarAnular] = useState(false);
   const [motivoAnulacion, setMotivoAnulacion] = useState('');
   const [anulando, setAnulando] = useState(false);
+
+  const [mostrarTrasladar, setMostrarTrasladar] = useState(false);
+  const [nuevaHabitacionId, setNuevaHabitacionId] = useState('');
+  const [trasladando, setTrasladando] = useState(false);
+  const [avisoTraslado, setAvisoTraslado] = useState<string | null>(null);
 
   useEffect(() => {
     if (modo !== 'editar' || !reservaId) return;
@@ -641,6 +654,32 @@ export function ReservaFormModal({
     }
   }
 
+  // Traslada esta línea de reserva a otra habitación, MISMAS fechas (ver
+  // ReservasService.trasladarHabitacionLinea) -- si el tipo de habitación
+  // destino es distinto, el backend devuelve avisoTipoHabitacion en vez de
+  // bloquear, y recién al confirmarlo ("Entendido") se cierra el modal.
+  async function confirmarTraslado() {
+    if (!reservaId || !lineaId || !nuevaHabitacionId) return;
+    setTrasladando(true);
+    setError(null);
+    try {
+      const resultado = await api.patch<{ avisoTipoHabitacion: string | null }>(
+        `/hoteles/${hotelId}/reservas/${reservaId}/habitaciones/${lineaId}/trasladar`,
+        { nuevaHabitacionId },
+      );
+      if (resultado.avisoTipoHabitacion) {
+        setAvisoTraslado(resultado.avisoTipoHabitacion);
+      } else {
+        onGuardado();
+        onClose();
+      }
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'No se pudo trasladar la habitación');
+    } finally {
+      setTrasladando(false);
+    }
+  }
+
   // Convierte esta línea de reserva en una estadía real (copia sus datos y
   // anticipos): solo el día que corresponde y con la habitación libre, lo
   // valida el backend. Lo que falte se termina de editar ya en
@@ -688,6 +727,9 @@ export function ReservaFormModal({
                   {haciendoCheckin ? 'Procesando...' : 'Hacer check-in'}
                 </button>
               )}
+              <button type="button" onClick={() => setMostrarTrasladar((v) => !v)} style={btnSecondary}>
+                Trasladar habitación
+              </button>
               <button
                 type="button"
                 onClick={() => setMostrarAnular((v) => !v)}
@@ -698,6 +740,76 @@ export function ReservaFormModal({
             </div>
           )}
         </div>
+
+        {mostrarTrasladar && (
+          <div style={{ ...cardStyle, marginBottom: 16 }}>
+            <p style={cardTitleStyle}>Trasladar habitación</p>
+            <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '0 0 10px' }}>
+              Habitación actual: {habNumero}. Se mantienen las mismas fechas de check-in y check-out; solo cambia
+              la habitación.
+            </p>
+
+            {avisoTraslado ? (
+              <>
+                <p
+                  style={{
+                    fontSize: 13,
+                    color: 'var(--limpieza-text)',
+                    background: 'var(--limpieza-bg)',
+                    border: '1px solid var(--limpieza)',
+                    borderRadius: 'var(--radius)',
+                    padding: 10,
+                    marginBottom: 10,
+                  }}
+                >
+                  {avisoTraslado}
+                </p>
+                <button
+                  type="button"
+                  onClick={() => {
+                    onGuardado();
+                    onClose();
+                  }}
+                  style={btnPrimary}
+                >
+                  Entendido
+                </button>
+              </>
+            ) : (
+              <>
+                <label style={labelStyle}>Nueva habitación</label>
+                <select
+                  value={nuevaHabitacionId}
+                  onChange={(e) => setNuevaHabitacionId(e.target.value)}
+                  style={{ ...inputStyle, maxWidth: 280 }}
+                >
+                  <option value="">Selecciona una habitación...</option>
+                  {(habitaciones ?? [])
+                    .filter((h) => h.id !== habitacionId)
+                    .map((h) => (
+                      <option key={h.id} value={h.id}>
+                        {h.hab_numero}
+                        {h.tipos_habitacion ? ` · ${h.tipos_habitacion.nombre}` : ''}
+                      </option>
+                    ))}
+                </select>
+                <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
+                  <button type="button" onClick={() => setMostrarTrasladar(false)} style={btnSecondary}>
+                    Volver
+                  </button>
+                  <button
+                    type="button"
+                    onClick={confirmarTraslado}
+                    disabled={trasladando || !nuevaHabitacionId}
+                    style={btnPrimary}
+                  >
+                    {trasladando ? 'Trasladando...' : 'Confirmar traslado'}
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        )}
 
         {mostrarAnular && (
           <div
