@@ -853,8 +853,69 @@ export class EstadiasService {
     // estado cuyo historial crece sin límite; pendiente/en_curso siempre
     // están acotados a lo que hay activo hoy, así que se siguen trayendo
     // completos.
+    //
+    // Esta rama NO puede reusar construirQuery(): esa consulta parte DE
+    // reserva_habitacion y trae estadias como recurso embebido (relación
+    // "a uno"), y en PostgREST el .order(col, { referencedTable }) solo
+    // reordena recursos embebidos "a muchos" -- en una relación "a uno" no
+    // tiene ningún efecto sobre el orden de las filas del nivel superior.
+    // Resultado real: .range() paginaba reserva_habitacion en un orden
+    // esencialmente arbitrario (no por checkout_real), así que una
+    // estadía recién finalizada podía caer en cualquier página en vez de
+    // aparecer primero -- el bug reportado ("la habitación que salió hoy
+    // no aparece en el filtro"). La solución es partir DE estadias, donde
+    // checkout_real ya es una columna del nivel superior y el .order() sí
+    // ordena las filas que se van a paginar.
     if (filtros.estado === 'finalizada') {
-      const { count, error: countError } = await construirQuery({ count: 'exact', head: true });
+      const construirQueryFinalizada = (opciones: { count: 'exact' | false; head?: boolean }) => {
+        let q = client
+          .from('estadias')
+          .select(
+            `
+            id, estado_actual, saldo, checkin_real, checkout_real, facturable,
+            reserva_habitacion!inner(
+              id, habitacion_id, tipo_alquiler, incluye_desayuno, tarifa_dia,
+              fecha_hora_checkin_prevista, fecha_hora_checkout_prevista,
+              habitaciones!inner(hab_numero, piso),
+              reservas!inner(hotel_id, huesped_id, ${embedHuespedes}(nombres, apellidos, tipo_doc, nro_doc, telefono, ruc, razon_social))
+            )
+          `,
+            opciones.count ? { count: opciones.count, head: opciones.head ?? false } : {},
+          )
+          .eq('reserva_habitacion.reservas.hotel_id', hotelId)
+          .eq('estado_actual', 'finalizada');
+
+        if (busqueda) {
+          q = q.or(
+            `nombres.ilike.%${busqueda}%,apellidos.ilike.%${busqueda}%,nro_doc.ilike.%${busqueda}%,ruc.ilike.%${busqueda}%,razon_social.ilike.%${busqueda}%`,
+            { referencedTable: 'reserva_habitacion.reservas.huespedes' },
+          );
+        }
+        if (filtros.conSaldo) {
+          q = q.gt('saldo', 0);
+        }
+        if (filtros.facturable !== undefined) {
+          q = q.eq('facturable', filtros.facturable === 'true');
+        }
+        if (filtros.habNumero) {
+          q = q.eq('reserva_habitacion.habitaciones.hab_numero', Number(filtros.habNumero));
+        }
+        if (filtros.checkinDesde) {
+          q = q.gte(
+            'reserva_habitacion.fecha_hora_checkin_prevista',
+            this.fechaLimaAInstante(filtros.checkinDesde).toISOString(),
+          );
+        }
+        if (filtros.checkinHasta) {
+          const hastaExclusivo = new Date(
+            this.fechaLimaAInstante(filtros.checkinHasta).getTime() + 24 * 60 * 60 * 1000,
+          );
+          q = q.lt('reserva_habitacion.fecha_hora_checkout_prevista', hastaExclusivo.toISOString());
+        }
+        return q;
+      };
+
+      const { count, error: countError } = await construirQueryFinalizada({ count: 'exact', head: true });
       if (countError) throw countError;
       const total = count ?? 0;
       const porPagina = 100;
@@ -866,11 +927,21 @@ export class EstadiasService {
       const totalPaginas = Math.max(1, Math.ceil(total / porPagina));
       const pagina = Math.min(totalPaginas, Math.max(1, Number(filtros.pagina) || 1));
 
-      const { data, error } = await construirQuery({ count: false })
-        .order('checkout_real', { referencedTable: 'estadias', ascending: false })
+      const { data, error } = await construirQueryFinalizada({ count: false })
+        .order('checkout_real', { ascending: false })
         .range((pagina - 1) * porPagina, pagina * porPagina - 1);
       if (error) throw error;
-      return { data, total };
+
+      // Se acomoda de vuelta a la forma que espera el frontend (la misma
+      // que devuelve construirQuery(): filas de reserva_habitacion con
+      // "estadias" anidado), para no tener que tocar nada del lado del
+      // cliente.
+      const dataAcomodada = (data ?? []).map((e: any) => {
+        const { reserva_habitacion, ...estadiaFields } = e;
+        return { ...reserva_habitacion, estadias: estadiaFields };
+      });
+
+      return { data: dataAcomodada, total };
     }
 
     const { data, error, count } = await construirQuery({ count: 'exact' });
