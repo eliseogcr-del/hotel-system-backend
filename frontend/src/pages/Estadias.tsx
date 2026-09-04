@@ -217,7 +217,7 @@ export function Estadias() {
           onChange={(e) => setFiltroFacturable(e.target.value)}
           style={{ padding: '8px 10px', border: '1px solid var(--border)', borderRadius: 'var(--radius)', fontSize: 13 }}
         >
-          <option value="">Facturable: todas</option>
+          <option value="">Todas</option>
           <option value="true">Solo facturables</option>
           <option value="false">Solo no facturables</option>
         </select>
