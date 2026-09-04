@@ -275,6 +275,62 @@ export class ReportesService {
   }
 
   /**
+   * Solo admin: anticipos (pagos adelantados de reserva) del hotel entero
+   * en un rango de fechas, como tabla dinámica por método de pago -- mismo
+   * formato que ventasDiarias(). Existe aparte porque los anticipos que NO
+   * son en efectivo nunca generan un movimientos_caja (ver
+   * ReservasService.procesarAnticipo: solo el efectivo pasa por la caja del
+   * recepcionista, yape/transferencia/tarjeta van directo a la cuenta de la
+   * empresa) -- así que "ventas diarias" nunca los iba a mostrar, aunque sí
+   * es dinero real cobrado por el hotel. Se agrupa por el día real del
+   * anticipo (anticipos_reserva.fecha en hora Lima), no por la fecha de la
+   * reserva que originan (que puede ser muy a futuro).
+   */
+  async anticiposDiarios(client: SupabaseClient, hotelId: string, desde: string, hasta: string) {
+    if (hasta < desde) {
+      throw new BadRequestException('La fecha "hasta" no puede ser anterior a "desde".');
+    }
+
+    const dias = rangoDiasYMD(desde, hasta);
+    const desdeInstante = fechaLimaAInstante(desde);
+    const hastaInstanteExclusivo = new Date(fechaLimaAInstante(hasta).getTime() + 24 * 60 * 60 * 1000);
+
+    const { data: anticipos, error } = await client
+      .from('anticipos_reserva')
+      .select('id, monto, metodo_pago, fecha, reservas!inner(hotel_id)')
+      .eq('reservas.hotel_id', hotelId)
+      .gte('fecha', desdeInstante.toISOString())
+      .lt('fecha', hastaInstanteExclusivo.toISOString());
+    if (error) throw error;
+
+    const indiceDia = new Map(dias.map((d, i) => [d, i]));
+    const porMetodoMap = new Map<string, number[]>();
+    for (const m of METODOS_PAGO) porMetodoMap.set(m, new Array(dias.length).fill(0));
+
+    for (const a of anticipos ?? []) {
+      const valores = porMetodoMap.get(a.metodo_pago);
+      if (!valores) continue; // no debería pasar (METODOS_PAGO ya cubre todo), por si acaso
+      const idxDia = indiceDia.get(fechaLimaYMD(a.fecha));
+      if (idxDia === undefined) continue;
+      valores[idxDia] += Number(a.monto);
+    }
+
+    const porMetodo = METODOS_PAGO.map((m) => {
+      const valores = porMetodoMap.get(m)!;
+      return { etiqueta: m, valores, total: valores.reduce((acc, v) => acc + v, 0) };
+    });
+    const totalesPorDia = dias.map((_, i) => porMetodo.reduce((acc, f) => acc + f.valores[i], 0));
+    const total = totalesPorDia.reduce((a, b) => a + b, 0);
+
+    return {
+      dias,
+      porMetodo,
+      totalesPorDiaMetodo: totalesPorDia,
+      totalMetodo: total,
+    };
+  }
+
+  /**
    * Solo admin: ocupabilidad del hotel entero en un rango de fechas --
    * ingresos totales generados por las estadías cuyo check-in real cayó en
    * ese rango, divididos entre la suma de días hospedados de esas mismas

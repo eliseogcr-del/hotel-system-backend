@@ -9,6 +9,7 @@ import { ReportesService } from './reportes.service';
 import { ReporteCajaQueryDto } from './dto/reporte-caja-query.dto';
 import { ReporteVentasQueryDto } from './dto/reporte-ventas-query.dto';
 import { ReporteOcupabilidadQueryDto } from './dto/reporte-ocupabilidad-query.dto';
+import { ReporteAnticiposQueryDto } from './dto/reporte-anticipos-query.dto';
 
 // Solo admin: reportes consolidados de todo el hotel (todas las
 // recepcionistas), a diferencia de Caja que cada quien solo ve la suya.
@@ -40,6 +41,17 @@ export class ReportesController {
   ) {
     const client = this.supabase.getClientForRequest(user.accessToken);
     return this.reportesService.ventasDiarias(client, hotelId, query.desde, query.hasta);
+  }
+
+  @Get('anticipos')
+  @Roles('admin')
+  async anticipos(
+    @Param('hotelId') hotelId: string,
+    @Query() query: ReporteAnticiposQueryDto,
+    @CurrentUser() user: RequestUser,
+  ) {
+    const client = this.supabase.getClientForRequest(user.accessToken);
+    return this.reportesService.anticiposDiarios(client, hotelId, query.desde, query.hasta);
   }
 
   @Get('ocupabilidad')
