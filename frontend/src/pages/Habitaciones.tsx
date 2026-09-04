@@ -683,7 +683,6 @@ export function Habitaciones() {
           modo="editar"
           reservaId={reservaModal.reservaHoy.reservaId}
           lineaId={reservaModal.reservaHoy.lineaId}
-          habitaciones={habitaciones}
           onClose={() => setReservaModal(null)}
           onGuardado={cargarSiAutomatico}
         />
