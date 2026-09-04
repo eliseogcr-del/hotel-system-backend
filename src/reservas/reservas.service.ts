@@ -17,6 +17,7 @@ import { ListarReservasQueryDto } from './dto/listar-reservas-query.dto';
 import { CalendarioQueryDto } from './dto/calendario-query.dto';
 import { ActualizarReservaLineaDto } from './dto/actualizar-reserva-linea.dto';
 import { CancelarReservaDto } from './dto/cancelar-reserva.dto';
+import { TrasladarHabitacionReservaDto } from './dto/trasladar-habitacion-reserva.dto';
 
 type MetodoPagoAnticipo = 'efectivo' | 'transferencia' | 'yape' | 'tarjeta';
 
@@ -685,6 +686,101 @@ export class ReservasService {
     }
 
     return this.obtenerDetalle(client, hotelId, reservaId);
+  }
+
+  /**
+   * Traslado de una línea de reserva (todavía sin check-in) a otra
+   * habitación, MISMAS fechas -- solo se reasigna reserva_habitacion.
+   * habitacion_id, tarifa y subtotal quedan igual que estaban (mismo
+   * criterio que EstadiasService.trasladarHabitacion(): lo que ya cuelga
+   * de la línea no se toca). No es obligatorio que la habitación destino
+   * sea del mismo tipo -- si difiere, se informa en la respuesta
+   * (`avisoTipoHabitacion`) pero no bloquea el traslado. Revalida
+   * disponibilidad de la habitación destino con el mismo motor que
+   * crear()/agregarHabitacion() (solapamiento + margen de limpieza,
+   * considerando la hora exacta de checkin/checkout, no solo el día).
+   */
+  async trasladarHabitacionLinea(
+    client: SupabaseClient,
+    hotelId: string,
+    reservaId: string,
+    lineaId: string,
+    dto: TrasladarHabitacionReservaDto,
+  ) {
+    const { data: rh, error: rhError } = await client
+      .from('reserva_habitacion')
+      .select(
+        `
+        id, habitacion_id, fecha_hora_checkin_prevista, fecha_hora_checkout_prevista,
+        reservas!inner(id, hotel_id, estado),
+        habitaciones(hab_numero, tipo_id, tipos_habitacion(nombre)),
+        estadias(estado_actual)
+      `,
+      )
+      .eq('id', lineaId)
+      .eq('reserva_id', reservaId)
+      .maybeSingle();
+    if (rhError) throw rhError;
+
+    const rhData = rh as any;
+    const reserva = rhData?.reservas;
+    if (!rh || reserva.hotel_id !== hotelId) {
+      throw new NotFoundException('La línea de reserva no existe en este hotel');
+    }
+    if (reserva.estado === 'cancelada') {
+      throw new BadRequestException('No se puede trasladar: la reserva está cancelada');
+    }
+    if (rhData.estadias && rhData.estadias.estado_actual !== 'pendiente') {
+      throw new BadRequestException(
+        'Esta reserva ya tiene un check-in en curso; traslada la habitación desde el detalle de la estadía.',
+      );
+    }
+    if (dto.nuevaHabitacionId === rhData.habitacion_id) {
+      throw new BadRequestException('La habitación destino es la misma que la actual');
+    }
+
+    const { data: habNueva, error: habError } = await client
+      .from('habitaciones')
+      .select('id, hab_numero, tipo_id, tipos_habitacion(nombre)')
+      .eq('id', dto.nuevaHabitacionId)
+      .eq('hotel_id', hotelId)
+      .maybeSingle();
+    if (habError) throw habError;
+    if (!habNueva) {
+      throw new NotFoundException('La habitación destino no existe en este hotel');
+    }
+
+    // Mismas fechas: solo cambia la habitación, no el rango.
+    const resultado = await this.disponibilidad.validar(client, {
+      hotelId,
+      habitacionId: dto.nuevaHabitacionId,
+      checkinPrevisto: rhData.fecha_hora_checkin_prevista,
+      checkoutPrevisto: rhData.fecha_hora_checkout_prevista,
+      excluirReservaHabitacionId: lineaId,
+    });
+    if (!resultado.disponible) {
+      throw new ConflictException(
+        resultado.conflicto?.mensaje ?? 'La habitación destino no está disponible en esas fechas',
+      );
+    }
+
+    const { error: updError } = await client
+      .from('reserva_habitacion')
+      .update({ habitacion_id: dto.nuevaHabitacionId })
+      .eq('id', lineaId);
+    if (updError) throw updError;
+
+    const tipoActual = rhData.habitaciones?.tipos_habitacion?.nombre ?? null;
+    const tipoNuevo = (habNueva as any).tipos_habitacion?.nombre ?? null;
+    const tipoHabitacionDistinto = rhData.habitaciones?.tipo_id !== habNueva.tipo_id;
+
+    const detalle = await this.obtenerDetalle(client, hotelId, reservaId);
+    return {
+      ...detalle,
+      avisoTipoHabitacion: tipoHabitacionDistinto
+        ? `La habitación ${habNueva.hab_numero} es de tipo "${tipoNuevo ?? '—'}", distinto al tipo original "${tipoActual ?? '—'}" (${rhData.habitaciones?.hab_numero}).`
+        : null,
+    };
   }
 
   /**

@@ -21,6 +21,7 @@ import { ListarReservasQueryDto } from './dto/listar-reservas-query.dto';
 import { CalendarioQueryDto } from './dto/calendario-query.dto';
 import { ActualizarReservaLineaDto } from './dto/actualizar-reserva-linea.dto';
 import { CancelarReservaDto } from './dto/cancelar-reserva.dto';
+import { TrasladarHabitacionReservaDto } from './dto/trasladar-habitacion-reserva.dto';
 
 @Controller('hoteles/:hotelId/reservas')
 @UseGuards(AuthGuard, RolesGuard)
@@ -134,6 +135,19 @@ export class ReservasController {
       dto,
       user.personalId,
     );
+  }
+
+  @Patch(':id/habitaciones/:lineaId/trasladar')
+  @Roles('admin', 'recepcion')
+  async trasladarHabitacion(
+    @Param('hotelId') hotelId: string,
+    @Param('id') id: string,
+    @Param('lineaId') lineaId: string,
+    @Body() dto: TrasladarHabitacionReservaDto,
+    @CurrentUser() user: RequestUser,
+  ) {
+    const client = this.supabase.getClientForRequest(user.accessToken);
+    return this.reservasService.trasladarHabitacionLinea(client, hotelId, id, lineaId, dto);
   }
 
   @Patch(':id/confirmar')
