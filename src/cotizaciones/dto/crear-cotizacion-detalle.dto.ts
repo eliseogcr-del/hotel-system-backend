@@ -1,4 +1,4 @@
-import { IsInt, IsNumber, IsOptional, IsUUID, Min } from 'class-validator';
+import { IsInt, IsNumber, IsOptional, IsString, IsUUID, Min } from 'class-validator';
 
 export class CrearCotizacionDetalleDto {
   @IsUUID()
@@ -8,10 +8,13 @@ export class CrearCotizacionDetalleDto {
   @Min(1)
   nroPersonas: number;
 
-  // Si no se envía: tarifa negociada de la empresa (tarifas_especiales) si
-  // aplica, o la tarifa 'normal' vigente del tipo de habitación.
-  @IsOptional()
+  // Precio por persona por noche -- se escribe a mano en el cuadro, no sale
+  // de un catálogo (tarifas es por habitación por noche, no por persona).
   @IsNumber()
   @Min(0)
-  precioNocheManual?: number;
+  precioPersona: number;
+
+  @IsOptional()
+  @IsString()
+  notas?: string;
 }

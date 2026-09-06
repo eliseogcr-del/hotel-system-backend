@@ -9,16 +9,9 @@ import { DisponibilidadService } from '../habitaciones/disponibilidad/disponibil
 import { ReservasService } from '../reservas/reservas.service';
 import { CrearReservaDto } from '../reservas/dto/crear-reserva.dto';
 import { CrearCotizacionDto } from './dto/crear-cotizacion.dto';
-import { CrearCotizacionDetalleDto } from './dto/crear-cotizacion-detalle.dto';
+import { DisponibilidadCotizacionDto } from './dto/disponibilidad-cotizacion.dto';
 import { ActualizarEstadoCotizacionDto } from './dto/actualizar-estado-cotizacion.dto';
 import { ListarCotizacionesQueryDto } from './dto/listar-cotizaciones-query.dto';
-
-interface LineaConCosto {
-  linea: CrearCotizacionDetalleDto;
-  precioNoche: number;
-  tarifaId: string | null;
-  subtotal: number;
-}
 
 @Injectable()
 export class CotizacionesService {
@@ -26,6 +19,50 @@ export class CotizacionesService {
     private readonly disponibilidad: DisponibilidadService,
     private readonly reservasService: ReservasService,
   ) {}
+
+  /**
+   * Habitaciones que se pueden ofrecer en el cuadro de la cotización: no
+   * bloqueadas, y realmente libres para el check-in/check-out (con hora)
+   * que se está cotizando -- mismo motor de disponibilidad que usan
+   * Reservas (margen de limpieza por tipo de habitación, ver CLAUDE.md
+   * sección 4), para no ofrecer algo que después el checkeo real rechace.
+   */
+  async habitacionesDisponibles(
+    client: SupabaseClient,
+    hotelId: string,
+    dto: DisponibilidadCotizacionDto,
+  ) {
+    const checkinISO = `${dto.fechaCheckin}T${dto.horaCheckin}:00`;
+    const fechaCheckout = this.sumarDiasYMD(dto.fechaCheckin, dto.noches);
+    const checkoutISO = `${fechaCheckout}T${dto.horaCheckout}:00`;
+
+    const { data: habitaciones, error: habError } = await client
+      .from('habitaciones')
+      .select('id, hab_numero, piso, tipo_id, tipos_habitacion(nombre)')
+      .eq('hotel_id', hotelId)
+      .neq('estado', 'bloqueada')
+      .order('hab_numero', { ascending: true });
+    if (habError) throw habError;
+
+    const candidatas = await Promise.all(
+      (habitaciones ?? []).map(async (h) => {
+        const resultado = await this.disponibilidad.validar(client, {
+          hotelId,
+          habitacionId: h.id,
+          checkinPrevisto: checkinISO,
+          checkoutPrevisto: checkoutISO,
+        });
+        return resultado.disponible ? h : null;
+      }),
+    );
+
+    return {
+      checkinPrevisto: checkinISO,
+      checkoutPrevisto: checkoutISO,
+      dias: dto.noches,
+      habitaciones: candidatas.filter((h): h is NonNullable<typeof h> => h !== null),
+    };
+  }
 
   async crear(
     client: SupabaseClient,
@@ -43,10 +80,11 @@ export class CotizacionesService {
     }
 
     // Cotizaciones cubren un único rango de fechas para todas sus líneas
-    // (grupos que llegan y se van juntos). Se usan horas estándar de
-    // check-in/check-out para el motor de disponibilidad.
-    const checkinISO = `${dto.fechaDesde}T15:00:00`;
-    const checkoutISO = `${dto.fechaHasta}T11:00:00`;
+    // (grupos que llegan y se van juntos), con la hora de check-in/check-out
+    // que se usó para armar el cuadro (ver habitacionesDisponibles()) -- se
+    // revalida acá porque pudo pasar tiempo desde que se armó el cuadro.
+    const checkinISO = `${dto.fechaDesde}T${dto.horaCheckin}:00`;
+    const checkoutISO = `${dto.fechaHasta}T${dto.horaCheckout}:00`;
 
     for (const linea of dto.habitaciones) {
       const resultado = await this.disponibilidad.validar(client, {
@@ -68,13 +106,10 @@ export class CotizacionesService {
       ),
     );
 
-    const lineasConCosto = await Promise.all(
-      dto.habitaciones.map((linea) =>
-        this.resolverLinea(client, hotelId, dto.empresaId, dias, linea),
-      ),
+    const totalEstimado = dto.habitaciones.reduce(
+      (acc, l) => acc + l.nroPersonas * l.precioPersona * dias,
+      0,
     );
-
-    const totalEstimado = lineasConCosto.reduce((acc, l) => acc + l.subtotal, 0);
     const venceEn =
       dto.venceEn ?? new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
 
@@ -86,6 +121,8 @@ export class CotizacionesService {
         empresa_id: dto.empresaId ?? null,
         fecha_desde: dto.fechaDesde,
         fecha_hasta: dto.fechaHasta,
+        hora_checkin: dto.horaCheckin,
+        hora_checkout: dto.horaCheckout,
         moneda: dto.moneda ?? 'PEN',
         estado: 'pendiente',
         total_estimado: totalEstimado,
@@ -96,14 +133,14 @@ export class CotizacionesService {
       .single();
     if (cotizacionError) throw cotizacionError;
 
-    const filas = lineasConCosto.map((l) => ({
+    const filas = dto.habitaciones.map((l) => ({
       cotizacion_id: cotizacion.id,
-      habitacion_id: l.linea.habitacionId,
-      tarifa_id: l.tarifaId,
-      nro_personas: l.linea.nroPersonas,
+      habitacion_id: l.habitacionId,
+      nro_personas: l.nroPersonas,
       dias,
-      precio_noche: l.precioNoche,
-      subtotal: l.subtotal,
+      precio_persona: l.precioPersona,
+      notas: l.notas?.trim() || null,
+      subtotal: l.nroPersonas * l.precioPersona * dias,
     }));
 
     const { error: detalleError } = await client.from('cotizacion_detalle').insert(filas);
@@ -193,8 +230,8 @@ export class CotizacionesService {
       );
     }
 
-    const checkinISO = `${cotizacion.fecha_desde}T15:00:00`;
-    const checkoutISO = `${cotizacion.fecha_hasta}T11:00:00`;
+    const checkinISO = `${cotizacion.fecha_desde}T${cotizacion.hora_checkin}`;
+    const checkoutISO = `${cotizacion.fecha_hasta}T${cotizacion.hora_checkout}`;
 
     const reservaDto: CrearReservaDto = {
       huespedId: cotizacion.huesped_id ?? undefined,
@@ -207,7 +244,12 @@ export class CotizacionesService {
         tipoAlquiler: 'pernocte' as const,
         checkinPrevisto: checkinISO,
         checkoutPrevisto: checkoutISO,
-        tarifaDiaManual: Number(d.precio_noche),
+        // Reservas cotiza por habitación por noche -- se convierte el
+        // precio por persona (o, en cotizaciones viejas del flujo
+        // anterior, el precio_noche que ya tenían) al equivalente por
+        // habitación para no perder el total cotizado.
+        tarifaDiaManual:
+          d.precio_persona != null ? Number(d.precio_persona) * Number(d.nro_personas) : Number(d.precio_noche),
       })),
     };
 
@@ -222,63 +264,12 @@ export class CotizacionesService {
     return { cotizacion: { ...cotizacion, estado: 'convertida', reserva_id: reserva.id }, reserva };
   }
 
-  private async resolverLinea(
-    client: SupabaseClient,
-    hotelId: string,
-    empresaId: string | undefined,
-    dias: number,
-    linea: CrearCotizacionDetalleDto,
-  ): Promise<LineaConCosto> {
-    const { data: hab, error: habError } = await client
-      .from('habitaciones')
-      .select('id, tipo_id, tipos_habitacion(precio_normal, precio_costo)')
-      .eq('id', linea.habitacionId)
-      .eq('hotel_id', hotelId)
-      .maybeSingle();
-    if (habError) throw habError;
-    if (!hab) {
-      throw new NotFoundException(`La habitación ${linea.habitacionId} no existe en este hotel`);
-    }
-
-    const precios = (hab as any).tipos_habitacion as
-      | { precio_normal: number; precio_costo: number }
-      | null;
-
-    let precioNoche = linea.precioNocheManual;
-
-    // Empresa con tarifa negociada -> esa tarifa. Si no, el precio normal
-    // configurado en el tipo de habitación (ver ReservasService, mismo
-    // criterio que para reservas walk-in/telefónicas).
-    if (precioNoche === undefined && empresaId) {
-      const { data: especial, error: especialError } = await client
-        .from('tarifas_especiales')
-        .select('tarifa_real')
-        .eq('hotel_id', hotelId)
-        .eq('empresa_id', empresaId)
-        .maybeSingle();
-      if (especialError) throw especialError;
-      if (especial?.tarifa_real != null) {
-        precioNoche = Number(especial.tarifa_real);
-      }
-    }
-
-    if (precioNoche === undefined) {
-      if (!precios) {
-        throw new NotFoundException(
-          `No se encontró el tipo de habitación de ${linea.habitacionId}`,
-        );
-      }
-      precioNoche = Number(precios.precio_normal);
-    }
-
-    const precioCosto = precios ? Number(precios.precio_costo) : 0;
-    if (precioCosto > 0 && precioNoche < precioCosto) {
-      throw new BadRequestException(
-        `El precio por noche (S/. ${precioNoche}) no puede ser menor al precio de costo configurado para este tipo de habitación (S/. ${precioCosto})`,
-      );
-    }
-
-    const subtotal = precioNoche * dias;
-    return { linea, precioNoche, tarifaId: null, subtotal };
+  // YYYY-MM-DD + N días -> YYYY-MM-DD, sin líos de zona horaria (mismo
+  // patrón que sumarDiasYMD en reportes.service.ts).
+  private sumarDiasYMD(fechaYMD: string, dias: number): string {
+    const [anio, mes, dia] = fechaYMD.split('-').map(Number);
+    const d = new Date(Date.UTC(anio, mes - 1, dia));
+    d.setUTCDate(d.getUTCDate() + dias);
+    return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}`;
   }
 }

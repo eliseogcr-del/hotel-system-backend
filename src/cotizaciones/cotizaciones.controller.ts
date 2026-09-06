@@ -16,6 +16,7 @@ import { RequestUser } from '../common/interfaces/request-user.interface';
 import { SupabaseService } from '../common/supabase/supabase.service';
 import { CotizacionesService } from './cotizaciones.service';
 import { CrearCotizacionDto } from './dto/crear-cotizacion.dto';
+import { DisponibilidadCotizacionDto } from './dto/disponibilidad-cotizacion.dto';
 import { ActualizarEstadoCotizacionDto } from './dto/actualizar-estado-cotizacion.dto';
 import { ListarCotizacionesQueryDto } from './dto/listar-cotizaciones-query.dto';
 
@@ -26,6 +27,17 @@ export class CotizacionesController {
     private readonly cotizacionesService: CotizacionesService,
     private readonly supabase: SupabaseService,
   ) {}
+
+  @Post('habitaciones-disponibles')
+  @Roles('admin', 'recepcion')
+  async habitacionesDisponibles(
+    @Param('hotelId') hotelId: string,
+    @Body() dto: DisponibilidadCotizacionDto,
+    @CurrentUser() user: RequestUser,
+  ) {
+    const client = this.supabase.getClientForRequest(user.accessToken);
+    return this.cotizacionesService.habitacionesDisponibles(client, hotelId, dto);
+  }
 
   @Post()
   @Roles('admin', 'recepcion')

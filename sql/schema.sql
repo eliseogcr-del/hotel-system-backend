@@ -378,6 +378,11 @@ create table cotizaciones (
     fecha_emision date not null default current_date,
     fecha_desde date not null,
     fecha_hasta date not null,
+    -- Hora de check-in/check-out que se usó para chequear disponibilidad al
+    -- cotizar (antes hardcodeada en 15:00/11:00) -- se guarda para poder
+    -- reconstruir el rango exacto al convertir la cotización en reserva.
+    hora_checkin time not null default '15:00',
+    hora_checkout time not null default '11:00',
     estado text not null default 'pendiente' check (estado in ('pendiente','aprobada','convertida','vencida','cancelada')),
     moneda text not null default 'PEN',
     total_estimado numeric(10,2),
@@ -393,7 +398,13 @@ create table cotizacion_detalle (
     tarifa_id uuid references tarifas(id),
     nro_personas int not null default 1,
     dias int not null default 1,
-    precio_noche numeric(10,2) not null,
+    -- precio_noche es del flujo viejo (precio por habitación por noche,
+    -- sacado de tarifas); el flujo actual cotiza precio_persona (precio por
+    -- persona por noche) y arma el subtotal como nro_personas * precio_persona
+    -- * dias -- por eso precio_noche queda nullable.
+    precio_noche numeric(10,2),
+    precio_persona numeric(10,2),
+    notas text,
     subtotal numeric(10,2) not null
 );
 

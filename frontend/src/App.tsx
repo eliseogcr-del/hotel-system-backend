@@ -11,6 +11,7 @@ import { EstadiaDetalle } from './pages/EstadiaDetalle';
 import { Caja } from './pages/Caja';
 import { TareasHk } from './pages/TareasHk';
 import { Cotizaciones } from './pages/Cotizaciones';
+import { NuevaCotizacion } from './pages/NuevaCotizacion';
 import { CotizacionDetalle } from './pages/CotizacionDetalle';
 import { Configuracion } from './pages/Configuracion';
 import { Reportes } from './pages/Reportes';
@@ -37,6 +38,7 @@ export function App() {
         <Route path="/caja" element={<Caja />} />
         <Route path="/tareas-hk" element={<TareasHk />} />
         <Route path="/cotizaciones" element={<Cotizaciones />} />
+        <Route path="/cotizaciones/nueva" element={<NuevaCotizacion />} />
         <Route path="/cotizaciones/:id" element={<CotizacionDetalle />} />
         <Route path="/configuracion" element={<Configuracion />} />
         <Route path="/reportes" element={<Reportes />} />

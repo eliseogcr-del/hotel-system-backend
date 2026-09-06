@@ -8,7 +8,9 @@ interface DetalleLinea {
   id: string;
   nro_personas: number;
   dias: number;
-  precio_noche: number;
+  precio_noche: number | null;
+  precio_persona: number | null;
+  notas: string | null;
   subtotal: number;
   habitaciones: { hab_numero: number; tipos_habitacion: { nombre: string } | null } | null;
 }
@@ -19,12 +21,100 @@ interface CotizacionDetalleData {
   moneda: string;
   fecha_desde: string;
   fecha_hasta: string;
+  hora_checkin: string;
+  hora_checkout: string;
   total_estimado: number | null;
   vence_en: string | null;
   reserva_id: string | null;
   huespedes: { nombres: string; apellidos: string } | null;
   empresas: { razon_social: string } | null;
   cotizacion_detalle: DetalleLinea[];
+}
+
+function fmt(n: number): string {
+  return Number(n).toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+function escapeHtml(texto: string): string {
+  return texto
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+function imprimirCotizacionPDF(cotizacion: CotizacionDetalleData, hotelNombre: string): void {
+  const cliente = cotizacion.huespedes
+    ? `${cotizacion.huespedes.nombres} ${cotizacion.huespedes.apellidos}`
+    : (cotizacion.empresas?.razon_social ?? '—');
+
+  const totalPersonas = cotizacion.cotizacion_detalle.reduce((acc, l) => acc + l.nro_personas, 0);
+
+  const filasHtml = cotizacion.cotizacion_detalle
+    .map(
+      (l) => `
+    <tr>
+      <td>${l.habitaciones?.hab_numero ?? '—'}</td>
+      <td>${escapeHtml(l.habitaciones?.tipos_habitacion?.nombre ?? '—')}</td>
+      <td>${escapeHtml(l.notas ?? '')}</td>
+      <td style="text-align:right">${l.nro_personas}</td>
+      <td style="text-align:right">${l.precio_persona != null ? fmt(Number(l.precio_persona)) : '—'}</td>
+      <td style="text-align:right">${fmt(Number(l.subtotal))}</td>
+    </tr>`,
+    )
+    .join('');
+
+  const html = `<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Cotización</title>
+<style>
+  body { font-family: Arial, sans-serif; padding: 24px; color: #1a1a1a; }
+  h1 { font-size: 18px; margin: 0 0 4px; }
+  p.hotel { font-size: 13px; color: #555; margin: 0 0 12px; }
+  p.meta { font-size: 12px; color: #555; margin: 0 0 16px; }
+  table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  th, td { border: 1px solid #ccc; padding: 6px 10px; text-align: left; }
+  th { background: #f0f0f0; }
+  tfoot td { font-weight: 700; border-top: 2px solid #1a1a1a; }
+  @media print { body { padding: 10mm; } }
+</style>
+</head>
+<body>
+  <h1>Cotización</h1>
+  <p class="hotel">${escapeHtml(hotelNombre)}</p>
+  <p class="meta">
+    <b>Cliente:</b> ${escapeHtml(cliente)}
+    &nbsp;|&nbsp; <b>Check-in:</b> ${new Date(cotizacion.fecha_desde).toLocaleDateString('es-PE')} ${cotizacion.hora_checkin.slice(0, 5)}
+    &nbsp;|&nbsp; <b>Check-out:</b> ${new Date(cotizacion.fecha_hasta).toLocaleDateString('es-PE')} ${cotizacion.hora_checkout.slice(0, 5)}
+    &nbsp;|&nbsp; <b>Generado:</b> ${new Date().toLocaleString('es-PE')}
+  </p>
+  <table>
+    <thead>
+      <tr>
+        <th>Hab.</th><th>Tipo</th><th>Nota</th><th>Personas</th><th>Precio/persona/noche</th><th>Subtotal</th>
+      </tr>
+    </thead>
+    <tbody>${filasHtml}</tbody>
+    <tfoot>
+      <tr>
+        <td colspan="3">Total</td>
+        <td style="text-align:right">${totalPersonas}</td>
+        <td></td>
+        <td style="text-align:right">${cotizacion.moneda} ${fmt(cotizacion.total_estimado ?? 0)}</td>
+      </tr>
+    </tfoot>
+  </table>
+</body>
+</html>`;
+
+  const ventana = window.open('', '_blank');
+  if (!ventana) return;
+  ventana.document.write(html);
+  ventana.document.close();
+  ventana.focus();
+  setTimeout(() => ventana.print(), 250);
 }
 
 export function CotizacionDetalle() {
@@ -92,7 +182,8 @@ export function CotizacionDetalle() {
             {cotizacion.huespedes ? `${cotizacion.huespedes.nombres} ${cotizacion.huespedes.apellidos}` : cotizacion.empresas?.razon_social}
           </h1>
           <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '4px 0 0' }}>
-            {new Date(cotizacion.fecha_desde).toLocaleDateString()} → {new Date(cotizacion.fecha_hasta).toLocaleDateString()}
+            {new Date(cotizacion.fecha_desde).toLocaleDateString()} {cotizacion.hora_checkin?.slice(0, 5)} →{' '}
+            {new Date(cotizacion.fecha_hasta).toLocaleDateString()} {cotizacion.hora_checkout?.slice(0, 5)}
             {cotizacion.vence_en && ` · vence ${new Date(cotizacion.vence_en).toLocaleDateString()}`}
           </p>
         </div>
@@ -117,6 +208,9 @@ export function CotizacionDetalle() {
             Cancelar
           </button>
         )}
+        <button onClick={() => imprimirCotizacionPDF(cotizacion, hotelActual.nombre)} style={btnSecondary}>
+          🖨️ Imprimir / PDF
+        </button>
         {cotizacion.reserva_id && (
           <Link to={`/reservas/${cotizacion.reserva_id}`} style={{ ...btnSecondary, textDecoration: 'none', display: 'inline-block' }}>
             Ver reserva
@@ -125,12 +219,13 @@ export function CotizacionDetalle() {
       </div>
 
       <div style={{ overflowX: 'auto' }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, minWidth: 520 }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, minWidth: 640 }}>
           <thead>
             <tr style={{ textAlign: 'left', color: 'var(--text-secondary)', fontSize: 11 }}>
               <th style={thStyle}>Habitación</th>
+              <th style={thStyle}>Nota</th>
               <th style={thStyle}>Personas</th>
-              <th style={thStyle}>Precio/noche</th>
+              <th style={thStyle}>Precio/persona/noche</th>
               <th style={thStyle}>Días</th>
               <th style={thStyle}>Subtotal</th>
             </tr>
@@ -141,8 +236,9 @@ export function CotizacionDetalle() {
                 <td style={tdStyle}>
                   {l.habitaciones?.hab_numero} · {l.habitaciones?.tipos_habitacion?.nombre}
                 </td>
+                <td style={tdStyle}>{l.notas || '—'}</td>
                 <td style={tdStyle}>{l.nro_personas}</td>
-                <td style={tdStyle}>{l.precio_noche}</td>
+                <td style={tdStyle}>{l.precio_persona ?? l.precio_noche ?? '—'}</td>
                 <td style={tdStyle}>{l.dias}</td>
                 <td style={tdStyle}>{l.subtotal}</td>
               </tr>
