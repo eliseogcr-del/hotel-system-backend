@@ -58,6 +58,7 @@ function imprimirCotizacionPDF(cotizacion: CotizacionDetalleData, hotelNombre: s
       <td>${escapeHtml(l.habitaciones?.tipos_habitacion?.nombre ?? '—')}</td>
       <td style="text-align:right">${l.nro_personas}</td>
       <td style="text-align:right">${l.precio_persona != null ? fmt(Number(l.precio_persona)) : '—'}</td>
+      <td style="text-align:right">${l.dias}</td>
       <td style="text-align:right;font-weight:700">${fmt(Number(l.subtotal))}</td>
       <td>${escapeHtml(l.notas ?? '')}</td>
     </tr>`,
@@ -79,10 +80,11 @@ function imprimirCotizacionPDF(cotizacion: CotizacionDetalleData, hotelNombre: s
     color: #0b3a4a; background: #dcedf8; border: 1px solid #6fa2c2;
     border-radius: 8px; padding: 10px 14px; margin-bottom: 16px;
   }
-  table { width: 100%; border-collapse: collapse; font-size: 14px; border: 2px solid #6fa2c2; }
-  th, td { border-right: 2px solid #b9b7ac; border-bottom: 2px solid #b9b7ac; padding: 9px 10px; text-align: left; }
+  table { width: 100%; border-collapse: collapse; font-size: 12px; border: 2px solid #6fa2c2; table-layout: fixed; }
+  th, td { border-right: 2px solid #b9b7ac; border-bottom: 2px solid #b9b7ac; padding: 7px 8px; text-align: left; word-wrap: break-word; }
   th { background: #dcedf8; color: #0b3a4a; font-weight: 700; border-bottom: 2px solid #6fa2c2; border-right: 2px solid #6fa2c2; }
-  @media print { body { padding: 10mm; } }
+  @page { size: portrait; margin: 12mm; }
+  @media print { body { padding: 0; } }
 </style>
 </head>
 <body>
@@ -99,9 +101,13 @@ function imprimirCotizacionPDF(cotizacion: CotizacionDetalleData, hotelNombre: s
     <span>Total estimado: ${cotizacion.moneda} ${fmt(cotizacion.total_estimado ?? 0)}</span>
   </div>
   <table>
+    <colgroup>
+      <col style="width:9%"><col style="width:16%"><col style="width:11%">
+      <col style="width:16%"><col style="width:8%"><col style="width:14%"><col style="width:26%">
+    </colgroup>
     <thead>
       <tr>
-        <th>Hab.</th><th>Tipo</th><th>Personas</th><th>Precio/persona/noche</th><th>Subtotal</th><th>Nota</th>
+        <th>Hab.</th><th>Tipo</th><th>Personas</th><th>Precio/persona/noche</th><th>Días</th><th>Subtotal</th><th>Nota</th>
       </tr>
     </thead>
     <tbody>${filasHtml}</tbody>
