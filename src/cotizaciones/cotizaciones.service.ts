@@ -159,17 +159,51 @@ export class CotizacionesService {
         `
         id, fecha_emision, fecha_desde, fecha_hasta, estado, moneda,
         total_estimado, vence_en, reserva_id,
-        huespedes(nombres, apellidos), empresas(razon_social)
+        huespedes(nombres, apellidos), empresas(razon_social),
+        cotizacion_detalle(nro_personas)
       `,
       )
       .eq('hotel_id', hotelId)
       .order('fecha_emision', { ascending: false });
 
     if (filtros.estado) query = query.eq('estado', filtros.estado);
+    if (filtros.desde) query = query.gte('fecha_emision', filtros.desde);
+    if (filtros.hasta) query = query.lte('fecha_emision', filtros.hasta);
 
     const { data, error } = await query;
     if (error) throw error;
-    return data;
+
+    const filas = (data ?? []).map((c: any) => ({
+      id: c.id,
+      fecha_emision: c.fecha_emision,
+      fecha_desde: c.fecha_desde,
+      fecha_hasta: c.fecha_hasta,
+      estado: c.estado,
+      moneda: c.moneda,
+      total_estimado: c.total_estimado,
+      vence_en: c.vence_en,
+      reserva_id: c.reserva_id,
+      huespedes: c.huespedes,
+      empresas: c.empresas,
+      totalPersonas: (c.cotizacion_detalle ?? []).reduce(
+        (acc: number, d: any) => acc + Number(d.nro_personas ?? 0),
+        0,
+      ),
+    }));
+
+    // Igual que ReservasService.listar(): el nombre puede venir de
+    // huespedes o de empresas (dos tablas embebidas distintas), así que se
+    // filtra en memoria en vez de encadenar un OR entre ambas.
+    const busqueda = filtros.busqueda?.trim().toLowerCase();
+    if (busqueda) {
+      return filas.filter((f) => {
+        const nombre = f.huespedes
+          ? `${f.huespedes.nombres} ${f.huespedes.apellidos}`
+          : (f.empresas?.razon_social ?? '');
+        return nombre.toLowerCase().includes(busqueda);
+      });
+    }
+    return filas;
   }
 
   async obtenerDetalle(client: SupabaseClient, hotelId: string, id: string) {
