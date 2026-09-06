@@ -122,6 +122,10 @@ export function NuevaCotizacion() {
     setFilas((prev) => prev.map((f) => (f.habitacionId === habitacionId ? { ...f, ...cambios } : f)));
   }
 
+  function quitarFila(habitacionId: string) {
+    setFilas((prev) => prev.filter((f) => f.habitacionId !== habitacionId));
+  }
+
   const totalPersonas = useMemo(() => filas.reduce((acc, f) => acc + (Number(f.personas) || 0), 0), [filas]);
   const totalGeneral = useMemo(
     () => filas.reduce((acc, f) => acc + subtotalFila(f, disponibilidad?.dias ?? noches), 0),
@@ -336,6 +340,7 @@ export function NuevaCotizacion() {
                       <col style={{ width: 130 }} />
                       <col style={{ width: 110 }} />
                       <col style={{ width: 190 }} />
+                      <col style={{ width: 80 }} />
                     </colgroup>
                     <thead>
                       <tr style={{ textAlign: 'left', fontSize: 11.5 }}>
@@ -345,6 +350,7 @@ export function NuevaCotizacion() {
                         <th style={{ ...thStyle, textAlign: 'right' }}>Precio/persona/noche</th>
                         <th style={{ ...thStyle, textAlign: 'right' }}>Subtotal</th>
                         <th style={thStyle}>Nota</th>
+                        <th style={{ ...thStyle, textAlign: 'center' }}></th>
                       </tr>
                     </thead>
                     <tbody>
@@ -385,6 +391,11 @@ export function NuevaCotizacion() {
                               placeholder="Opcional"
                               style={inputCeldaStyle}
                             />
+                          </td>
+                          <td style={{ ...tdStyle, textAlign: 'center' }}>
+                            <button type="button" onClick={() => quitarFila(f.habitacionId)} style={btnQuitar}>
+                              Quitar
+                            </button>
                           </td>
                         </tr>
                       ))}
@@ -493,5 +504,15 @@ const btnSecondary: CSSProperties = {
   border: '1px solid var(--border)',
   borderRadius: 'var(--radius)',
   fontSize: 13,
+  cursor: 'pointer',
+};
+
+const btnQuitar: CSSProperties = {
+  padding: '4px 8px',
+  background: 'transparent',
+  border: '1px solid var(--danger)',
+  borderRadius: 'var(--radius)',
+  color: 'var(--danger)',
+  fontSize: 11.5,
   cursor: 'pointer',
 };
