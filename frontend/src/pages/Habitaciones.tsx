@@ -847,8 +847,8 @@ function VistaTarjetas({
                     {c.es_externa ? ' · externa' : ''}
                   </span>
                   {c.ocupante && (
-                    <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>
-                      Hab. {c.ocupante.habNumero} · {c.ocupante.huesped ?? '—'}
+                    <span style={{ fontSize: 11, color: '#fff' }}>
+                      Hab. <b style={{ fontSize: 15 }}>{c.ocupante.habNumero}</b> · {c.ocupante.huesped ?? '—'}
                     </span>
                   )}
                 </div>
