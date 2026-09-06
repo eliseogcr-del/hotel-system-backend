@@ -301,22 +301,56 @@ export function NuevaCotizacion() {
                   Completa cantidad de personas y precio por persona/noche solo en las habitaciones que quieras
                   cotizar -- las que dejes en 0 personas no se incluyen.
                 </p>
-                <div style={{ overflowX: 'auto', border: '1px solid var(--border)', borderRadius: 'var(--radius)' }}>
-                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, minWidth: 760 }}>
+
+                <div
+                  style={{
+                    display: 'flex',
+                    flexWrap: 'wrap',
+                    gap: '4px 28px',
+                    fontWeight: 700,
+                    fontSize: 14,
+                    color: 'var(--table-header-text)',
+                    background: 'var(--table-header-bg)',
+                    border: '1px solid var(--table-header-border)',
+                    borderRadius: 'var(--radius)',
+                    padding: '10px 14px',
+                    marginBottom: 12,
+                  }}
+                >
+                  <span>Total personas: {totalPersonas}</span>
+                  <span>Total cotizado: PEN {totalGeneral.toFixed(2)}</span>
+                </div>
+
+                <div
+                  style={{
+                    overflowX: 'auto',
+                    border: `2px solid var(--table-header-border)`,
+                    borderRadius: 'var(--radius)',
+                  }}
+                >
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, tableLayout: 'fixed', minWidth: 720 }}>
+                    <colgroup>
+                      <col style={{ width: 90 }} />
+                      <col style={{ width: 130 }} />
+                      <col style={{ width: 90 }} />
+                      <col style={{ width: 130 }} />
+                      <col style={{ width: 110 }} />
+                      <col style={{ width: 190 }} />
+                    </colgroup>
                     <thead>
-                      <tr style={{ textAlign: 'left', fontSize: 11, color: 'var(--text-secondary)' }}>
+                      <tr style={{ textAlign: 'left', fontSize: 11.5 }}>
                         <th style={thStyle}>Habitación</th>
                         <th style={thStyle}>Tipo</th>
                         <th style={{ ...thStyle, textAlign: 'right' }}>Personas</th>
                         <th style={{ ...thStyle, textAlign: 'right' }}>Precio/persona/noche</th>
                         <th style={{ ...thStyle, textAlign: 'right' }}>Subtotal</th>
-                        <th style={{ ...thStyle, minWidth: 200 }}>Nota</th>
+                        <th style={thStyle}>Nota</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {filas.map((f) => (
-                        <tr key={f.habitacionId} style={{ borderTop: '1px solid var(--border)' }}>
-                          <td style={{ ...tdStyle, fontWeight: 500, color: 'var(--text-primary)' }}>{f.habNumero}</td>
+                      {filas.map((f, i) => (
+                        <tr key={f.habitacionId} style={{ background: i % 2 === 1 ? 'var(--surface-0)' : 'var(--surface-1)' }}>
+                          <td style={{ ...tdStyle, fontWeight: 600, color: 'var(--text-primary)' }}>{f.habNumero}</td>
                           <td style={tdStyle}>{f.tipoNombre ?? '—'}</td>
                           <td style={tdStyle}>
                             <input
@@ -341,7 +375,7 @@ export function NuevaCotizacion() {
                               style={{ ...inputCeldaStyle, textAlign: 'right' }}
                             />
                           </td>
-                          <td style={{ ...tdStyle, textAlign: 'right', fontWeight: 500 }}>
+                          <td style={{ ...tdStyle, textAlign: 'right', fontWeight: 600 }}>
                             {subtotalFila(f, disponibilidad.dias).toFixed(2)}
                           </td>
                           <td style={tdStyle}>
@@ -355,17 +389,6 @@ export function NuevaCotizacion() {
                         </tr>
                       ))}
                     </tbody>
-                    <tfoot>
-                      <tr style={{ borderTop: '2px solid var(--border-strong)', fontWeight: 700 }}>
-                        <td style={tdStyle} colSpan={2}>
-                          Total
-                        </td>
-                        <td style={{ ...tdStyle, textAlign: 'right' }}>{totalPersonas}</td>
-                        <td style={tdStyle}></td>
-                        <td style={{ ...tdStyle, textAlign: 'right' }}>{totalGeneral.toFixed(2)}</td>
-                        <td style={tdStyle}></td>
-                      </tr>
-                    </tfoot>
                   </table>
                 </div>
               </>
@@ -412,8 +435,21 @@ const cardTitleStyle: CSSProperties = {
   letterSpacing: 0.4,
 };
 
-const thStyle: CSSProperties = { padding: '6px 8px' };
-const tdStyle: CSSProperties = { padding: '6px 8px', color: 'var(--text-secondary)' };
+const thStyle: CSSProperties = {
+  padding: '8px 8px',
+  fontWeight: 700,
+  color: 'var(--table-header-text)',
+  background: 'var(--table-header-bg)',
+  borderRight: '2px solid var(--table-header-border)',
+  borderBottom: '2px solid var(--table-header-border)',
+};
+
+const tdStyle: CSSProperties = {
+  padding: '4px 6px',
+  color: 'var(--text-secondary)',
+  borderRight: '2px solid var(--table-border)',
+  borderBottom: '2px solid var(--table-border)',
+};
 
 const inputStyle: CSSProperties = {
   width: '100%',
@@ -427,8 +463,10 @@ const inputStyle: CSSProperties = {
 
 const inputCeldaStyle: CSSProperties = {
   ...inputStyle,
-  padding: '6px 8px',
-  fontSize: 13,
+  padding: '4px 6px',
+  fontSize: 12.5,
+  background: 'transparent',
+  border: '1px solid transparent',
 };
 
 const labelStyle: CSSProperties = {

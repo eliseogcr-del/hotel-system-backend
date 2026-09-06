@@ -52,13 +52,13 @@ function imprimirCotizacionPDF(cotizacion: CotizacionDetalleData, hotelNombre: s
 
   const filasHtml = cotizacion.cotizacion_detalle
     .map(
-      (l) => `
-    <tr>
+      (l, i) => `
+    <tr style="background:${i % 2 === 1 ? '#f7f7f5' : '#ffffff'}">
       <td>${l.habitaciones?.hab_numero ?? '—'}</td>
       <td>${escapeHtml(l.habitaciones?.tipos_habitacion?.nombre ?? '—')}</td>
       <td style="text-align:right">${l.nro_personas}</td>
       <td style="text-align:right">${l.precio_persona != null ? fmt(Number(l.precio_persona)) : '—'}</td>
-      <td style="text-align:right">${fmt(Number(l.subtotal))}</td>
+      <td style="text-align:right;font-weight:700">${fmt(Number(l.subtotal))}</td>
       <td>${escapeHtml(l.notas ?? '')}</td>
     </tr>`,
     )
@@ -74,10 +74,14 @@ function imprimirCotizacionPDF(cotizacion: CotizacionDetalleData, hotelNombre: s
   h1 { font-size: 18px; margin: 0 0 4px; }
   p.hotel { font-size: 13px; color: #555; margin: 0 0 12px; }
   p.meta { font-size: 12px; color: #555; margin: 0 0 16px; }
-  table { width: 100%; border-collapse: collapse; font-size: 12px; }
-  th, td { border: 1px solid #ccc; padding: 6px 10px; text-align: left; }
-  th { background: #f0f0f0; }
-  tfoot td { font-weight: 700; border-top: 2px solid #1a1a1a; }
+  .totales {
+    display: flex; gap: 28px; font-weight: 700; font-size: 14px;
+    color: #0b3a4a; background: #dcedf8; border: 1px solid #6fa2c2;
+    border-radius: 8px; padding: 10px 14px; margin-bottom: 16px;
+  }
+  table { width: 100%; border-collapse: collapse; font-size: 12px; border: 2px solid #6fa2c2; }
+  th, td { border-right: 2px solid #b9b7ac; border-bottom: 2px solid #b9b7ac; padding: 7px 10px; text-align: left; }
+  th { background: #dcedf8; color: #0b3a4a; font-weight: 700; border-bottom: 2px solid #6fa2c2; border-right: 2px solid #6fa2c2; }
   @media print { body { padding: 10mm; } }
 </style>
 </head>
@@ -90,6 +94,10 @@ function imprimirCotizacionPDF(cotizacion: CotizacionDetalleData, hotelNombre: s
     &nbsp;|&nbsp; <b>Check-out:</b> ${new Date(cotizacion.fecha_hasta).toLocaleDateString('es-PE')} ${cotizacion.hora_checkout.slice(0, 5)}
     &nbsp;|&nbsp; <b>Generado:</b> ${new Date().toLocaleString('es-PE')}
   </p>
+  <div class="totales">
+    <span>Total personas: ${totalPersonas}</span>
+    <span>Total estimado: ${cotizacion.moneda} ${fmt(cotizacion.total_estimado ?? 0)}</span>
+  </div>
   <table>
     <thead>
       <tr>
@@ -97,15 +105,6 @@ function imprimirCotizacionPDF(cotizacion: CotizacionDetalleData, hotelNombre: s
       </tr>
     </thead>
     <tbody>${filasHtml}</tbody>
-    <tfoot>
-      <tr>
-        <td colspan="2">Total</td>
-        <td style="text-align:right">${totalPersonas}</td>
-        <td></td>
-        <td style="text-align:right">${cotizacion.moneda} ${fmt(cotizacion.total_estimado ?? 0)}</td>
-        <td></td>
-      </tr>
-    </tfoot>
   </table>
 </body>
 </html>`;
@@ -219,10 +218,31 @@ export function CotizacionDetalle() {
         )}
       </div>
 
-      <div style={{ overflowX: 'auto' }}>
+      <div
+        style={{
+          display: 'flex',
+          flexWrap: 'wrap',
+          gap: '4px 28px',
+          fontWeight: 700,
+          fontSize: 14,
+          color: 'var(--table-header-text)',
+          background: 'var(--table-header-bg)',
+          border: '1px solid var(--table-header-border)',
+          borderRadius: 'var(--radius)',
+          padding: '10px 14px',
+          marginBottom: 12,
+        }}
+      >
+        <span>Total personas: {cotizacion.cotizacion_detalle.reduce((acc, l) => acc + l.nro_personas, 0)}</span>
+        <span>
+          Total estimado: {cotizacion.moneda} {fmt(cotizacion.total_estimado ?? 0)}
+        </span>
+      </div>
+
+      <div style={{ overflowX: 'auto', border: '2px solid var(--table-header-border)', borderRadius: 'var(--radius)' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, minWidth: 640 }}>
           <thead>
-            <tr style={{ textAlign: 'left', color: 'var(--text-secondary)', fontSize: 11 }}>
+            <tr style={{ textAlign: 'left', fontSize: 11.5 }}>
               <th style={thStyle}>Habitación</th>
               <th style={thStyle}>Personas</th>
               <th style={thStyle}>Precio/persona/noche</th>
@@ -232,31 +252,40 @@ export function CotizacionDetalle() {
             </tr>
           </thead>
           <tbody>
-            {cotizacion.cotizacion_detalle.map((l) => (
-              <tr key={l.id} style={{ borderTop: '1px solid var(--border)' }}>
+            {cotizacion.cotizacion_detalle.map((l, i) => (
+              <tr key={l.id} style={{ background: i % 2 === 1 ? 'var(--surface-0)' : 'var(--surface-1)' }}>
                 <td style={tdStyle}>
                   {l.habitaciones?.hab_numero} · {l.habitaciones?.tipos_habitacion?.nombre}
                 </td>
                 <td style={tdStyle}>{l.nro_personas}</td>
                 <td style={tdStyle}>{l.precio_persona ?? l.precio_noche ?? '—'}</td>
                 <td style={tdStyle}>{l.dias}</td>
-                <td style={tdStyle}>{l.subtotal}</td>
+                <td style={{ ...tdStyle, fontWeight: 600 }}>{l.subtotal}</td>
                 <td style={tdStyle}>{l.notas || '—'}</td>
               </tr>
             ))}
           </tbody>
         </table>
       </div>
-
-      <p style={{ textAlign: 'right', fontWeight: 500, fontSize: 15, marginTop: 12 }}>
-        Total estimado: {cotizacion.moneda} {cotizacion.total_estimado ?? 0}
-      </p>
     </div>
   );
 }
 
-const thStyle: CSSProperties = { padding: '6px 8px' };
-const tdStyle: CSSProperties = { padding: '8px', color: 'var(--text-secondary)' };
+const thStyle: CSSProperties = {
+  padding: '8px 8px',
+  fontWeight: 700,
+  color: 'var(--table-header-text)',
+  background: 'var(--table-header-bg)',
+  borderRight: '2px solid var(--table-header-border)',
+  borderBottom: '2px solid var(--table-header-border)',
+};
+
+const tdStyle: CSSProperties = {
+  padding: '7px 8px',
+  color: 'var(--text-secondary)',
+  borderRight: '2px solid var(--table-border)',
+  borderBottom: '2px solid var(--table-border)',
+};
 
 const btnPrimary: CSSProperties = {
   padding: '8px 14px',
