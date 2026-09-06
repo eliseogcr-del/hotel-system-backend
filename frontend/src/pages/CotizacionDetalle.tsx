@@ -56,10 +56,10 @@ function imprimirCotizacionPDF(cotizacion: CotizacionDetalleData, hotelNombre: s
     <tr>
       <td>${l.habitaciones?.hab_numero ?? '—'}</td>
       <td>${escapeHtml(l.habitaciones?.tipos_habitacion?.nombre ?? '—')}</td>
-      <td>${escapeHtml(l.notas ?? '')}</td>
       <td style="text-align:right">${l.nro_personas}</td>
       <td style="text-align:right">${l.precio_persona != null ? fmt(Number(l.precio_persona)) : '—'}</td>
       <td style="text-align:right">${fmt(Number(l.subtotal))}</td>
+      <td>${escapeHtml(l.notas ?? '')}</td>
     </tr>`,
     )
     .join('');
@@ -93,16 +93,17 @@ function imprimirCotizacionPDF(cotizacion: CotizacionDetalleData, hotelNombre: s
   <table>
     <thead>
       <tr>
-        <th>Hab.</th><th>Tipo</th><th>Nota</th><th>Personas</th><th>Precio/persona/noche</th><th>Subtotal</th>
+        <th>Hab.</th><th>Tipo</th><th>Personas</th><th>Precio/persona/noche</th><th>Subtotal</th><th>Nota</th>
       </tr>
     </thead>
     <tbody>${filasHtml}</tbody>
     <tfoot>
       <tr>
-        <td colspan="3">Total</td>
+        <td colspan="2">Total</td>
         <td style="text-align:right">${totalPersonas}</td>
         <td></td>
         <td style="text-align:right">${cotizacion.moneda} ${fmt(cotizacion.total_estimado ?? 0)}</td>
+        <td></td>
       </tr>
     </tfoot>
   </table>
@@ -223,11 +224,11 @@ export function CotizacionDetalle() {
           <thead>
             <tr style={{ textAlign: 'left', color: 'var(--text-secondary)', fontSize: 11 }}>
               <th style={thStyle}>Habitación</th>
-              <th style={thStyle}>Nota</th>
               <th style={thStyle}>Personas</th>
               <th style={thStyle}>Precio/persona/noche</th>
               <th style={thStyle}>Días</th>
               <th style={thStyle}>Subtotal</th>
+              <th style={thStyle}>Nota</th>
             </tr>
           </thead>
           <tbody>
@@ -236,11 +237,11 @@ export function CotizacionDetalle() {
                 <td style={tdStyle}>
                   {l.habitaciones?.hab_numero} · {l.habitaciones?.tipos_habitacion?.nombre}
                 </td>
-                <td style={tdStyle}>{l.notas || '—'}</td>
                 <td style={tdStyle}>{l.nro_personas}</td>
                 <td style={tdStyle}>{l.precio_persona ?? l.precio_noche ?? '—'}</td>
                 <td style={tdStyle}>{l.dias}</td>
                 <td style={tdStyle}>{l.subtotal}</td>
+                <td style={tdStyle}>{l.notas || '—'}</td>
               </tr>
             ))}
           </tbody>

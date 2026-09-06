@@ -307,10 +307,10 @@ export function NuevaCotizacion() {
                       <tr style={{ textAlign: 'left', fontSize: 11, color: 'var(--text-secondary)' }}>
                         <th style={thStyle}>Habitación</th>
                         <th style={thStyle}>Tipo</th>
-                        <th style={{ ...thStyle, minWidth: 200 }}>Nota</th>
                         <th style={{ ...thStyle, textAlign: 'right' }}>Personas</th>
                         <th style={{ ...thStyle, textAlign: 'right' }}>Precio/persona/noche</th>
                         <th style={{ ...thStyle, textAlign: 'right' }}>Subtotal</th>
+                        <th style={{ ...thStyle, minWidth: 200 }}>Nota</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -318,14 +318,6 @@ export function NuevaCotizacion() {
                         <tr key={f.habitacionId} style={{ borderTop: '1px solid var(--border)' }}>
                           <td style={{ ...tdStyle, fontWeight: 500, color: 'var(--text-primary)' }}>{f.habNumero}</td>
                           <td style={tdStyle}>{f.tipoNombre ?? '—'}</td>
-                          <td style={tdStyle}>
-                            <input
-                              value={f.nota}
-                              onChange={(e) => actualizarFila(f.habitacionId, { nota: e.target.value })}
-                              placeholder="Opcional"
-                              style={inputCeldaStyle}
-                            />
-                          </td>
                           <td style={tdStyle}>
                             <input
                               type="number"
@@ -352,17 +344,26 @@ export function NuevaCotizacion() {
                           <td style={{ ...tdStyle, textAlign: 'right', fontWeight: 500 }}>
                             {subtotalFila(f, disponibilidad.dias).toFixed(2)}
                           </td>
+                          <td style={tdStyle}>
+                            <input
+                              value={f.nota}
+                              onChange={(e) => actualizarFila(f.habitacionId, { nota: e.target.value })}
+                              placeholder="Opcional"
+                              style={inputCeldaStyle}
+                            />
+                          </td>
                         </tr>
                       ))}
                     </tbody>
                     <tfoot>
                       <tr style={{ borderTop: '2px solid var(--border-strong)', fontWeight: 700 }}>
-                        <td style={tdStyle} colSpan={3}>
+                        <td style={tdStyle} colSpan={2}>
                           Total
                         </td>
                         <td style={{ ...tdStyle, textAlign: 'right' }}>{totalPersonas}</td>
                         <td style={tdStyle}></td>
                         <td style={{ ...tdStyle, textAlign: 'right' }}>{totalGeneral.toFixed(2)}</td>
+                        <td style={tdStyle}></td>
                       </tr>
                     </tfoot>
                   </table>
