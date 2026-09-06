@@ -1087,12 +1087,42 @@ export class ReservasService {
     let sesionTurnoId: string | null = null;
     if (metodoPago === 'efectivo') {
       sesionTurnoId = await this.obtenerSesionAbierta(client, hotelId, personalId);
+
+      // Igual que en EstadiasService.registrarMovimiento(): el cierre de
+      // caja (Caja.tsx) lista los movimientos de todas las reservas juntos,
+      // y "concepto" no puede tocarse porque Reportes (categoriaTipoIngreso)
+      // hace match exacto contra 'Anticipo de reserva' para clasificar los
+      // ingresos -- la referencia de habitación/cliente va en "notas".
+      const { data: resumen, error: resumenError } = await client
+        .from('reservas')
+        .select(
+          `
+          huespedes(nombres, apellidos), empresas(razon_social),
+          reserva_habitacion(habitaciones(hab_numero))
+        `,
+        )
+        .eq('id', reservaId)
+        .maybeSingle();
+      if (resumenError) throw resumenError;
+
+      const habitacionesTexto = ((resumen as any)?.reserva_habitacion ?? [])
+        .map((rh: any) => rh.habitaciones?.hab_numero)
+        .filter((n: unknown) => n != null)
+        .join(', ');
+      const nombreCliente = (resumen as any)?.huespedes
+        ? `${(resumen as any).huespedes.nombres} ${(resumen as any).huespedes.apellidos}`
+        : ((resumen as any)?.empresas?.razon_social ?? null);
+      const referencia = habitacionesTexto
+        ? `Hab. ${habitacionesTexto}${nombreCliente ? ` - ${nombreCliente}` : ''}`
+        : nombreCliente;
+
       const { error: cajaError } = await client.from('movimientos_caja').insert({
         sesion_turno_id: sesionTurnoId,
         tipo: 'ingreso',
         monto,
         concepto: 'Anticipo de reserva',
         metodo_pago: metodoPago,
+        notas: referencia ?? null,
       });
       if (cajaError) throw cajaError;
     }
