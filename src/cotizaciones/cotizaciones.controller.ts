@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   Param,
   Patch,
@@ -82,6 +83,18 @@ export class CotizacionesController {
   ) {
     const client = this.supabase.getClientForRequest(user.accessToken);
     return this.cotizacionesService.actualizarEstado(client, hotelId, id, dto);
+  }
+
+  @Delete(':id/detalle/:lineaId')
+  @Roles('admin', 'recepcion')
+  async eliminarLinea(
+    @Param('hotelId') hotelId: string,
+    @Param('id') id: string,
+    @Param('lineaId') lineaId: string,
+    @CurrentUser() user: RequestUser,
+  ) {
+    const client = this.supabase.getClientForRequest(user.accessToken);
+    return this.cotizacionesService.eliminarLinea(client, hotelId, id, lineaId);
   }
 
   @Post(':id/convertir')
