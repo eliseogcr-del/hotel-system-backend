@@ -75,12 +75,12 @@ function imprimirCotizacionPDF(cotizacion: CotizacionDetalleData, hotelNombre: s
   p.hotel { font-size: 13px; color: #555; margin: 0 0 12px; }
   p.meta { font-size: 12px; color: #555; margin: 0 0 16px; }
   .totales {
-    display: flex; gap: 28px; font-weight: 700; font-size: 14px;
+    display: flex; gap: 28px; font-weight: 700; font-size: 16px;
     color: #0b3a4a; background: #dcedf8; border: 1px solid #6fa2c2;
     border-radius: 8px; padding: 10px 14px; margin-bottom: 16px;
   }
-  table { width: 100%; border-collapse: collapse; font-size: 12px; border: 2px solid #6fa2c2; }
-  th, td { border-right: 2px solid #b9b7ac; border-bottom: 2px solid #b9b7ac; padding: 7px 10px; text-align: left; }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; border: 2px solid #6fa2c2; }
+  th, td { border-right: 2px solid #b9b7ac; border-bottom: 2px solid #b9b7ac; padding: 9px 10px; text-align: left; }
   th { background: #dcedf8; color: #0b3a4a; font-weight: 700; border-bottom: 2px solid #6fa2c2; border-right: 2px solid #6fa2c2; }
   @media print { body { padding: 10mm; } }
 </style>
@@ -242,7 +242,7 @@ export function CotizacionDetalle() {
           flexWrap: 'wrap',
           gap: '4px 28px',
           fontWeight: 700,
-          fontSize: 14,
+          fontSize: 16,
           color: 'var(--table-header-text)',
           background: 'var(--table-header-bg)',
           border: '1px solid var(--table-header-border)',
@@ -258,9 +258,9 @@ export function CotizacionDetalle() {
       </div>
 
       <div style={{ overflowX: 'auto', border: '2px solid var(--table-header-border)', borderRadius: 'var(--radius)' }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, minWidth: 640 }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 16, minWidth: 640 }}>
           <thead>
-            <tr style={{ textAlign: 'left', fontSize: 11.5 }}>
+            <tr style={{ textAlign: 'left', fontSize: 14 }}>
               <th style={thStyle}>Habitación</th>
               <th style={thStyle}>Personas</th>
               <th style={thStyle}>Precio/persona/noche</th>
@@ -303,7 +303,7 @@ export function CotizacionDetalle() {
 }
 
 const thStyle: CSSProperties = {
-  padding: '8px 8px',
+  padding: '10px 10px',
   fontWeight: 700,
   color: 'var(--table-header-text)',
   background: 'var(--table-header-bg)',
@@ -312,7 +312,8 @@ const thStyle: CSSProperties = {
 };
 
 const tdStyle: CSSProperties = {
-  padding: '7px 8px',
+  padding: '9px 10px',
+  fontSize: 15,
   color: 'var(--text-secondary)',
   borderRight: '2px solid var(--table-border)',
   borderBottom: '2px solid var(--table-border)',
