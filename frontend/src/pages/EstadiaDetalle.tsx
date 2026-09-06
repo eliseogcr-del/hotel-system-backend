@@ -431,8 +431,8 @@ export function EstadiaDetalle() {
         />
       )}
 
-      <div style={{ overflowX: 'auto' }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, marginTop: 16, minWidth: 640 }}>
+      <div style={{ overflowX: 'auto', border: '2px solid var(--table-header-border)', borderRadius: 'var(--radius)', marginTop: 16 }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, minWidth: 640 }}>
           <thead>
             <tr style={{ textAlign: 'left', color: 'var(--text-secondary)', fontSize: 11 }}>
               <th style={thStyle}>Fecha</th>
@@ -441,7 +441,7 @@ export function EstadiaDetalle() {
               <th style={thStyle}>Método</th>
               <th style={thStyle}>Personal</th>
               <th style={thStyle}>Notas</th>
-              <th style={thStyle}></th>
+              <th style={{ ...thStyle, borderRight: 'none' }}></th>
             </tr>
           </thead>
           <tbody>
@@ -456,7 +456,7 @@ export function EstadiaDetalle() {
               const color = esPago ? 'var(--ingreso)' : 'var(--disponible)';
               const bg = esPago ? 'var(--ingreso-bg)' : 'var(--disponible-bg)';
               return (
-                <tr key={m.id} style={{ borderTop: '1px solid var(--border)', background: bg }}>
+                <tr key={m.id} style={{ background: bg }}>
                   <td style={{ ...tdStyle, color }}>{new Date(m.fecha).toLocaleString()}</td>
                   <td style={{ ...tdStyle, color, fontWeight: 500 }}>{TIPO_LABEL[m.tipo] ?? m.tipo}</td>
                   <td style={{ ...tdStyle, color, fontWeight: 600 }}>
@@ -502,7 +502,7 @@ export function EstadiaDetalle() {
                       m.notas ?? ''
                     )}
                   </td>
-                  <td style={tdStyle}>
+                  <td style={{ ...tdStyle, borderRight: 'none' }}>
                     {editandoMovimientoId === m.id ? (
                       <span style={{ display: 'flex', gap: 8 }}>
                         <button
@@ -1486,8 +1486,17 @@ function RegistrarMovimientoForm({
   );
 }
 
-const thStyle: CSSProperties = { padding: '6px 8px' };
-const tdStyle: CSSProperties = { padding: '8px', color: 'var(--text-secondary)' };
+const thStyle: CSSProperties = {
+  padding: '6px 8px',
+  borderRight: '2px solid var(--table-header-border)',
+  borderBottom: '2px solid var(--table-header-border)',
+};
+const tdStyle: CSSProperties = {
+  padding: '8px',
+  color: 'var(--text-secondary)',
+  borderRight: '2px solid var(--table-border)',
+  borderBottom: '2px solid var(--table-border)',
+};
 
 const inputStyle: CSSProperties = {
   padding: '8px 10px',
