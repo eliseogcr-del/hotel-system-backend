@@ -763,13 +763,29 @@ export class EstadiasService {
           : dto.tipo === 'desayuno'
             ? 'Desayuno pagado al momento'
             : 'Consumo de bazar pagado al momento';
+
+      // El cierre de caja (Caja.tsx) lista los movimientos de todas las
+      // habitaciones juntos -- "concepto" no puede tocarse porque Reportes
+      // (categoriaTipoIngreso) y el propio Caja.tsx (etiquetaConcepto) hacen
+      // match exacto contra estos textos fijos para clasificar los ingresos.
+      // La referencia de habitación/huésped va en "notas" en su lugar, que
+      // ya se muestra en su propia columna en Caja.tsx y en la liquidación
+      // impresa.
+      const habNumero = estadia.reserva_habitacion.habitaciones?.hab_numero;
+      const huesped = estadia.reserva_habitacion.reservas.huespedes;
+      const referenciaHabitacion =
+        habNumero != null
+          ? `Hab. ${habNumero}${huesped ? ` - ${huesped.nombres} ${huesped.apellidos}` : ''}`
+          : null;
+      const notasCaja = [referenciaHabitacion, notasCargo].filter(Boolean).join(' — ') || null;
+
       const { error: cajaError } = await client.from('movimientos_caja').insert({
         sesion_turno_id: sesionTurnoId,
         tipo: 'ingreso',
         monto: Math.abs(montoPago),
         concepto: conceptoCaja,
         metodo_pago: dto.metodoPago,
-        notas: notasCargo ?? null,
+        notas: notasCaja,
         moneda_pago: monedaPago ?? null,
         monto_original: montoOriginalUsd ?? null,
         tipo_cambio_aplicado: tipoCambioAplicado ?? null,
