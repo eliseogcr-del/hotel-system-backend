@@ -8,7 +8,7 @@ interface HabitacionDisponible {
   id: string;
   hab_numero: number;
   piso: number;
-  tipos_habitacion: { nombre: string } | null;
+  tipos_habitacion: { nombre: string; aforo_max: number } | null;
 }
 
 interface RespuestaDisponibilidad {
@@ -23,6 +23,7 @@ interface FilaGrid {
   habNumero: number;
   piso: number;
   tipoNombre: string | null;
+  aforoMax: number;
   nota: string;
   personas: number;
   precioPersona: number;
@@ -107,6 +108,7 @@ export function NuevaCotizacion() {
           habNumero: h.hab_numero,
           piso: h.piso,
           tipoNombre: h.tipos_habitacion?.nombre ?? null,
+          aforoMax: h.tipos_habitacion?.aforo_max ?? 0,
           nota: '',
           personas: 0,
           precioPersona: 0,
@@ -128,6 +130,7 @@ export function NuevaCotizacion() {
   }
 
   const totalPersonas = useMemo(() => filas.reduce((acc, f) => acc + (Number(f.personas) || 0), 0), [filas]);
+  const aforoMaxTotal = useMemo(() => filas.reduce((acc, f) => acc + (Number(f.aforoMax) || 0), 0), [filas]);
   const totalGeneral = useMemo(
     () => filas.reduce((acc, f) => acc + subtotalFila(f, disponibilidad?.dias ?? noches), 0),
     [filas, disponibilidad, noches],
@@ -326,6 +329,7 @@ export function NuevaCotizacion() {
                   }}
                 >
                   <span>Total personas: {totalPersonas}</span>
+                  <span>Capacidad máxima: {aforoMaxTotal}</span>
                   <span>Total cotizado: PEN {totalGeneral.toFixed(2)}</span>
                   <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                     Adelanto pagado: PEN

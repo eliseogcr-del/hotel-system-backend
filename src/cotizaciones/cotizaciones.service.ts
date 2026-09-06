@@ -38,7 +38,7 @@ export class CotizacionesService {
 
     const { data: habitaciones, error: habError } = await client
       .from('habitaciones')
-      .select('id, hab_numero, piso, tipo_id, tipos_habitacion(nombre)')
+      .select('id, hab_numero, piso, tipo_id, tipos_habitacion(nombre, aforo_max)')
       .eq('hotel_id', hotelId)
       .neq('estado', 'bloqueada')
       .order('hab_numero', { ascending: true });
