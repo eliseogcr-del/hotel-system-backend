@@ -124,6 +124,7 @@ export function CotizacionDetalle() {
   const [cotizacion, setCotizacion] = useState<CotizacionDetalleData | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [accionando, setAccionando] = useState(false);
+  const [quitandoId, setQuitandoId] = useState<string | null>(null);
 
   function cargar() {
     if (!hotelActual || !id) return;
@@ -149,6 +150,21 @@ export function CotizacionDetalle() {
     }
   }
 
+  async function quitarLinea(lineaId: string) {
+    if (!hotelActual || !id) return;
+    if (!confirm('¿Quitar esta habitación de la cotización?')) return;
+    setQuitandoId(lineaId);
+    setError(null);
+    try {
+      await api.delete(`/hoteles/${hotelActual.hotelId}/cotizaciones/${id}/detalle/${lineaId}`);
+      cargar();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'No se pudo quitar la habitación');
+    } finally {
+      setQuitandoId(null);
+    }
+  }
+
   async function convertir() {
     if (!hotelActual || !id) return;
     if (!confirm('¿Convertir esta cotización en una reserva confirmada?')) return;
@@ -169,6 +185,8 @@ export function CotizacionDetalle() {
   if (!hotelActual) return null;
   if (error && !cotizacion) return <p style={{ color: 'var(--danger)' }}>{error}</p>;
   if (!cotizacion) return <p style={{ color: 'var(--text-muted)' }}>Cargando...</p>;
+
+  const puedeEditar = cotizacion.estado !== 'convertida';
 
   return (
     <div>
@@ -249,6 +267,7 @@ export function CotizacionDetalle() {
               <th style={thStyle}>Días</th>
               <th style={thStyle}>Subtotal</th>
               <th style={thStyle}>Nota</th>
+              {puedeEditar && <th style={{ ...thStyle, textAlign: 'center' }}></th>}
             </tr>
           </thead>
           <tbody>
@@ -262,6 +281,18 @@ export function CotizacionDetalle() {
                 <td style={tdStyle}>{l.dias}</td>
                 <td style={{ ...tdStyle, fontWeight: 600 }}>{l.subtotal}</td>
                 <td style={tdStyle}>{l.notas || '—'}</td>
+                {puedeEditar && (
+                  <td style={{ ...tdStyle, textAlign: 'center' }}>
+                    <button
+                      type="button"
+                      onClick={() => quitarLinea(l.id)}
+                      disabled={quitandoId === l.id}
+                      style={btnQuitar}
+                    >
+                      {quitandoId === l.id ? '...' : 'Quitar'}
+                    </button>
+                  </td>
+                )}
               </tr>
             ))}
           </tbody>
@@ -312,4 +343,14 @@ const btnDanger: CSSProperties = {
   border: '1px solid var(--ocupada)',
   borderRadius: 'var(--radius)',
   fontSize: 13,
+};
+
+const btnQuitar: CSSProperties = {
+  padding: '4px 8px',
+  background: 'transparent',
+  border: '1px solid var(--danger)',
+  borderRadius: 'var(--radius)',
+  color: 'var(--danger)',
+  fontSize: 11.5,
+  cursor: 'pointer',
 };

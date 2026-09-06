@@ -216,6 +216,43 @@ export class CotizacionesService {
   }
 
   /**
+   * Saca una habitación del cuadro de una cotización ya grabada (ej. el
+   * cliente ya no quiere esa habitación) y recalcula el total_estimado con
+   * las líneas que quedan. No se puede editar una cotización ya convertida
+   * en reserva -- ahí la reserva real es la que se edita.
+   */
+  async eliminarLinea(client: SupabaseClient, hotelId: string, id: string, lineaId: string) {
+    const actual = await this.obtenerDetalle(client, hotelId, id);
+    if (actual.estado === 'convertida') {
+      throw new BadRequestException(
+        'Esta cotización ya fue convertida en reserva; no se puede editar su cuadro',
+      );
+    }
+
+    const linea = actual.cotizacion_detalle.find((l: any) => l.id === lineaId);
+    if (!linea) throw new NotFoundException('Línea de cotización no encontrada');
+
+    const { error: delError } = await client
+      .from('cotizacion_detalle')
+      .delete()
+      .eq('id', lineaId)
+      .eq('cotizacion_id', id);
+    if (delError) throw delError;
+
+    const totalEstimado = actual.cotizacion_detalle
+      .filter((l: any) => l.id !== lineaId)
+      .reduce((acc: number, l: any) => acc + Number(l.subtotal), 0);
+
+    const { error: updError } = await client
+      .from('cotizaciones')
+      .update({ total_estimado: totalEstimado })
+      .eq('id', id);
+    if (updError) throw updError;
+
+    return this.obtenerDetalle(client, hotelId, id);
+  }
+
+  /**
    * Copia (no enlaza) los datos de la cotización a una reserva nueva y
    * editable, reutilizando ReservasService.crear() para heredar su misma
    * validación de disponibilidad (re-chequeada, porque pudo haber pasado
