@@ -247,36 +247,74 @@ export class ReservasService {
     return this.obtenerDetalle(client, hotelId, reserva.id);
   }
 
+  // Vista de la pestaña "Lista" de Reservas: una fila por habitación
+  // reservada (no por reserva -- una reserva grupal ocupa varias filas),
+  // para poder mostrar y filtrar por habitación/tipo/tarifa de cada línea
+  // en vez de solo los datos agregados de la reserva.
   async listar(
     client: SupabaseClient,
     hotelId: string,
     filtros: ListarReservasQueryDto,
   ) {
     let query = client
-      .from('reservas')
+      .from('reserva_habitacion')
       .select(
         `
-        id, origen, codigo_externo, fecha_ingreso, dias_hospedaje,
-        fecha_salida_prog, moneda, descuento_total, importe_final, estado,
-        created_at,
-        huespedes(nombres, apellidos), empresas(razon_social),
-        reserva_habitacion(
-          id, habitacion_id, fecha_hora_checkin_prevista,
-          fecha_hora_checkout_prevista, subtotal,
-          habitaciones(hab_numero)
+        id, nro_personas, tarifa_dia, dias, incluye_desayuno,
+        fecha_hora_checkin_prevista, fecha_hora_checkout_prevista,
+        habitaciones!inner(hab_numero, tipos_habitacion(nombre)),
+        reservas!inner(
+          id, origen, moneda, facturable, estado, hotel_id,
+          huespedes(nombres, apellidos), empresas(razon_social)
         )
       `,
       )
-      .eq('hotel_id', hotelId)
-      .order('fecha_ingreso', { ascending: false });
+      .eq('reservas.hotel_id', hotelId)
+      .order('fecha_hora_checkin_prevista', { ascending: false });
 
-    if (filtros.estado) query = query.eq('estado', filtros.estado);
-    if (filtros.desde) query = query.gte('fecha_ingreso', filtros.desde);
-    if (filtros.hasta) query = query.lte('fecha_ingreso', filtros.hasta);
+    if (filtros.estado) query = query.eq('reservas.estado', filtros.estado);
+    if (filtros.desde) query = query.gte('fecha_hora_checkin_prevista', `${filtros.desde}T00:00:00`);
+    if (filtros.hasta) query = query.lte('fecha_hora_checkin_prevista', `${filtros.hasta}T23:59:59`);
+    if (filtros.habNumero) query = query.eq('habitaciones.hab_numero', Number(filtros.habNumero));
 
     const { data, error } = await query;
     if (error) throw error;
-    return data;
+
+    const filas = data ?? [];
+    const reservaIds = [...new Set(filas.map((f: any) => f.reservas.id))];
+
+    // Los adelantos se registran a nivel de la reserva completa (no por
+    // línea/habitación) -- ver anticipos_reserva en CLAUDE.md 3.3 -- así
+    // que se agregan aparte y se repiten en cada línea de la misma reserva.
+    const anticiposPorReserva = new Map<string, number>();
+    if (reservaIds.length > 0) {
+      const { data: anticipos, error: anticiposError } = await client
+        .from('anticipos_reserva')
+        .select('reserva_id, monto')
+        .in('reserva_id', reservaIds);
+      if (anticiposError) throw anticiposError;
+      for (const a of anticipos ?? []) {
+        anticiposPorReserva.set(a.reserva_id, (anticiposPorReserva.get(a.reserva_id) ?? 0) + Number(a.monto));
+      }
+    }
+
+    return filas.map((f: any) => ({
+      id: f.id,
+      reservaId: f.reservas.id,
+      habNumero: f.habitaciones.hab_numero,
+      tipoHabitacion: f.habitaciones.tipos_habitacion?.nombre ?? null,
+      huesped: f.reservas.huespedes
+        ? `${f.reservas.huespedes.nombres} ${f.reservas.huespedes.apellidos}`
+        : (f.reservas.empresas?.razon_social ?? null),
+      checkinPrevisto: f.fecha_hora_checkin_prevista,
+      nroPersonas: f.nro_personas,
+      moneda: f.reservas.moneda,
+      tarifaDia: f.tarifa_dia,
+      incluyeDesayuno: f.incluye_desayuno,
+      facturable: f.reservas.facturable,
+      estado: f.reservas.estado,
+      anticipo: anticiposPorReserva.get(f.reservas.id) ?? 0,
+    }));
   }
 
   async obtenerCalendario(

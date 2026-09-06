@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type CSSProperties } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { api, ApiError } from '../lib/api';
 import { useHotel } from '../contexts/HotelContext';
 import { ReservaFormModal } from '../components/ReservaFormModal';
@@ -21,16 +21,22 @@ interface TipoHabitacionPrecios {
   precio_costo: number;
 }
 
-interface Reserva {
+// Una fila por habitación reservada (no por reserva) -- ver
+// ReservasService.listar(): una reserva grupal ocupa varias filas.
+interface ReservaLinea {
   id: string;
-  origen: string;
-  fecha_ingreso: string;
-  dias_hospedaje: number;
-  estado: string;
-  importe_final: number | null;
+  reservaId: string;
+  habNumero: number;
+  tipoHabitacion: string | null;
+  huesped: string | null;
+  checkinPrevisto: string;
+  nroPersonas: number;
   moneda: string;
-  huespedes: { nombres: string; apellidos: string } | null;
-  empresas: { razon_social: string } | null;
+  tarifaDia: number;
+  incluyeDesayuno: boolean;
+  facturable: boolean;
+  estado: string;
+  anticipo: number;
 }
 
 const ESTADOS = ['pendiente_revision', 'confirmada', 'cancelada'];
@@ -82,10 +88,13 @@ function capitalizar(texto: string): string {
 export function Reservas() {
   const { hotelActual } = useHotel();
   const navigate = useNavigate();
-  const [reservas, setReservas] = useState<Reserva[]>([]);
+  const [filas, setFilas] = useState<ReservaLinea[]>([]);
   const [habitaciones, setHabitaciones] = useState<Habitacion[]>([]);
   const [tiposHabitacion, setTiposHabitacion] = useState<TipoHabitacionPrecios[]>([]);
   const [filtroEstado, setFiltroEstado] = useState('');
+  const [filtroListaDesde, setFiltroListaDesde] = useState('');
+  const [filtroListaHasta, setFiltroListaHasta] = useState('');
+  const [filtroHabNumero, setFiltroHabNumero] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -142,15 +151,20 @@ export function Reservas() {
   function cargarReservas() {
     if (!hotelActual) return;
     setLoading(true);
-    const query = filtroEstado ? `?estado=${filtroEstado}` : '';
+    const params = new URLSearchParams();
+    if (filtroEstado) params.set('estado', filtroEstado);
+    if (filtroListaDesde) params.set('desde', filtroListaDesde);
+    if (filtroListaHasta) params.set('hasta', filtroListaHasta);
+    if (filtroHabNumero) params.set('habNumero', filtroHabNumero);
+    const query = params.toString() ? `?${params.toString()}` : '';
     api
-      .get<Reserva[]>(`/hoteles/${hotelActual.hotelId}/reservas${query}`)
-      .then(setReservas)
+      .get<ReservaLinea[]>(`/hoteles/${hotelActual.hotelId}/reservas${query}`)
+      .then(setFilas)
       .catch((err) => setError(err instanceof ApiError ? err.message : 'Error al cargar'))
       .finally(() => setLoading(false));
   }
 
-  useEffect(cargarReservas, [hotelActual, filtroEstado]);
+  useEffect(cargarReservas, [hotelActual, filtroEstado, filtroListaDesde, filtroListaHasta, filtroHabNumero]);
 
   useEffect(() => {
     if (!hotelActual) return;
@@ -286,63 +300,176 @@ export function Reservas() {
       )}
 
       {vista === 'lista' && (
-        <>
-          <div style={{ margin: '16px 0' }}>
-            <select value={filtroEstado} onChange={(e) => setFiltroEstado(e.target.value)} style={selectStyle}>
-              <option value="">Todos los estados</option>
-              {ESTADOS.map((e) => (
-                <option key={e} value={e}>
-                  {e}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {loading && <p style={{ color: 'var(--text-muted)' }}>Cargando...</p>}
-          {error && <p style={{ color: 'var(--danger)' }}>{error}</p>}
-
-          {!loading && !error && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              {reservas.map((r) => (
-                <Link
-                  key={r.id}
-                  to={`/reservas/${r.id}`}
-                  style={{
-                    display: 'flex',
-                    flexWrap: 'wrap',
-                    justifyContent: 'space-between',
-                    alignItems: 'center',
-                    gap: '4px 12px',
-                    padding: '10px 14px',
-                    background: 'var(--surface-1)',
-                    border: '1px solid var(--border)',
-                    borderRadius: 'var(--radius)',
-                    textDecoration: 'none',
-                    color: 'var(--text-primary)',
-                    fontSize: 13,
-                  }}
-                >
-                  <span>
-                    {r.huespedes ? `${r.huespedes.nombres} ${r.huespedes.apellidos}` : r.empresas?.razon_social ?? '—'}
-                    {' · '}
-                    <span style={{ color: 'var(--text-muted)' }}>{r.origen}</span>
-                  </span>
-                  <span style={{ color: 'var(--text-secondary)' }}>
-                    {new Date(r.fecha_ingreso).toLocaleDateString()} · {r.dias_hospedaje}d
-                  </span>
-                  <span style={{ fontWeight: 500 }}>
-                    {r.importe_final != null ? `${r.moneda} ${r.importe_final}` : '—'}
-                  </span>
-                  <EstadoBadge estado={r.estado} />
-                </Link>
-              ))}
-              {reservas.length === 0 && <p style={{ color: 'var(--text-muted)' }}>No hay reservas.</p>}
-            </div>
-          )}
-        </>
+        <ListaReservas
+          filas={filas}
+          loading={loading}
+          error={error}
+          filtroEstado={filtroEstado}
+          onFiltroEstadoChange={setFiltroEstado}
+          filtroDesde={filtroListaDesde}
+          onFiltroDesdeChange={setFiltroListaDesde}
+          filtroHasta={filtroListaHasta}
+          onFiltroHastaChange={setFiltroListaHasta}
+          filtroHabNumero={filtroHabNumero}
+          onFiltroHabNumeroChange={setFiltroHabNumero}
+          onClickFila={(f) => navigate(`/reservas/${f.reservaId}`)}
+        />
       )}
 
       {vista === 'avisos-booking' && <AvisosBookingTab hotelId={hotelActual.hotelId} />}
+    </div>
+  );
+}
+
+// Grilla de la pestaña "Lista": una fila por habitación reservada (ver
+// ReservaLinea), con el mismo formato ya usado en el cuadro de cotización
+// (encabezados en negrita con fondo de color, bordes gruesos, franjas
+// zebra) -- ver NuevaCotizacion.tsx / CotizacionDetalle.tsx.
+function ListaReservas({
+  filas,
+  loading,
+  error,
+  filtroEstado,
+  onFiltroEstadoChange,
+  filtroDesde,
+  onFiltroDesdeChange,
+  filtroHasta,
+  onFiltroHastaChange,
+  filtroHabNumero,
+  onFiltroHabNumeroChange,
+  onClickFila,
+}: {
+  filas: ReservaLinea[];
+  loading: boolean;
+  error: string | null;
+  filtroEstado: string;
+  onFiltroEstadoChange: (v: string) => void;
+  filtroDesde: string;
+  onFiltroDesdeChange: (v: string) => void;
+  filtroHasta: string;
+  onFiltroHastaChange: (v: string) => void;
+  filtroHabNumero: string;
+  onFiltroHabNumeroChange: (v: string) => void;
+  onClickFila: (f: ReservaLinea) => void;
+}) {
+  return (
+    <div>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'flex-end', margin: '16px 0' }}>
+        <div>
+          <label style={labelStyle}>Estado</label>
+          <select value={filtroEstado} onChange={(e) => onFiltroEstadoChange(e.target.value)} style={selectStyle}>
+            <option value="">Todos los estados</option>
+            {ESTADOS.map((e) => (
+              <option key={e} value={e}>
+                {e}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <label style={labelStyle}>Check-in desde</label>
+          <input
+            type="date"
+            value={filtroDesde}
+            onChange={(e) => onFiltroDesdeChange(e.target.value)}
+            style={inputStyle}
+          />
+        </div>
+        <div>
+          <label style={labelStyle}>Check-in hasta</label>
+          <input
+            type="date"
+            value={filtroHasta}
+            onChange={(e) => onFiltroHastaChange(e.target.value)}
+            style={inputStyle}
+          />
+        </div>
+        <div style={{ width: 130 }}>
+          <label style={labelStyle}>N° habitación</label>
+          <input
+            type="number"
+            min={0}
+            value={filtroHabNumero}
+            onChange={(e) => onFiltroHabNumeroChange(e.target.value)}
+            style={inputStyle}
+            placeholder="Ej. 402"
+          />
+        </div>
+        {(filtroEstado || filtroDesde || filtroHasta || filtroHabNumero) && (
+          <button
+            type="button"
+            onClick={() => {
+              onFiltroEstadoChange('');
+              onFiltroDesdeChange('');
+              onFiltroHastaChange('');
+              onFiltroHabNumeroChange('');
+            }}
+            style={btnSecondary}
+          >
+            Limpiar filtros
+          </button>
+        )}
+      </div>
+
+      {loading && <p style={{ color: 'var(--text-muted)' }}>Cargando...</p>}
+      {error && <p style={{ color: 'var(--danger)' }}>{error}</p>}
+
+      {!loading && !error && (
+        <div style={{ overflowX: 'auto', border: '2px solid var(--table-header-border)', borderRadius: 'var(--radius)' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, minWidth: 980 }}>
+            <thead>
+              <tr style={{ textAlign: 'left', fontSize: 12 }}>
+                <th style={thListaStyle}>Habitación</th>
+                <th style={thListaStyle}>Tipo</th>
+                <th style={thListaStyle}>Huésped</th>
+                <th style={thListaStyle}>Check-in</th>
+                <th style={{ ...thListaStyle, textAlign: 'right' }}>Personas</th>
+                <th style={thListaStyle}>Moneda</th>
+                <th style={{ ...thListaStyle, textAlign: 'right' }}>Tarifa/noche</th>
+                <th style={{ ...thListaStyle, textAlign: 'right' }}>Adelanto</th>
+                <th style={{ ...thListaStyle, textAlign: 'center' }}>Desayuno</th>
+                <th style={{ ...thListaStyle, textAlign: 'center' }}>Facturable</th>
+                <th style={thListaStyle}>Estado</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filas.map((f, i) => (
+                <tr
+                  key={f.id}
+                  onClick={() => onClickFila(f)}
+                  style={{
+                    cursor: 'pointer',
+                    background: i % 2 === 1 ? 'var(--surface-0)' : 'var(--surface-1)',
+                  }}
+                >
+                  <td style={{ ...tdListaStyle, fontWeight: 600, color: 'var(--text-primary)' }}>{f.habNumero}</td>
+                  <td style={tdListaStyle}>{f.tipoHabitacion ?? '—'}</td>
+                  <td style={tdListaStyle}>{f.huesped ?? '—'}</td>
+                  <td style={tdListaStyle}>{new Date(f.checkinPrevisto).toLocaleString('es-PE', { dateStyle: 'short', timeStyle: 'short' })}</td>
+                  <td style={{ ...tdListaStyle, textAlign: 'right' }}>{f.nroPersonas}</td>
+                  <td style={tdListaStyle}>{f.moneda}</td>
+                  <td style={{ ...tdListaStyle, textAlign: 'right' }}>{Number(f.tarifaDia).toFixed(2)}</td>
+                  <td style={{ ...tdListaStyle, textAlign: 'right' }}>
+                    {f.anticipo > 0 ? Number(f.anticipo).toFixed(2) : '—'}
+                  </td>
+                  <td style={{ ...tdListaStyle, textAlign: 'center' }}>{f.incluyeDesayuno ? 'Sí' : 'No'}</td>
+                  <td style={{ ...tdListaStyle, textAlign: 'center' }}>{f.facturable ? 'Sí' : 'No'}</td>
+                  <td style={tdListaStyle}>
+                    <EstadoBadge estado={f.estado} />
+                  </td>
+                </tr>
+              ))}
+              {filas.length === 0 && (
+                <tr>
+                  <td style={tdListaStyle} colSpan={11}>
+                    No hay reservas para estos filtros.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   );
 }
@@ -1031,6 +1158,25 @@ const btnToggleActivo: CSSProperties = {
   background: 'var(--brand)',
   color: '#fff',
   borderColor: 'var(--brand)',
+};
+
+// Mismo formato "profesional" que el cuadro de cotización: encabezados en
+// negrita con fondo de color, bordes de celda gruesos para diferenciar
+// filas y columnas (ver NuevaCotizacion.tsx).
+const thListaStyle: CSSProperties = {
+  padding: '8px 10px',
+  fontWeight: 700,
+  color: 'var(--table-header-text)',
+  background: 'var(--table-header-bg)',
+  borderRight: '2px solid var(--table-header-border)',
+  borderBottom: '2px solid var(--table-header-border)',
+};
+
+const tdListaStyle: CSSProperties = {
+  padding: '7px 10px',
+  color: 'var(--text-secondary)',
+  borderRight: '2px solid var(--table-border)',
+  borderBottom: '2px solid var(--table-border)',
 };
 
 // Grilla del calendario: líneas más oscuras y gruesas que el resto de la
