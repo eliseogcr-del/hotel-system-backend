@@ -836,7 +836,16 @@ function VistaTarjetas({
                   title={clickable ? 'Ver detalle' : undefined}
                 >
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
-                    <span style={{ fontSize: 24, fontWeight: 700, color: '#fff' }}>{c.numero}</span>
+                    <span
+                      style={{
+                        fontSize: 24,
+                        fontWeight: 700,
+                        color: '#fff',
+                        textShadow: '0 1px 3px rgba(0,0,0,0.6)',
+                      }}
+                    >
+                      {c.numero}
+                    </span>
                     <span style={{ fontSize: 10, fontWeight: 700, color: ESTADO_COLOR_INTENSO[c.estado].text }}>
                       {ESTADO_COCHERA_LABEL[c.estado]}
                     </span>
