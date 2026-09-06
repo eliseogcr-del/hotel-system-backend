@@ -298,7 +298,7 @@ export class ReservasService {
       }
     }
 
-    return filas.map((f: any) => ({
+    const filasMapeadas = filas.map((f: any) => ({
       id: f.id,
       reservaId: f.reservas.id,
       habNumero: f.habitaciones.hab_numero,
@@ -315,6 +315,18 @@ export class ReservasService {
       estado: f.reservas.estado,
       anticipo: anticiposPorReserva.get(f.reservas.id) ?? 0,
     }));
+
+    // Filtrado en memoria en vez de un .or() de PostgREST: el nombre a
+    // buscar puede venir del huésped o de la empresa (dos tablas embebidas
+    // distintas -- ver el campo "huesped" de arriba), y encadenar ORs entre
+    // dos foreignTables no es directo con el query builder de supabase-js.
+    // El volumen de reservas por hotel es chico, así que no hace falta
+    // resolverlo a nivel de base de datos.
+    const busqueda = filtros.busqueda?.trim().toLowerCase();
+    if (busqueda) {
+      return filasMapeadas.filter((f) => f.huesped?.toLowerCase().includes(busqueda));
+    }
+    return filasMapeadas;
   }
 
   async obtenerCalendario(

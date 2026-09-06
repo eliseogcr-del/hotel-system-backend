@@ -95,6 +95,15 @@ export function Reservas() {
   const [filtroListaDesde, setFiltroListaDesde] = useState('');
   const [filtroListaHasta, setFiltroListaHasta] = useState('');
   const [filtroHabNumero, setFiltroHabNumero] = useState('');
+  const [filtroBusqueda, setFiltroBusqueda] = useState('');
+  const [filtroBusquedaAplicada, setFiltroBusquedaAplicada] = useState('');
+
+  // Debounce igual que en Estadias.tsx: evita mandar una consulta por cada
+  // tecla mientras se escribe el nombre a buscar.
+  useEffect(() => {
+    const t = setTimeout(() => setFiltroBusquedaAplicada(filtroBusqueda.trim()), 300);
+    return () => clearTimeout(t);
+  }, [filtroBusqueda]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -156,6 +165,7 @@ export function Reservas() {
     if (filtroListaDesde) params.set('desde', filtroListaDesde);
     if (filtroListaHasta) params.set('hasta', filtroListaHasta);
     if (filtroHabNumero) params.set('habNumero', filtroHabNumero);
+    if (filtroBusquedaAplicada) params.set('busqueda', filtroBusquedaAplicada);
     const query = params.toString() ? `?${params.toString()}` : '';
     api
       .get<ReservaLinea[]>(`/hoteles/${hotelActual.hotelId}/reservas${query}`)
@@ -164,7 +174,14 @@ export function Reservas() {
       .finally(() => setLoading(false));
   }
 
-  useEffect(cargarReservas, [hotelActual, filtroEstado, filtroListaDesde, filtroListaHasta, filtroHabNumero]);
+  useEffect(cargarReservas, [
+    hotelActual,
+    filtroEstado,
+    filtroListaDesde,
+    filtroListaHasta,
+    filtroHabNumero,
+    filtroBusquedaAplicada,
+  ]);
 
   useEffect(() => {
     if (!hotelActual) return;
@@ -312,6 +329,8 @@ export function Reservas() {
           onFiltroHastaChange={setFiltroListaHasta}
           filtroHabNumero={filtroHabNumero}
           onFiltroHabNumeroChange={setFiltroHabNumero}
+          filtroBusqueda={filtroBusqueda}
+          onFiltroBusquedaChange={setFiltroBusqueda}
           onClickFila={(f) => navigate(`/reservas/${f.reservaId}`)}
         />
       )}
@@ -337,6 +356,8 @@ function ListaReservas({
   onFiltroHastaChange,
   filtroHabNumero,
   onFiltroHabNumeroChange,
+  filtroBusqueda,
+  onFiltroBusquedaChange,
   onClickFila,
 }: {
   filas: ReservaLinea[];
@@ -350,6 +371,8 @@ function ListaReservas({
   onFiltroHastaChange: (v: string) => void;
   filtroHabNumero: string;
   onFiltroHabNumeroChange: (v: string) => void;
+  filtroBusqueda: string;
+  onFiltroBusquedaChange: (v: string) => void;
   onClickFila: (f: ReservaLinea) => void;
 }) {
   return (
@@ -395,7 +418,16 @@ function ListaReservas({
             placeholder="Ej. 402"
           />
         </div>
-        {(filtroEstado || filtroDesde || filtroHasta || filtroHabNumero) && (
+        <div style={{ minWidth: 180 }}>
+          <label style={labelStyle}>Nombre</label>
+          <input
+            value={filtroBusqueda}
+            onChange={(e) => onFiltroBusquedaChange(e.target.value)}
+            style={inputStyle}
+            placeholder="Huésped o empresa"
+          />
+        </div>
+        {(filtroEstado || filtroDesde || filtroHasta || filtroHabNumero || filtroBusqueda) && (
           <button
             type="button"
             onClick={() => {
@@ -403,6 +435,7 @@ function ListaReservas({
               onFiltroDesdeChange('');
               onFiltroHastaChange('');
               onFiltroHabNumeroChange('');
+              onFiltroBusquedaChange('');
             }}
             style={btnSecondary}
           >
