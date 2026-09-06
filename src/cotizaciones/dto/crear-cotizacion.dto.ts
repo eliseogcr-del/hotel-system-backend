@@ -3,9 +3,11 @@ import {
   IsArray,
   IsDateString,
   IsEnum,
+  IsNumber,
   IsOptional,
   IsUUID,
   Matches,
+  Min,
   ValidateNested,
 } from 'class-validator';
 import { Type } from 'class-transformer';
@@ -44,6 +46,13 @@ export class CrearCotizacionDto {
   @IsOptional()
   @IsDateString()
   venceEn?: string;
+
+  // Adelanto que el cliente ya pagó sobre la cotización, solo informativo
+  // (ver CotizacionesService.crear() y migracion_cotizacion_adelanto.sql).
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  adelanto?: number;
 
   @IsArray()
   @ArrayMinSize(1)
