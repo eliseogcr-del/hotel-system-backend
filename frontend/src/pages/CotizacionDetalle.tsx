@@ -25,7 +25,6 @@ interface CotizacionDetalleData {
   hora_checkin: string;
   hora_checkout: string;
   total_estimado: number | null;
-  adelanto: number | null;
   vence_en: string | null;
   reserva_id: string | null;
   huespedes: { nombres: string; apellidos: string } | null;
@@ -51,8 +50,6 @@ function imprimirCotizacionPDF(cotizacion: CotizacionDetalleData, hotelNombre: s
     : (cotizacion.empresas?.razon_social ?? '—');
 
   const totalPersonas = cotizacion.cotizacion_detalle.reduce((acc, l) => acc + l.nro_personas, 0);
-  const adelanto = Number(cotizacion.adelanto ?? 0);
-  const diferenciaAPagar = Number(cotizacion.total_estimado ?? 0) - adelanto;
 
   const filasHtml = cotizacion.cotizacion_detalle
     .map(
@@ -103,8 +100,6 @@ function imprimirCotizacionPDF(cotizacion: CotizacionDetalleData, hotelNombre: s
   <div class="totales">
     <span>Total personas: ${totalPersonas}</span>
     <span>Total estimado: ${cotizacion.moneda} ${fmt(cotizacion.total_estimado ?? 0)}</span>
-    ${adelanto > 0 ? `<span>Adelanto pagado: ${cotizacion.moneda} ${fmt(adelanto)}</span>` : ''}
-    <span>Diferencia a pagar: ${cotizacion.moneda} ${fmt(diferenciaAPagar)}</span>
   </div>
   <table>
     <colgroup>
@@ -232,8 +227,6 @@ export function CotizacionDetalle() {
   if (!cotizacion) return <p style={{ color: 'var(--text-muted)' }}>Cargando...</p>;
 
   const puedeEditar = cotizacion.estado !== 'convertida';
-  const adelantoPagado = Number(cotizacion.adelanto ?? 0);
-  const diferenciaAPagar = Number(cotizacion.total_estimado ?? 0) - adelantoPagado;
 
   return (
     <div>
@@ -334,14 +327,6 @@ export function CotizacionDetalle() {
         <span>Total personas: {cotizacion.cotizacion_detalle.reduce((acc, l) => acc + l.nro_personas, 0)}</span>
         <span>
           Total estimado: {cotizacion.moneda} {fmt(cotizacion.total_estimado ?? 0)}
-        </span>
-        {adelantoPagado > 0 && (
-          <span>
-            Adelanto pagado: {cotizacion.moneda} {fmt(adelantoPagado)}
-          </span>
-        )}
-        <span style={{ color: diferenciaAPagar > 0 ? 'var(--danger)' : 'var(--disponible)' }}>
-          Diferencia a pagar: {cotizacion.moneda} {fmt(diferenciaAPagar)}
         </span>
       </div>
 

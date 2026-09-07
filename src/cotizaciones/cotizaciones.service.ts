@@ -126,7 +126,6 @@ export class CotizacionesService {
         moneda: dto.moneda ?? 'PEN',
         estado: 'pendiente',
         total_estimado: totalEstimado,
-        adelanto: dto.adelanto ?? 0,
         creado_por: personalId,
         vence_en: venceEn,
       })
