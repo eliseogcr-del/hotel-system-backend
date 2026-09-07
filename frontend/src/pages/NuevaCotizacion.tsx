@@ -8,7 +8,7 @@ interface HabitacionDisponible {
   id: string;
   hab_numero: number;
   piso: number;
-  tipos_habitacion: { nombre: string } | null;
+  tipos_habitacion: { nombre: string; aforo_max: number } | null;
 }
 
 interface RespuestaDisponibilidad {
@@ -23,6 +23,7 @@ interface FilaGrid {
   habNumero: number;
   piso: number;
   tipoNombre: string | null;
+  aforoMax: number;
   nota: string;
   personas: number;
   precioPersona: number;
@@ -54,6 +55,7 @@ export function NuevaCotizacion() {
   const [filas, setFilas] = useState<FilaGrid[]>([]);
   const [buscandoDisponibilidad, setBuscandoDisponibilidad] = useState(false);
   const [errorDisponibilidad, setErrorDisponibilidad] = useState<string | null>(null);
+  const [adelanto, setAdelanto] = useState(0);
 
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -106,6 +108,7 @@ export function NuevaCotizacion() {
           habNumero: h.hab_numero,
           piso: h.piso,
           tipoNombre: h.tipos_habitacion?.nombre ?? null,
+          aforoMax: h.tipos_habitacion?.aforo_max ?? 0,
           nota: '',
           personas: 0,
           precioPersona: 0,
@@ -127,11 +130,13 @@ export function NuevaCotizacion() {
   }
 
   const totalPersonas = useMemo(() => filas.reduce((acc, f) => acc + (Number(f.personas) || 0), 0), [filas]);
+  const aforoMaxTotal = useMemo(() => filas.reduce((acc, f) => acc + (Number(f.aforoMax) || 0), 0), [filas]);
   const totalGeneral = useMemo(
     () => filas.reduce((acc, f) => acc + subtotalFila(f, disponibilidad?.dias ?? noches), 0),
     [filas, disponibilidad, noches],
   );
   const filasIncluidas = useMemo(() => filas.filter((f) => Number(f.personas) > 0), [filas]);
+  const diferenciaAPagar = totalGeneral - (Number(adelanto) || 0);
 
   async function guardar(e: FormEvent) {
     e.preventDefault();
@@ -168,6 +173,7 @@ export function NuevaCotizacion() {
         fechaHasta: fechaCheckoutYMD(fechaCheckin, disponibilidad?.dias ?? noches),
         horaCheckin,
         horaCheckout,
+        adelanto: adelanto || undefined,
         habitaciones: filasIncluidas.map((f) => ({
           habitacionId: f.habitacionId,
           nroPersonas: f.personas,
@@ -310,7 +316,8 @@ export function NuevaCotizacion() {
                   style={{
                     display: 'flex',
                     flexWrap: 'wrap',
-                    gap: '4px 28px',
+                    gap: '10px 28px',
+                    alignItems: 'center',
                     fontWeight: 700,
                     fontSize: 14,
                     color: 'var(--table-header-text)',
@@ -322,7 +329,22 @@ export function NuevaCotizacion() {
                   }}
                 >
                   <span>Total personas: {totalPersonas}</span>
+                  <span>Capacidad máxima: {aforoMaxTotal}</span>
                   <span>Total cotizado: PEN {totalGeneral.toFixed(2)}</span>
+                  <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    Adelanto pagado: PEN
+                    <input
+                      type="number"
+                      min={0}
+                      step={0.01}
+                      value={adelanto}
+                      onChange={(e) => setAdelanto(Math.max(0, Number(e.target.value)))}
+                      style={{ ...inputCeldaStyle, width: 90, background: 'var(--surface-1)', border: '1px solid var(--table-header-border)' }}
+                    />
+                  </span>
+                  <span style={{ color: diferenciaAPagar > 0 ? 'var(--danger)' : 'var(--disponible)' }}>
+                    Diferencia a pagar: PEN {diferenciaAPagar.toFixed(2)}
+                  </span>
                 </div>
 
                 <div
