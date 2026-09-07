@@ -17,6 +17,7 @@ interface DetalleLinea {
 
 interface CotizacionDetalleData {
   id: string;
+  huesped_id: string | null;
   estado: string;
   moneda: string;
   fecha_desde: string;
@@ -136,6 +137,10 @@ export function CotizacionDetalle() {
   const [error, setError] = useState<string | null>(null);
   const [accionando, setAccionando] = useState(false);
   const [quitandoId, setQuitandoId] = useState<string | null>(null);
+  const [editandoNombre, setEditandoNombre] = useState(false);
+  const [nombresEdit, setNombresEdit] = useState('');
+  const [apellidosEdit, setApellidosEdit] = useState('');
+  const [guardandoNombre, setGuardandoNombre] = useState(false);
 
   function cargar() {
     if (!hotelActual || !id) return;
@@ -176,6 +181,35 @@ export function CotizacionDetalle() {
     }
   }
 
+  function iniciarEdicionNombre() {
+    if (!cotizacion?.huespedes) return;
+    setNombresEdit(cotizacion.huespedes.nombres);
+    setApellidosEdit(cotizacion.huespedes.apellidos);
+    setEditandoNombre(true);
+  }
+
+  async function guardarNombre() {
+    if (!hotelActual || !cotizacion?.huesped_id) return;
+    if (!nombresEdit.trim() || !apellidosEdit.trim()) {
+      setError('Nombres y apellidos no pueden quedar vacíos.');
+      return;
+    }
+    setGuardandoNombre(true);
+    setError(null);
+    try {
+      await api.patch(`/hoteles/${hotelActual.hotelId}/huespedes/${cotizacion.huesped_id}`, {
+        nombres: nombresEdit.trim(),
+        apellidos: apellidosEdit.trim(),
+      });
+      setEditandoNombre(false);
+      cargar();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'No se pudo actualizar el nombre del cliente');
+    } finally {
+      setGuardandoNombre(false);
+    }
+  }
+
   async function convertir() {
     if (!hotelActual || !id) return;
     if (!confirm('¿Convertir esta cotización en una reserva confirmada?')) return;
@@ -209,9 +243,42 @@ export function CotizacionDetalle() {
 
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, justifyContent: 'space-between', alignItems: 'center', margin: '12px 0 20px' }}>
         <div>
-          <h1 style={{ fontSize: 20 }}>
-            {cotizacion.huespedes ? `${cotizacion.huespedes.nombres} ${cotizacion.huespedes.apellidos}` : cotizacion.empresas?.razon_social}
-          </h1>
+          {editandoNombre ? (
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
+              <input
+                value={nombresEdit}
+                onChange={(e) => setNombresEdit(e.target.value)}
+                placeholder="Nombres"
+                style={inputEditStyle}
+              />
+              <input
+                value={apellidosEdit}
+                onChange={(e) => setApellidosEdit(e.target.value)}
+                placeholder="Apellidos"
+                style={inputEditStyle}
+              />
+              <button type="button" onClick={guardarNombre} disabled={guardandoNombre} style={btnPrimary}>
+                {guardandoNombre ? 'Guardando...' : 'Guardar'}
+              </button>
+              <button type="button" onClick={() => setEditandoNombre(false)} disabled={guardandoNombre} style={btnSecondary}>
+                Cancelar
+              </button>
+            </div>
+          ) : (
+            <h1 style={{ fontSize: 20, display: 'flex', alignItems: 'center', gap: 8 }}>
+              {cotizacion.huespedes ? `${cotizacion.huespedes.nombres} ${cotizacion.huespedes.apellidos}` : cotizacion.empresas?.razon_social}
+              {cotizacion.huesped_id && (
+                <button
+                  type="button"
+                  onClick={iniciarEdicionNombre}
+                  title="Editar nombre del cliente"
+                  style={{ ...btnSecondary, padding: '2px 8px', fontSize: 11 }}
+                >
+                  Editar
+                </button>
+              )}
+            </h1>
+          )}
           <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '4px 0 0' }}>
             {new Date(cotizacion.fecha_desde).toLocaleDateString()} {cotizacion.hora_checkin?.slice(0, 5)} →{' '}
             {new Date(cotizacion.fecha_hasta).toLocaleDateString()} {cotizacion.hora_checkout?.slice(0, 5)}
@@ -365,6 +432,13 @@ const btnDanger: CSSProperties = {
   border: '1px solid var(--ocupada)',
   borderRadius: 'var(--radius)',
   fontSize: 13,
+};
+
+const inputEditStyle: CSSProperties = {
+  padding: '6px 10px',
+  border: '1px solid var(--border)',
+  borderRadius: 'var(--radius)',
+  fontSize: 15,
 };
 
 const btnQuitar: CSSProperties = {
