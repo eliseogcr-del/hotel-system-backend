@@ -386,11 +386,6 @@ create table cotizaciones (
     estado text not null default 'pendiente' check (estado in ('pendiente','aprobada','convertida','vencida','cancelada')),
     moneda text not null default 'PEN',
     total_estimado numeric(10,2),
-    -- Adelanto que el cliente ya pagó sobre la cotización, solo informativo
-    -- (a diferencia de anticipos_reserva, no genera movimiento de caja ni
-    -- tiene método de pago porque todavía no es una reserva confirmada) --
-    -- alimenta la "diferencia a pagar" (total_estimado - adelanto).
-    adelanto numeric(10,2) not null default 0,
     creado_por uuid references personal(id),
     reserva_id uuid references reservas(id),
     vence_en date

@@ -55,7 +55,6 @@ export function NuevaCotizacion() {
   const [filas, setFilas] = useState<FilaGrid[]>([]);
   const [buscandoDisponibilidad, setBuscandoDisponibilidad] = useState(false);
   const [errorDisponibilidad, setErrorDisponibilidad] = useState<string | null>(null);
-  const [adelanto, setAdelanto] = useState(0);
 
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -136,7 +135,6 @@ export function NuevaCotizacion() {
     [filas, disponibilidad, noches],
   );
   const filasIncluidas = useMemo(() => filas.filter((f) => Number(f.personas) > 0), [filas]);
-  const diferenciaAPagar = totalGeneral - (Number(adelanto) || 0);
 
   async function guardar(e: FormEvent) {
     e.preventDefault();
@@ -173,7 +171,6 @@ export function NuevaCotizacion() {
         fechaHasta: fechaCheckoutYMD(fechaCheckin, disponibilidad?.dias ?? noches),
         horaCheckin,
         horaCheckout,
-        adelanto: adelanto || undefined,
         habitaciones: filasIncluidas.map((f) => ({
           habitacionId: f.habitacionId,
           nroPersonas: f.personas,
@@ -331,20 +328,6 @@ export function NuevaCotizacion() {
                   <span>Total personas: {totalPersonas}</span>
                   <span>Capacidad máxima: {aforoMaxTotal}</span>
                   <span>Total cotizado: PEN {totalGeneral.toFixed(2)}</span>
-                  <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                    Adelanto pagado: PEN
-                    <input
-                      type="number"
-                      min={0}
-                      step={0.01}
-                      value={adelanto}
-                      onChange={(e) => setAdelanto(Math.max(0, Number(e.target.value)))}
-                      style={{ ...inputCeldaStyle, width: 90, background: 'var(--surface-1)', border: '1px solid var(--table-header-border)' }}
-                    />
-                  </span>
-                  <span style={{ color: diferenciaAPagar > 0 ? 'var(--danger)' : 'var(--disponible)' }}>
-                    Diferencia a pagar: PEN {diferenciaAPagar.toFixed(2)}
-                  </span>
                 </div>
 
                 <div
