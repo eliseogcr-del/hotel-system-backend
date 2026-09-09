@@ -415,6 +415,7 @@ export class ReportesService {
     });
 
     const totalesPorDia = dias.map((_, i) => matriz.reduce((acc, f) => acc + (f.ocupacionPorDia[i] ? 1 : 0), 0));
+    const totalCeldasOcupadas = totalesPorDia.reduce((a, b) => a + b, 0);
 
     return {
       desde,
@@ -423,6 +424,7 @@ export class ReportesService {
         dias,
         habitaciones: matriz,
         totalesPorDia,
+        promedioPorDia: dias.length > 0 ? totalCeldasOcupadas / dias.length : 0,
       },
     };
   }

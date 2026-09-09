@@ -90,6 +90,7 @@ interface MatrizOcupabilidad {
   dias: string[];
   habitaciones: FilaMatrizOcupabilidad[];
   totalesPorDia: number[];
+  promedioPorDia: number;
 }
 
 interface ReporteOcupabilidad {
@@ -479,6 +480,14 @@ export function Reportes() {
         {!ocupLoading && ocupabilidad && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
             <MatrizOcupabilidadTabla matriz={ocupabilidad.matriz} />
+
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12 }}>
+              <MetricCard
+                label="Ocupabilidad / día"
+                value={`${ocupabilidad.matriz.promedioPorDia.toFixed(1)} hab./día`}
+                destacado
+              />
+            </div>
           </div>
         )}
       </div>
