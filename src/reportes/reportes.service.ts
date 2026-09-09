@@ -363,42 +363,6 @@ export class ReportesService {
       .order('hab_numero', { ascending: true });
     if (habError) throw habError;
 
-    // Ingresos/días hospedados: a propósito solo cuenta estadías cuyo
-    // check-in cayó dentro del rango filtrado (criterio de "devengado" --
-    // ver discrepancia esperada con Ventas diarias, que es por caja). No
-    // sirve para la matriz de ocupación de abajo: una estadía que empezó
-    // ANTES del rango pero sigue ocupada (o terminó ya entrado el rango)
-    // debe seguir marcándose ocupada en esos días, aunque su check-in no
-    // esté en el rango.
-    const { data: lineas, error } = await client
-      .from('reserva_habitacion')
-      .select(
-        `
-        id, dias, habitacion_id,
-        reservas!inner(hotel_id),
-        estadias!inner(id, checkin_real)
-      `,
-      )
-      .eq('reservas.hotel_id', hotelId)
-      .gte('estadias.checkin_real', desdeInstante.toISOString())
-      .lt('estadias.checkin_real', hastaInstanteExclusivo.toISOString());
-    if (error) throw error;
-
-    const filas = lineas ?? [];
-    const diasOcupados = filas.reduce((acc, l) => acc + Number(l.dias), 0);
-    const estadiaIds = filas.map((l) => (l as any).estadias.id);
-
-    let ingresosTotales = 0;
-    if (estadiaIds.length > 0) {
-      const { data: movimientos, error: movError } = await client
-        .from('movimientos_cuenta')
-        .select('monto')
-        .neq('tipo', 'pago')
-        .in('estadia_id', estadiaIds);
-      if (movError) throw movError;
-      ingresosTotales = movimientos?.reduce((acc, m) => acc + Number(m.monto), 0) ?? 0;
-    }
-
     // Matriz de ocupación: cualquier estadía cuyo rango [checkin_real,
     // checkin_real + dias) se solape con [desde, hasta], sin importar
     // cuándo empezó -- por eso el filtro es "empezó antes de que termine
@@ -451,20 +415,14 @@ export class ReportesService {
     });
 
     const totalesPorDia = dias.map((_, i) => matriz.reduce((acc, f) => acc + (f.ocupacionPorDia[i] ? 1 : 0), 0));
-    const totalCeldasOcupadas = totalesPorDia.reduce((a, b) => a + b, 0);
 
     return {
       desde,
       hasta,
-      ingresosTotales,
-      diasOcupados,
-      ocupabilidad: diasOcupados > 0 ? ingresosTotales / diasOcupados : 0,
       matriz: {
         dias,
         habitaciones: matriz,
         totalesPorDia,
-        promedioPorDia: dias.length > 0 ? totalCeldasOcupadas / dias.length : 0,
-        promedioPorHabitacion: matriz.length > 0 ? totalCeldasOcupadas / matriz.length : 0,
       },
     };
   }
