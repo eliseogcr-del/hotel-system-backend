@@ -363,6 +363,13 @@ export class ReportesService {
       .order('hab_numero', { ascending: true });
     if (habError) throw habError;
 
+    // Ingresos/días hospedados: a propósito solo cuenta estadías cuyo
+    // check-in cayó dentro del rango filtrado (criterio de "devengado" --
+    // ver discrepancia esperada con Ventas diarias, que es por caja). No
+    // sirve para la matriz de ocupación de abajo: una estadía que empezó
+    // ANTES del rango pero sigue ocupada (o terminó ya entrado el rango)
+    // debe seguir marcándose ocupada en esos días, aunque su check-in no
+    // esté en el rango.
     const { data: lineas, error } = await client
       .from('reserva_habitacion')
       .select(
@@ -392,11 +399,32 @@ export class ReportesService {
       ingresosTotales = movimientos?.reduce((acc, m) => acc + Number(m.monto), 0) ?? 0;
     }
 
+    // Matriz de ocupación: cualquier estadía cuyo rango [checkin_real,
+    // checkin_real + dias) se solape con [desde, hasta], sin importar
+    // cuándo empezó -- por eso el filtro es "empezó antes de que termine
+    // el rango" + "sigue en curso (checkout_real null) o terminó dentro o
+    // después del rango", no "empezó dentro del rango" como arriba.
+    const { data: lineasOcupacion, error: ocupError } = await client
+      .from('reserva_habitacion')
+      .select(
+        `
+        id, dias, habitacion_id,
+        reservas!inner(hotel_id),
+        estadias!inner(id, checkin_real, checkout_real)
+      `,
+      )
+      .eq('reservas.hotel_id', hotelId)
+      .lt('estadias.checkin_real', hastaInstanteExclusivo.toISOString())
+      .or(`checkout_real.is.null,checkout_real.gte.${desdeInstante.toISOString()}`, {
+        referencedTable: 'estadias',
+      });
+    if (ocupError) throw ocupError;
+
     // Días ocupados por habitación (recorta al rango del filtro: una
-    // estadía cuyo check-in cayó en el rango puede seguir varios días
-    // después de "hasta").
+    // estadía puede seguir varios días después de "hasta", o haber
+    // empezado antes de "desde").
     const ocupadoPorHabitacion = new Map<string, Set<string>>();
-    for (const l of filas) {
+    for (const l of lineasOcupacion ?? []) {
       const habitacionId = (l as any).habitacion_id as string;
       const checkinYMD = fechaLimaYMD((l as any).estadias.checkin_real);
       let set = ocupadoPorHabitacion.get(habitacionId);
