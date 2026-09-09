@@ -13,6 +13,14 @@ import { DisponibilidadCotizacionDto } from './dto/disponibilidad-cotizacion.dto
 import { ActualizarEstadoCotizacionDto } from './dto/actualizar-estado-cotizacion.dto';
 import { ListarCotizacionesQueryDto } from './dto/listar-cotizaciones-query.dto';
 
+// Perú (America/Lima) es UTC-5 todo el año -- mismo criterio que en
+// caja.service.ts / estadias.service.ts.
+const PERU_UTC_OFFSET_MS = 5 * 60 * 60 * 1000;
+
+function comoRelojLima(fecha: Date): Date {
+  return new Date(fecha.getTime() - PERU_UTC_OFFSET_MS);
+}
+
 @Injectable()
 export class CotizacionesService {
   constructor(
@@ -119,6 +127,7 @@ export class CotizacionesService {
         hotel_id: hotelId,
         huesped_id: dto.huespedId ?? null,
         empresa_id: dto.empresaId ?? null,
+        fecha_emision: this.fechaHoyLima(),
         fecha_desde: dto.fechaDesde,
         fecha_hasta: dto.fechaHasta,
         hora_checkin: dto.horaCheckin,
@@ -333,6 +342,21 @@ export class CotizacionesService {
     if (updError) throw updError;
 
     return { cotizacion: { ...cotizacion, estado: 'convertida', reserva_id: reserva.id }, reserva };
+  }
+
+  // cotizaciones.fecha_emision tiene "default current_date" en la base,
+  // pero eso usa el reloj UTC del servidor de Postgres -- después de las
+  // 19:00 hora Lima ya es "mañana" en UTC, así que una cotización creada a
+  // esa hora quedaba fechada un día adelantado y no aparecía en el filtro
+  // de fecha de emisión de Cotizaciones.tsx (que filtra por hoy en hora
+  // Lima). Se calcula acá explícito, igual que fechaHoyLima() en
+  // caja.service.ts.
+  private fechaHoyLima(): string {
+    const ahoraLima = comoRelojLima(new Date());
+    const yyyy = ahoraLima.getUTCFullYear();
+    const mm = String(ahoraLima.getUTCMonth() + 1).padStart(2, '0');
+    const dd = String(ahoraLima.getUTCDate()).padStart(2, '0');
+    return `${yyyy}-${mm}-${dd}`;
   }
 
   // YYYY-MM-DD + N días -> YYYY-MM-DD, sin líos de zona horaria (mismo
