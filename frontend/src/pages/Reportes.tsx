@@ -116,6 +116,7 @@ const METODO_LABEL: Record<string, string> = {
   transferencia: 'Transferencia',
   tarjeta: 'Tarjeta',
 };
+const METODOS = ['efectivo', 'transferencia', 'yape', 'tarjeta'];
 
 function inicioDeMes(fechaYMD: string): string {
   return `${fechaYMD.slice(0, 7)}-01`;
@@ -181,7 +182,7 @@ export function Reportes() {
       .catch(() => {});
   }, [hotelActual]);
 
-  useEffect(() => {
+  function cargarReporteCaja() {
     if (!hotelActual || hotelActual.rol !== 'admin') return;
     setLoading(true);
     setError(null);
@@ -192,7 +193,9 @@ export function Reportes() {
       .then(setReporte)
       .catch((err) => setError(err instanceof ApiError ? err.message : 'No se pudo cargar el reporte'))
       .finally(() => setLoading(false));
-  }, [hotelActual, fecha, turnoId]);
+  }
+
+  useEffect(cargarReporteCaja, [hotelActual, fecha, turnoId]);
 
   useEffect(() => {
     if (!hotelActual || hotelActual.rol !== 'admin' || !ventasDesde || !ventasHasta) return;
@@ -341,7 +344,7 @@ export function Reportes() {
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
               {reporte.sesiones.map((s) => (
-                <SesionCard key={s.id} sesion={s} />
+                <SesionCard key={s.id} sesion={s} hotelId={hotelActual.hotelId} onEditado={cargarReporteCaja} />
               ))}
             </div>
           </>
@@ -669,7 +672,49 @@ function TablaVentas({
   );
 }
 
-function SesionCard({ sesion }: { sesion: SesionReporte }) {
+function SesionCard({
+  sesion,
+  hotelId,
+  onEditado,
+}: {
+  sesion: SesionReporte;
+  hotelId: string;
+  onEditado: () => void;
+}) {
+  const [editandoId, setEditandoId] = useState<string | null>(null);
+  const [montoEdicion, setMontoEdicion] = useState('');
+  const [metodoEdicion, setMetodoEdicion] = useState('efectivo');
+  const [notasEdicion, setNotasEdicion] = useState('');
+  const [guardando, setGuardando] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  function iniciarEdicion(movimientoId: string, montoActual: number, metodoActual: string, notasActuales: string | null) {
+    setEditandoId(movimientoId);
+    setMontoEdicion(String(montoActual));
+    setMetodoEdicion(metodoActual);
+    setNotasEdicion(notasActuales ?? '');
+    setError(null);
+  }
+
+  async function guardarEdicion(movimientoId: string) {
+    if (montoEdicion === '') return;
+    setGuardando(true);
+    setError(null);
+    try {
+      await api.patch(`/hoteles/${hotelId}/caja/sesiones/${sesion.id}/movimientos/${movimientoId}`, {
+        monto: Number(montoEdicion),
+        metodoPago: metodoEdicion,
+        notas: notasEdicion,
+      });
+      setEditandoId(null);
+      onEditado();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'No se pudo editar el movimiento');
+    } finally {
+      setGuardando(false);
+    }
+  }
+
   return (
     <div style={{ border: '1px solid var(--border)', borderRadius: 12, padding: 16 }}>
       <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', gap: 8, marginBottom: 12 }}>
@@ -705,6 +750,8 @@ function SesionCard({ sesion }: { sesion: SesionReporte }) {
         />
       </div>
 
+      {error && <p style={{ color: 'var(--danger)', fontSize: 12, marginBottom: 8 }}>{error}</p>}
+
       {sesion.movimientos.length === 0 ? (
         <p style={{ color: 'var(--text-muted)', fontSize: 13 }}>Sin movimientos en esta sesión.</p>
       ) : (
@@ -718,6 +765,7 @@ function SesionCard({ sesion }: { sesion: SesionReporte }) {
                 <th style={thStyle}>Monto</th>
                 <th style={thStyle}>Hora</th>
                 <th style={thStyle}>Notas</th>
+                <th style={{ ...thStyle, borderRight: 'none' }}></th>
               </tr>
             </thead>
             <tbody>
@@ -728,10 +776,76 @@ function SesionCard({ sesion }: { sesion: SesionReporte }) {
                   <tr key={m.id} style={{ borderTop: '1px solid var(--border)', background: bg }}>
                     <td style={{ ...tdStyle, color, fontWeight: 500 }}>{m.tipo}</td>
                     <td style={{ ...tdStyle, color }}>{m.concepto}</td>
-                    <td style={{ ...tdStyle, color }}>{METODO_LABEL[m.metodo_pago] ?? m.metodo_pago}</td>
-                    <td style={{ ...tdStyle, color, fontWeight: 600 }}>{Number(m.monto).toFixed(2)}</td>
+                    <td style={{ ...tdStyle, color }}>
+                      {editandoId === m.id ? (
+                        <select
+                          value={metodoEdicion}
+                          onChange={(e) => setMetodoEdicion(e.target.value)}
+                          style={{ fontSize: 12, padding: '2px 4px' }}
+                        >
+                          {METODOS.map((met) => (
+                            <option key={met} value={met}>
+                              {METODO_LABEL[met] ?? met}
+                            </option>
+                          ))}
+                        </select>
+                      ) : (
+                        METODO_LABEL[m.metodo_pago] ?? m.metodo_pago
+                      )}
+                    </td>
+                    <td style={{ ...tdStyle, color, fontWeight: 600 }}>
+                      {editandoId === m.id ? (
+                        <input
+                          type="number"
+                          step={0.01}
+                          value={montoEdicion}
+                          onChange={(e) => setMontoEdicion(e.target.value)}
+                          style={{ width: 90, padding: '2px 4px', fontSize: 12 }}
+                          autoFocus
+                        />
+                      ) : (
+                        Number(m.monto).toFixed(2)
+                      )}
+                    </td>
                     <td style={{ ...tdStyle, color }}>{new Date(m.created_at).toLocaleTimeString()}</td>
-                    <td style={{ ...tdStyle, color }}>{m.notas ?? ''}</td>
+                    <td style={{ ...tdStyle, color }}>
+                      {editandoId === m.id ? (
+                        <input
+                          value={notasEdicion}
+                          onChange={(e) => setNotasEdicion(e.target.value)}
+                          style={{ width: 160, padding: '2px 4px', fontSize: 12 }}
+                        />
+                      ) : (
+                        m.notas ?? ''
+                      )}
+                    </td>
+                    <td style={{ ...tdStyle, borderRight: 'none' }}>
+                      {editandoId === m.id ? (
+                        <span style={{ display: 'flex', gap: 8 }}>
+                          <button
+                            onClick={() => guardarEdicion(m.id)}
+                            disabled={guardando}
+                            style={{ border: 'none', background: 'transparent', color: 'var(--brand)', fontSize: 12, textDecoration: 'underline', cursor: 'pointer', padding: 0 }}
+                          >
+                            Guardar
+                          </button>
+                          <button
+                            onClick={() => setEditandoId(null)}
+                            disabled={guardando}
+                            style={{ border: 'none', background: 'transparent', color: 'var(--text-secondary)', fontSize: 12, textDecoration: 'underline', cursor: 'pointer', padding: 0 }}
+                          >
+                            Cancelar
+                          </button>
+                        </span>
+                      ) : (
+                        <button
+                          onClick={() => iniciarEdicion(m.id, Number(m.monto), m.metodo_pago, m.notas)}
+                          style={{ border: 'none', background: 'transparent', color: 'var(--text-secondary)', fontSize: 12, textDecoration: 'underline', cursor: 'pointer', padding: 0 }}
+                        >
+                          Editar
+                        </button>
+                      )}
+                    </td>
                   </tr>
                 );
               })}
