@@ -439,6 +439,20 @@ create index idx_movimientos_caja_sesion on movimientos_caja(sesion_turno_id);
 create index idx_tareas_hk_hotel_estado on tareas_hk(hotel_id, estado);
 create index idx_personal_hotel_personal on personal_hotel(personal_id);
 create index idx_personal_hotel_hotel on personal_hotel(hotel_id);
+-- AuthGuard resuelve esta fila en CADA request autenticado (ver
+-- auth.guard.ts) -- sin este índice es un seq scan de toda la tabla
+-- personal en cada click de cada usuario, en cada hotel.
+create index idx_personal_auth_user on personal(auth_user_id);
+-- estado_actual se filtra en el dashboard de Habitaciones, el motor de
+-- disponibilidad, procesarSalidasVencidas y tareas_hk en cada carga de
+-- pantalla -- sin índice, cada uno escanea toda la historia de estadias
+-- de TODOS los hoteles (la tabla no tiene hotel_id propio) para encontrar
+-- las pocas que están 'en_curso' ahora mismo.
+create index idx_estadias_estado_actual on estadias(estado_actual);
+-- Misma lógica que arriba pero para sesiones_turno: "mi sesión abierta"
+-- (Caja.tsx al cargar, anticipos en efectivo) filtra por
+-- personal_hotel_id + estado en cada request.
+create index idx_sesiones_turno_personal_hotel_estado on sesiones_turno(personal_hotel_id, estado);
 
 -- ============================================================================
 -- FUNCIONES DE APOYO PARA RLS
