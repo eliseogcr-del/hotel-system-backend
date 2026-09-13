@@ -61,6 +61,16 @@ function fmt(n: number): string {
   return Number(n).toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
+// fecha_desde/fecha_hasta/vence_en son columnas `date` (YYYY-MM-DD, sin
+// hora) -- new Date('2026-09-26') se interpreta como medianoche UTC, y
+// toLocaleDateString() la muestra en la hora local del navegador: en Perú
+// (UTC-5) eso retrocede al día anterior. Se arma la fecha en UTC y se
+// formatea forzando timeZone: 'UTC' para que no se corra.
+function formatoFechaYMD(fechaYMD: string): string {
+  const [anio, mes, dia] = fechaYMD.split('-').map(Number);
+  return new Date(Date.UTC(anio, mes - 1, dia)).toLocaleDateString('es-PE', { timeZone: 'UTC' });
+}
+
 function escapeHtml(texto: string): string {
   return texto
     .replace(/&/g, '&amp;')
@@ -143,8 +153,8 @@ function imprimirCotizacionPDF(cotizacion: CotizacionDetalleData, hotel: HotelId
     ${contactoLinea ? `<div><b>Contacto:</b> ${contactoLinea}</div>` : ''}
     <div style="margin-top:8px">
       <b>Cliente:</b> ${escapeHtml(cliente)}
-      &nbsp;|&nbsp; <b>Check-in:</b> ${new Date(cotizacion.fecha_desde).toLocaleDateString('es-PE')} ${cotizacion.hora_checkin.slice(0, 5)}
-      &nbsp;|&nbsp; <b>Check-out:</b> ${new Date(cotizacion.fecha_hasta).toLocaleDateString('es-PE')} ${cotizacion.hora_checkout.slice(0, 5)}
+      &nbsp;|&nbsp; <b>Check-in:</b> ${formatoFechaYMD(cotizacion.fecha_desde)} ${cotizacion.hora_checkin.slice(0, 5)}
+      &nbsp;|&nbsp; <b>Check-out:</b> ${formatoFechaYMD(cotizacion.fecha_hasta)} ${cotizacion.hora_checkout.slice(0, 5)}
       &nbsp;|&nbsp; <b>Generado:</b> ${new Date().toLocaleString('es-PE')}
     </div>
   </div>
@@ -498,9 +508,9 @@ export function CotizacionDetalle() {
             </div>
           ) : (
             <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '4px 0 0', display: 'flex', alignItems: 'center', gap: 8 }}>
-              {new Date(cotizacion.fecha_desde).toLocaleDateString()} {cotizacion.hora_checkin?.slice(0, 5)} →{' '}
-              {new Date(cotizacion.fecha_hasta).toLocaleDateString()} {cotizacion.hora_checkout?.slice(0, 5)}
-              {cotizacion.vence_en && ` · vence ${new Date(cotizacion.vence_en).toLocaleDateString()}`}
+              {formatoFechaYMD(cotizacion.fecha_desde)} {cotizacion.hora_checkin?.slice(0, 5)} →{' '}
+              {formatoFechaYMD(cotizacion.fecha_hasta)} {cotizacion.hora_checkout?.slice(0, 5)}
+              {cotizacion.vence_en && ` · vence ${formatoFechaYMD(cotizacion.vence_en)}`}
               {puedeEditar && (
                 <button
                   type="button"
