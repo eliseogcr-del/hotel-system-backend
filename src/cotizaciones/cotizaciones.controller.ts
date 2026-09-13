@@ -19,6 +19,7 @@ import { CotizacionesService } from './cotizaciones.service';
 import { CrearCotizacionDto } from './dto/crear-cotizacion.dto';
 import { CrearCotizacionDetalleDto } from './dto/crear-cotizacion-detalle.dto';
 import { EditarCotizacionDetalleDto } from './dto/editar-cotizacion-detalle.dto';
+import { EditarFechasCotizacionDto } from './dto/editar-fechas-cotizacion.dto';
 import { DisponibilidadCotizacionDto } from './dto/disponibilidad-cotizacion.dto';
 import { ActualizarEstadoCotizacionDto } from './dto/actualizar-estado-cotizacion.dto';
 import { ListarCotizacionesQueryDto } from './dto/listar-cotizaciones-query.dto';
@@ -96,6 +97,18 @@ export class CotizacionesController {
   ) {
     const client = this.supabase.getClientForRequest(user.accessToken);
     return this.cotizacionesService.actualizarEstado(client, hotelId, id, dto);
+  }
+
+  @Patch(':id/fechas')
+  @Roles('admin', 'recepcion')
+  async editarFechas(
+    @Param('hotelId') hotelId: string,
+    @Param('id') id: string,
+    @Body() dto: EditarFechasCotizacionDto,
+    @CurrentUser() user: RequestUser,
+  ) {
+    const client = this.supabase.getClientForRequest(user.accessToken);
+    return this.cotizacionesService.editarFechas(client, hotelId, id, dto);
   }
 
   @Get(':id/habitaciones-disponibles')

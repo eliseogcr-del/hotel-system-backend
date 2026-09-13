@@ -215,6 +215,13 @@ export function CotizacionDetalle() {
   const [nuevaNota, setNuevaNota] = useState('');
   const [agregando, setAgregando] = useState(false);
 
+  const [editandoFechas, setEditandoFechas] = useState(false);
+  const [fechaDesdeEdit, setFechaDesdeEdit] = useState('');
+  const [horaCheckinEdit, setHoraCheckinEdit] = useState('');
+  const [fechaHastaEdit, setFechaHastaEdit] = useState('');
+  const [horaCheckoutEdit, setHoraCheckoutEdit] = useState('');
+  const [guardandoFechas, setGuardandoFechas] = useState(false);
+
   function cargar() {
     if (!hotelActual || !id) return;
     api
@@ -367,6 +374,36 @@ export function CotizacionDetalle() {
     }
   }
 
+  function iniciarEdicionFechas() {
+    if (!cotizacion) return;
+    setFechaDesdeEdit(cotizacion.fecha_desde.slice(0, 10));
+    setHoraCheckinEdit(cotizacion.hora_checkin.slice(0, 5));
+    setFechaHastaEdit(cotizacion.fecha_hasta.slice(0, 10));
+    setHoraCheckoutEdit(cotizacion.hora_checkout.slice(0, 5));
+    setEditandoFechas(true);
+    setError(null);
+  }
+
+  async function guardarFechas() {
+    if (!hotelActual || !id) return;
+    setGuardandoFechas(true);
+    setError(null);
+    try {
+      await api.patch(`/hoteles/${hotelActual.hotelId}/cotizaciones/${id}/fechas`, {
+        fechaDesde: fechaDesdeEdit,
+        fechaHasta: fechaHastaEdit,
+        horaCheckin: horaCheckinEdit,
+        horaCheckout: horaCheckoutEdit,
+      });
+      setEditandoFechas(false);
+      cargar();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'No se pudo actualizar el check-in/check-out');
+    } finally {
+      setGuardandoFechas(false);
+    }
+  }
+
   async function convertir() {
     if (!hotelActual || !id) return;
     if (!confirm('¿Convertir esta cotización en una reserva confirmada?')) return;
@@ -434,11 +471,48 @@ export function CotizacionDetalle() {
               )}
             </h1>
           )}
-          <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '4px 0 0' }}>
-            {new Date(cotizacion.fecha_desde).toLocaleDateString()} {cotizacion.hora_checkin?.slice(0, 5)} →{' '}
-            {new Date(cotizacion.fecha_hasta).toLocaleDateString()} {cotizacion.hora_checkout?.slice(0, 5)}
-            {cotizacion.vence_en && ` · vence ${new Date(cotizacion.vence_en).toLocaleDateString()}`}
-          </p>
+          {editandoFechas ? (
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center', margin: '6px 0 0' }}>
+              <label style={{ display: 'flex', flexDirection: 'column', gap: 2, fontSize: 11 }}>
+                Check-in
+                <input type="date" value={fechaDesdeEdit} onChange={(e) => setFechaDesdeEdit(e.target.value)} style={inputEditStyle} />
+              </label>
+              <label style={{ display: 'flex', flexDirection: 'column', gap: 2, fontSize: 11 }}>
+                Hora
+                <input type="time" value={horaCheckinEdit} onChange={(e) => setHoraCheckinEdit(e.target.value)} style={inputEditStyle} />
+              </label>
+              <label style={{ display: 'flex', flexDirection: 'column', gap: 2, fontSize: 11 }}>
+                Check-out
+                <input type="date" value={fechaHastaEdit} onChange={(e) => setFechaHastaEdit(e.target.value)} style={inputEditStyle} />
+              </label>
+              <label style={{ display: 'flex', flexDirection: 'column', gap: 2, fontSize: 11 }}>
+                Hora
+                <input type="time" value={horaCheckoutEdit} onChange={(e) => setHoraCheckoutEdit(e.target.value)} style={inputEditStyle} />
+              </label>
+              <button type="button" onClick={guardarFechas} disabled={guardandoFechas} style={btnPrimary}>
+                {guardandoFechas ? 'Guardando...' : 'Guardar'}
+              </button>
+              <button type="button" onClick={() => setEditandoFechas(false)} disabled={guardandoFechas} style={btnSecondary}>
+                Cancelar
+              </button>
+            </div>
+          ) : (
+            <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '4px 0 0', display: 'flex', alignItems: 'center', gap: 8 }}>
+              {new Date(cotizacion.fecha_desde).toLocaleDateString()} {cotizacion.hora_checkin?.slice(0, 5)} →{' '}
+              {new Date(cotizacion.fecha_hasta).toLocaleDateString()} {cotizacion.hora_checkout?.slice(0, 5)}
+              {cotizacion.vence_en && ` · vence ${new Date(cotizacion.vence_en).toLocaleDateString()}`}
+              {puedeEditar && (
+                <button
+                  type="button"
+                  onClick={iniciarEdicionFechas}
+                  title="Editar check-in/check-out"
+                  style={{ ...btnSecondary, padding: '2px 8px', fontSize: 11 }}
+                >
+                  Editar
+                </button>
+              )}
+            </p>
+          )}
         </div>
         <EstadoBadge estado={cotizacion.estado} />
       </div>

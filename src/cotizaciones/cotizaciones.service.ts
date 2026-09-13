@@ -11,6 +11,7 @@ import { CrearReservaDto } from '../reservas/dto/crear-reserva.dto';
 import { CrearCotizacionDto } from './dto/crear-cotizacion.dto';
 import { CrearCotizacionDetalleDto } from './dto/crear-cotizacion-detalle.dto';
 import { EditarCotizacionDetalleDto } from './dto/editar-cotizacion-detalle.dto';
+import { EditarFechasCotizacionDto } from './dto/editar-fechas-cotizacion.dto';
 import { DisponibilidadCotizacionDto } from './dto/disponibilidad-cotizacion.dto';
 import { ActualizarEstadoCotizacionDto } from './dto/actualizar-estado-cotizacion.dto';
 import { ListarCotizacionesQueryDto } from './dto/listar-cotizaciones-query.dto';
@@ -332,6 +333,72 @@ export class CotizacionesService {
     if (error) throw error;
     if (!data) throw new NotFoundException('Cotización no encontrada');
     return data;
+  }
+
+  /**
+   * Cambia el rango de check-in/check-out de una cotización ya grabada.
+   * Revalida disponibilidad de cada línea del cuadro contra las nuevas
+   * fechas (igual que crear() -- las líneas "no disponible" forzadas no se
+   * revalidan) y recalcula días/subtotal de cada línea y el total, porque
+   * "días" depende del rango completo, no de cada línea por separado.
+   */
+  async editarFechas(client: SupabaseClient, hotelId: string, id: string, dto: EditarFechasCotizacionDto) {
+    const actual = await this.obtenerDetalle(client, hotelId, id);
+    if (actual.estado === 'convertida') {
+      throw new BadRequestException(
+        'Esta cotización ya fue convertida en reserva; no se pueden editar sus fechas',
+      );
+    }
+    if (new Date(dto.fechaHasta) <= new Date(dto.fechaDesde)) {
+      throw new BadRequestException('fechaHasta debe ser posterior a fechaDesde');
+    }
+
+    const checkinISO = `${dto.fechaDesde}T${dto.horaCheckin}:00`;
+    const checkoutISO = `${dto.fechaHasta}T${dto.horaCheckout}:00`;
+
+    for (const linea of actual.cotizacion_detalle as any[]) {
+      if (linea.disponibilidad_forzada) continue;
+      const resultado = await this.disponibilidad.validar(client, {
+        hotelId,
+        habitacionId: linea.habitacion_id,
+        checkinPrevisto: checkinISO,
+        checkoutPrevisto: checkoutISO,
+      });
+      if (!resultado.disponible) {
+        const numero = linea.habitaciones?.hab_numero;
+        throw new ConflictException(
+          `Hab. ${numero ?? '—'}: ${resultado.conflicto?.mensaje ?? 'no está disponible en el nuevo rango de fechas'}`,
+        );
+      }
+    }
+
+    const dias = this.calcularDias(dto.fechaDesde, dto.fechaHasta);
+
+    for (const linea of actual.cotizacion_detalle as any[]) {
+      const subtotal =
+        linea.precio_persona != null
+          ? Number(linea.nro_personas) * Number(linea.precio_persona) * dias
+          : Number(linea.precio_noche ?? 0) * dias;
+      const { error: updLineaError } = await client
+        .from('cotizacion_detalle')
+        .update({ dias, subtotal })
+        .eq('id', linea.id);
+      if (updLineaError) throw updLineaError;
+    }
+
+    const { error: updError } = await client
+      .from('cotizaciones')
+      .update({
+        fecha_desde: dto.fechaDesde,
+        fecha_hasta: dto.fechaHasta,
+        hora_checkin: dto.horaCheckin,
+        hora_checkout: dto.horaCheckout,
+      })
+      .eq('id', id);
+    if (updError) throw updError;
+
+    await this.recalcularTotal(client, id);
+    return this.obtenerDetalle(client, hotelId, id);
   }
 
   /**
