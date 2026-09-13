@@ -16,6 +16,14 @@ function fechaYMD(relojLima: Date): string {
   return `${relojLima.getUTCFullYear()}-${String(relojLima.getUTCMonth() + 1).padStart(2, '0')}-${String(relojLima.getUTCDate()).padStart(2, '0')}`;
 }
 
+// Convierte una fecha 'YYYY-MM-DD' (hora Lima) al instante UTC real de esa
+// medianoche en Lima -- mismo patrón que reportes.service.ts.
+function fechaLimaAInstante(fechaYMD: string): Date {
+  const [anio, mes, dia] = fechaYMD.split('-').map(Number);
+  const relojLima = new Date(Date.UTC(anio, mes - 1, dia, 0, 0, 0, 0));
+  return new Date(relojLima.getTime() + PERU_UTC_OFFSET_MS);
+}
+
 @Injectable()
 export class HabitacionesService {
   constructor(private readonly disponibilidad: DisponibilidadService) {}
@@ -91,6 +99,16 @@ export class HabitacionesService {
     // recepción, ver Habitaciones.tsx). `estadias` es 1:1 con
     // reserva_habitacion y solo se crea al hacer check-in real -- si viene
     // null, esa línea nunca tuvo check-in todavía.
+    //
+    // Acotado a las próximas 24h (hora Lima) por fecha_hora_checkin_prevista
+    // -- sin esto, era un select de TODA la historia de reservas no
+    // canceladas del hotel (crece para siempre), filtrado en memoria recién
+    // acá. Con el filtro, usa el índice idx_reserva_hab_checkin y solo trae
+    // las líneas de hoy.
+    const hoyTexto = fechaYMD(comoRelojLima(new Date()));
+    const inicioHoyInstante = fechaLimaAInstante(hoyTexto);
+    const finHoyInstante = new Date(inicioHoyInstante.getTime() + 24 * 60 * 60 * 1000);
+
     const { data: reservasSinCheckin, error: reservasSinCheckinError } = await client
       .from('reserva_habitacion')
       .select(
@@ -101,17 +119,17 @@ export class HabitacionesService {
       `,
       )
       .eq('reservas.hotel_id', hotelId)
-      .neq('reservas.estado', 'cancelada');
+      .neq('reservas.estado', 'cancelada')
+      .gte('fecha_hora_checkin_prevista', inicioHoyInstante.toISOString())
+      .lt('fecha_hora_checkin_prevista', finHoyInstante.toISOString());
     if (reservasSinCheckinError) throw reservasSinCheckinError;
 
-    const hoyTexto = fechaYMD(comoRelojLima(new Date()));
     const reservaHoyPorHabitacion = new Map<
       string,
       { reservaId: string; lineaId: string; huesped: string | null }
     >();
     for (const linea of (reservasSinCheckin ?? []) as any[]) {
       if (linea.estadias) continue;
-      if (fechaYMD(comoRelojLima(new Date(linea.fecha_hora_checkin_prevista))) !== hoyTexto) continue;
       const huesped = linea.reservas.huespedes;
       const empresa = linea.reservas.empresas;
       reservaHoyPorHabitacion.set(linea.habitacion_id, {

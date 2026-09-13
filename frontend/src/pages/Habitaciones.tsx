@@ -189,11 +189,13 @@ export function Habitaciones() {
     setLoading(true);
     setError(null);
     // Sin cron real en el backend: cada vez que se abre/recarga este panel
-    // se le pide al backend que primero extienda automáticamente las
-    // estadías cuya salida programada ya venció hace más de 1 hora sin
-    // checkout ni ampliación, para que la lista que sigue ya salga al día.
-    // Si falla, no se bloquea la carga normal del panel por esto.
-    await api.post(`/hoteles/${hotelActual.hotelId}/estadias/procesar-salidas-vencidas`).catch(() => {});
+    // se le pide al backend que extienda automáticamente las estadías cuya
+    // salida programada ya venció hace más de 1 hora sin checkout ni
+    // ampliación. No se espera (antes bloqueaba la carga del panel entero
+    // un viaje de red completo) -- el caso que corrige es raro (una salida
+    // vencida hace rato sin registrar), y si justo se procesa mientras se
+    // pide /habitaciones, el próximo refresh ya lo muestra al día.
+    api.post(`/hoteles/${hotelActual.hotelId}/estadias/procesar-salidas-vencidas`).catch(() => {});
 
     api
       .get<Habitacion[]>(`/hoteles/${hotelActual.hotelId}/habitaciones`)
