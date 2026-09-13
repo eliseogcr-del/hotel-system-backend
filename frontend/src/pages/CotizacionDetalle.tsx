@@ -86,7 +86,7 @@ function imprimirCotizacionPDF(cotizacion: CotizacionDetalleData, hotel: HotelId
       <td style="text-align:right">${l.precio_persona != null ? fmt(Number(l.precio_persona)) : '—'}</td>
       <td style="text-align:right">${l.dias}</td>
       <td style="text-align:right;font-weight:700">${fmt(Number(l.subtotal))}</td>
-      <td>${escapeHtml(l.notas ?? '')}${l.disponibilidad_forzada ? ' <span style="color:#b3261e;font-weight:700">(no disponible al cotizar)</span>' : ''}</td>
+      <td>${escapeHtml(l.notas ?? '')}</td>
     </tr>`,
     )
     .join('');
