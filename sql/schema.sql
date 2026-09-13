@@ -33,7 +33,20 @@ create table hoteles (
     -- movimientos históricos): se usa una sola vez, como saldo_inicial de
     -- la primera sesión de turno del hotel; después queda inerte y su
     -- edición se bloquea en cuanto exista alguna sesiones_turno.
-    saldo_inicial_caja numeric(10,2) not null default 0
+    saldo_inicial_caja numeric(10,2) not null default 0,
+    -- Datos de identidad del hotel para documentos impresos (cotizaciones
+    -- hoy, boletas/facturas y otros más adelante) -- se configuran una vez
+    -- en Configuración y se reutilizan en todos. logo_url guarda la imagen
+    -- como data URI (data:image/png;base64,...), no un archivo en storage:
+    -- es una imagen chica y así no hace falta un bucket para algo que hoy
+    -- solo usa un documento.
+    logo_url text,
+    razon_social text,
+    direccion text,
+    ciudad text,
+    telefono text,
+    nombre_contacto text,
+    eslogan text
 );
 
 -- ============================================================================
@@ -405,7 +418,14 @@ create table cotizacion_detalle (
     precio_noche numeric(10,2),
     precio_persona numeric(10,2),
     notas text,
-    subtotal numeric(10,2) not null
+    subtotal numeric(10,2) not null,
+    -- true cuando esta línea se agregó a propósito estando ocupada/sin
+    -- margen de limpieza en ese rango (botón "Agregar habitación no
+    -- disponible") -- la cotización no bloquea la habitación de verdad, así
+    -- que esto es solo para avisar en pantalla/PDF que ese cupo no está
+    -- garantizado. Al convertir a reserva, el motor de disponibilidad
+    -- vuelve a chequear en serio y bloquea si sigue sin estar libre.
+    disponibilidad_forzada boolean not null default false
 );
 
 -- ============================================================================

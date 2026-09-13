@@ -1,4 +1,4 @@
-import { useEffect, useState, type CSSProperties, type FormEvent } from 'react';
+import { useEffect, useState, type ChangeEvent, type CSSProperties, type FormEvent } from 'react';
 import { api, ApiError } from '../lib/api';
 import { useHotel } from '../contexts/HotelContext';
 
@@ -69,6 +69,14 @@ interface HotelConfig {
   precio_mascota: number;
   saldo_inicial_caja: number;
   saldo_inicial_caja_bloqueado: boolean;
+  logo_url: string | null;
+  razon_social: string | null;
+  ruc: string | null;
+  direccion: string | null;
+  ciudad: string | null;
+  telefono: string | null;
+  nombre_contacto: string | null;
+  eslogan: string | null;
 }
 
 type RolHotel = 'admin' | 'recepcion' | 'hk';
@@ -130,6 +138,7 @@ export function Configuracion() {
       {error && <p style={{ color: 'var(--danger)' }}>{error}</p>}
 
       {hotel && <SeccionHotel hotelId={hotelActual.hotelId} hotel={hotel} onCambio={cargarTodo} setError={setError} />}
+      {hotel && <SeccionDocumentos hotelId={hotelActual.hotelId} hotel={hotel} onCambio={cargarTodo} setError={setError} />}
       <SeccionPersonal hotelId={hotelActual.hotelId} personal={personal} onCambio={cargarTodo} setError={setError} />
       <SeccionTipos hotelId={hotelActual.hotelId} tipos={tipos} onCambio={cargarTodo} setError={setError} />
       <SeccionHabitaciones
@@ -254,6 +263,201 @@ function SeccionHotel({
           ? 'El saldo inicial de caja ya no se puede editar: este hotel ya tiene turnos registrados.'
           : 'Efectivo físico con el que arranca la caja al empezar a operar en producción (no se migran movimientos históricos). Se usa una sola vez, en la primera sesión de turno que se abra; después este campo queda bloqueado.'}
       </p>
+    </section>
+  );
+}
+
+const LOGO_TIPOS_ACEPTADOS = ['image/png', 'image/jpeg', 'image/webp'];
+const LOGO_TAMANO_MAX = 1_500_000;
+
+function SeccionDocumentos({
+  hotelId,
+  hotel,
+  onCambio,
+  setError,
+}: {
+  hotelId: string;
+  hotel: HotelConfig;
+  onCambio: () => void;
+  setError: (e: string | null) => void;
+}) {
+  const [logoUrl, setLogoUrl] = useState(hotel.logo_url);
+  const [razonSocial, setRazonSocial] = useState(hotel.razon_social ?? '');
+  const [ruc, setRuc] = useState(hotel.ruc ?? '');
+  const [direccion, setDireccion] = useState(hotel.direccion ?? '');
+  const [ciudad, setCiudad] = useState(hotel.ciudad ?? '');
+  const [telefono, setTelefono] = useState(hotel.telefono ?? '');
+  const [nombreContacto, setNombreContacto] = useState(hotel.nombre_contacto ?? '');
+  const [eslogan, setEslogan] = useState(hotel.eslogan ?? '');
+  const [guardando, setGuardando] = useState(false);
+
+  function onArchivoLogo(e: ChangeEvent<HTMLInputElement>) {
+    const archivo = e.target.files?.[0];
+    e.target.value = '';
+    if (!archivo) return;
+    if (!LOGO_TIPOS_ACEPTADOS.includes(archivo.type)) {
+      setError('El logo debe ser una imagen PNG, JPG o WEBP');
+      return;
+    }
+    if (archivo.size > LOGO_TAMANO_MAX) {
+      setError('El logo no puede pesar más de 1.5MB');
+      return;
+    }
+    setError(null);
+    const lector = new FileReader();
+    lector.onload = () => setLogoUrl(lector.result as string);
+    lector.readAsDataURL(archivo);
+  }
+
+  async function guardar(e: FormEvent) {
+    e.preventDefault();
+    setGuardando(true);
+    setError(null);
+    try {
+      await api.patch(`/hoteles/${hotelId}`, {
+        logoUrl,
+        razonSocial: razonSocial.trim() || null,
+        ruc: ruc.trim() || null,
+        direccion: direccion.trim() || null,
+        ciudad: ciudad.trim() || null,
+        telefono: telefono.trim() || null,
+        nombreContacto: nombreContacto.trim() || null,
+        eslogan: eslogan.trim() || null,
+      });
+      onCambio();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'No se pudo guardar los datos del hotel');
+    } finally {
+      setGuardando(false);
+    }
+  }
+
+  return (
+    <section>
+      <h2 style={{ fontSize: 15, marginBottom: 10 }}>Datos del hotel para documentos</h2>
+      <p style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 8 }}>
+        El logo y estos datos se usan en el encabezado y pie de las cotizaciones impresas, y se reutilizarán en
+        los demás documentos (boletas/facturas, etc.) cuando se agreguen.
+      </p>
+      <form onSubmit={guardar} style={{ ...formInlineStyle, alignItems: 'flex-start' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, alignItems: 'flex-start' }}>
+          <div
+            style={{
+              width: 120,
+              height: 120,
+              border: '1px solid var(--border)',
+              borderRadius: 'var(--radius)',
+              background: 'var(--surface-1)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              overflow: 'hidden',
+            }}
+          >
+            {logoUrl ? (
+              <img src={logoUrl} alt="Logo del hotel" style={{ maxWidth: '100%', maxHeight: '100%' }} />
+            ) : (
+              <span style={{ fontSize: 11, color: 'var(--text-muted)', textAlign: 'center', padding: 8 }}>
+                Sin logo
+              </span>
+            )}
+          </div>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <label style={{ ...btnSecondary, cursor: 'pointer' }}>
+              {logoUrl ? 'Cambiar logo' : 'Subir logo'}
+              <input
+                type="file"
+                accept={LOGO_TIPOS_ACEPTADOS.join(',')}
+                onChange={onArchivoLogo}
+                style={{ display: 'none' }}
+              />
+            </label>
+            {logoUrl && (
+              <button type="button" onClick={() => setLogoUrl(null)} style={btnSecondary}>
+                Quitar
+              </button>
+            )}
+          </div>
+        </div>
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, flex: 1, minWidth: 260 }}>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 12, flex: 2, minWidth: 200 }}>
+              Razón social
+              <input
+                value={razonSocial}
+                onChange={(e) => setRazonSocial(e.target.value)}
+                placeholder="HOTEL JORGE CHÁVEZ S.A.C."
+                style={inputStyle}
+              />
+            </label>
+            <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 12, flex: 1, minWidth: 130 }}>
+              RUC
+              <input
+                value={ruc}
+                onChange={(e) => setRuc(e.target.value)}
+                placeholder="11 dígitos"
+                maxLength={11}
+                style={inputStyle}
+              />
+            </label>
+          </div>
+          <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 12 }}>
+            Dirección
+            <input
+              value={direccion}
+              onChange={(e) => setDireccion(e.target.value)}
+              placeholder="Calle Jorge Chávez 167, Trujillo - Perú"
+              style={inputStyle}
+            />
+          </label>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 12, flex: 1, minWidth: 150 }}>
+              Ciudad
+              <input
+                value={ciudad}
+                onChange={(e) => setCiudad(e.target.value)}
+                placeholder="Trujillo - Perú"
+                style={inputStyle}
+              />
+            </label>
+            <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 12, flex: 1, minWidth: 150 }}>
+              Teléfono / WhatsApp / Yape
+              <input
+                value={telefono}
+                onChange={(e) => setTelefono(e.target.value)}
+                placeholder="949 220 848"
+                style={inputStyle}
+              />
+            </label>
+          </div>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 12, flex: 1, minWidth: 200 }}>
+              Nombre de contacto
+              <input
+                value={nombreContacto}
+                onChange={(e) => setNombreContacto(e.target.value)}
+                placeholder="Administrador Hermis Cuba"
+                style={inputStyle}
+              />
+            </label>
+            <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 12, flex: 1, minWidth: 200 }}>
+              Eslogan (opcional)
+              <input
+                value={eslogan}
+                onChange={(e) => setEslogan(e.target.value)}
+                placeholder="Tu mejor descanso en Trujillo"
+                style={inputStyle}
+              />
+            </label>
+          </div>
+          <div>
+            <button type="submit" disabled={guardando} style={btnPrimary}>
+              Guardar
+            </button>
+          </div>
+        </div>
+      </form>
     </section>
   );
 }

@@ -12,7 +12,8 @@ import { ActualizarHotelDto } from './dto/actualizar-hotel.dto';
 const CODIGO_UNIQUE_VIOLATION = '23505';
 const CODIGO_FOREIGN_KEY_VIOLATION = '23503';
 
-const HOTEL_SELECT = 'id, nombre, hora_checkin, hora_checkout, modo_24h, precio_mascota, saldo_inicial_caja';
+const HOTEL_SELECT =
+  'id, nombre, hora_checkin, hora_checkout, modo_24h, precio_mascota, saldo_inicial_caja, logo_url, razon_social, ruc, direccion, ciudad, telefono, nombre_contacto, eslogan';
 
 @Injectable()
 export class ConfiguracionService {
@@ -37,6 +38,14 @@ export class ConfiguracionService {
     if (dto.horaCheckout !== undefined) cambios.hora_checkout = dto.horaCheckout;
     if (dto.modo24h !== undefined) cambios.modo_24h = dto.modo24h;
     if (dto.precioMascota !== undefined) cambios.precio_mascota = dto.precioMascota;
+    if (dto.logoUrl !== undefined) cambios.logo_url = dto.logoUrl;
+    if (dto.razonSocial !== undefined) cambios.razon_social = dto.razonSocial;
+    if (dto.ruc !== undefined) cambios.ruc = dto.ruc;
+    if (dto.direccion !== undefined) cambios.direccion = dto.direccion;
+    if (dto.ciudad !== undefined) cambios.ciudad = dto.ciudad;
+    if (dto.telefono !== undefined) cambios.telefono = dto.telefono;
+    if (dto.nombreContacto !== undefined) cambios.nombre_contacto = dto.nombreContacto;
+    if (dto.eslogan !== undefined) cambios.eslogan = dto.eslogan;
 
     if (dto.saldoInicialCaja !== undefined) {
       if (await this.yaOperoCaja(hotelId)) {

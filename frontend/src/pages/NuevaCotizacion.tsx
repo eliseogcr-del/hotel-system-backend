@@ -11,11 +11,19 @@ interface HabitacionDisponible {
   tipos_habitacion: { nombre: string; aforo_max: number } | null;
 }
 
+interface HabitacionNoDisponible extends HabitacionDisponible {
+  motivo: string;
+}
+
 interface RespuestaDisponibilidad {
   checkinPrevisto: string;
   checkoutPrevisto: string;
   dias: number;
   habitaciones: HabitacionDisponible[];
+}
+
+interface RespuestaNoDisponibles {
+  habitaciones: HabitacionNoDisponible[];
 }
 
 interface FilaGrid {
@@ -27,6 +35,11 @@ interface FilaGrid {
   nota: string;
   personas: number;
   precioPersona: number;
+  // true = agregada con el botón "Agregar habitaciones no disponibles" --
+  // ver CLAUDE.md/comentario en cotizaciones.service.ts: cotizar no bloquea
+  // la habitación de verdad, así que se permite igual, marcada como aviso.
+  forzada: boolean;
+  motivoNoDisponible: string | null;
 }
 
 function hoyYMD(): string {
@@ -55,6 +68,9 @@ export function NuevaCotizacion() {
   const [filas, setFilas] = useState<FilaGrid[]>([]);
   const [buscandoDisponibilidad, setBuscandoDisponibilidad] = useState(false);
   const [errorDisponibilidad, setErrorDisponibilidad] = useState<string | null>(null);
+
+  const [noDisponibles, setNoDisponibles] = useState<HabitacionNoDisponible[] | null>(null);
+  const [buscandoNoDisponibles, setBuscandoNoDisponibles] = useState(false);
 
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -111,13 +127,52 @@ export function NuevaCotizacion() {
           nota: '',
           personas: 0,
           precioPersona: 0,
+          forzada: false,
+          motivoNoDisponible: null,
         })),
       );
+      setNoDisponibles(null);
     } catch (err) {
       setErrorDisponibilidad(err instanceof ApiError ? err.message : 'No se pudo consultar disponibilidad');
     } finally {
       setBuscandoDisponibilidad(false);
     }
+  }
+
+  async function buscarNoDisponibles() {
+    if (!hotelActual) return;
+    setBuscandoNoDisponibles(true);
+    setErrorDisponibilidad(null);
+    try {
+      const resultado = await api.post<RespuestaNoDisponibles>(
+        `/hoteles/${hotelActual.hotelId}/cotizaciones/habitaciones-no-disponibles`,
+        { fechaCheckin, horaCheckin, noches, horaCheckout },
+      );
+      setNoDisponibles(resultado.habitaciones);
+    } catch (err) {
+      setErrorDisponibilidad(err instanceof ApiError ? err.message : 'No se pudo consultar disponibilidad');
+    } finally {
+      setBuscandoNoDisponibles(false);
+    }
+  }
+
+  function agregarNoDisponible(h: HabitacionNoDisponible) {
+    setFilas((prev) => [
+      ...prev,
+      {
+        habitacionId: h.id,
+        habNumero: h.hab_numero,
+        piso: h.piso,
+        tipoNombre: h.tipos_habitacion?.nombre ?? null,
+        aforoMax: h.tipos_habitacion?.aforo_max ?? 0,
+        nota: '',
+        personas: 0,
+        precioPersona: 0,
+        forzada: true,
+        motivoNoDisponible: h.motivo,
+      },
+    ]);
+    setNoDisponibles((prev) => (prev ?? []).filter((n) => n.id !== h.id));
   }
 
   function actualizarFila(habitacionId: string, cambios: Partial<FilaGrid>) {
@@ -176,6 +231,7 @@ export function NuevaCotizacion() {
           nroPersonas: f.personas,
           precioPersona: f.precioPersona,
           notas: f.nota.trim() || undefined,
+          forzarNoDisponible: f.forzada || undefined,
         })),
       });
       navigate(`/cotizaciones/${resultado.id}`);
@@ -286,12 +342,60 @@ export function NuevaCotizacion() {
             <button type="button" onClick={buscarDisponibilidad} disabled={buscandoDisponibilidad} style={btnPrimary}>
               {buscandoDisponibilidad ? 'Buscando...' : 'Buscar habitaciones disponibles'}
             </button>
+            {disponibilidad && (
+              <button
+                type="button"
+                onClick={buscarNoDisponibles}
+                disabled={buscandoNoDisponibles}
+                style={btnSecondary}
+              >
+                {buscandoNoDisponibles ? 'Buscando...' : 'Agregar habitaciones no disponibles'}
+              </button>
+            )}
           </div>
           <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: '8px 0 0' }}>
             Solo se listarán las habitaciones que quedan libres en ese rango, dejando el margen de limpieza mínimo
-            entre estadías (según el tipo de habitación).
+            entre estadías (según el tipo de habitación). "Agregar habitaciones no disponibles" muestra las que
+            están ocupadas o sin margen de limpieza en esas fechas, por si igual quieres cotizarlas.
           </p>
         </div>
+
+        {noDisponibles && (
+          <div style={cardStyle}>
+            <p style={cardTitleStyle}>Habitaciones no disponibles en ese rango</p>
+            {noDisponibles.length === 0 ? (
+              <p style={{ color: 'var(--text-muted)', fontSize: 13 }}>
+                No hay ninguna habitación no disponible -- todas están libres en ese rango.
+              </p>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                {noDisponibles.map((h) => (
+                  <div
+                    key={h.id}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 12,
+                      padding: '8px 10px',
+                      border: '1px solid var(--border)',
+                      borderRadius: 'var(--radius)',
+                      fontSize: 12.5,
+                    }}
+                  >
+                    <span style={{ fontWeight: 700, minWidth: 40 }}>{h.hab_numero}</span>
+                    <span style={{ color: 'var(--text-secondary)', minWidth: 100 }}>
+                      {h.tipos_habitacion?.nombre ?? '—'}
+                    </span>
+                    <span style={{ color: 'var(--danger)', flex: 1 }}>{h.motivo}</span>
+                    <button type="button" onClick={() => agregarNoDisponible(h)} style={btnSecondary}>
+                      Agregar
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
 
         {errorDisponibilidad && <p style={{ color: 'var(--danger)', fontSize: 13 }}>{errorDisponibilidad}</p>}
 
@@ -361,7 +465,22 @@ export function NuevaCotizacion() {
                     <tbody>
                       {filas.map((f, i) => (
                         <tr key={f.habitacionId} style={{ background: i % 2 === 1 ? 'var(--surface-0)' : 'var(--surface-1)' }}>
-                          <td style={{ ...tdStyle, fontWeight: 600, color: 'var(--text-primary)' }}>{f.habNumero}</td>
+                          <td style={{ ...tdStyle, fontWeight: 600, color: 'var(--text-primary)' }}>
+                            {f.habNumero}
+                            {f.forzada && (
+                              <span
+                                title={f.motivoNoDisponible ?? 'No disponible en ese rango'}
+                                style={{
+                                  display: 'block',
+                                  fontWeight: 400,
+                                  fontSize: 10,
+                                  color: 'var(--danger)',
+                                }}
+                              >
+                                ⚠ No disponible
+                              </span>
+                            )}
+                          </td>
                           <td style={tdStyle}>{f.tipoNombre ?? '—'}</td>
                           <td style={tdStyle}>
                             <input

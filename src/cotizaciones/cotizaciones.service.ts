@@ -9,6 +9,8 @@ import { DisponibilidadService } from '../habitaciones/disponibilidad/disponibil
 import { ReservasService } from '../reservas/reservas.service';
 import { CrearReservaDto } from '../reservas/dto/crear-reserva.dto';
 import { CrearCotizacionDto } from './dto/crear-cotizacion.dto';
+import { CrearCotizacionDetalleDto } from './dto/crear-cotizacion-detalle.dto';
+import { EditarCotizacionDetalleDto } from './dto/editar-cotizacion-detalle.dto';
 import { DisponibilidadCotizacionDto } from './dto/disponibilidad-cotizacion.dto';
 import { ActualizarEstadoCotizacionDto } from './dto/actualizar-estado-cotizacion.dto';
 import { ListarCotizacionesQueryDto } from './dto/listar-cotizaciones-query.dto';
@@ -44,6 +46,50 @@ export class CotizacionesService {
     const fechaCheckout = this.sumarDiasYMD(dto.fechaCheckin, dto.noches);
     const checkoutISO = `${fechaCheckout}T${dto.horaCheckout}:00`;
 
+    const evaluadas = await this.evaluarDisponibilidadHabitaciones(client, hotelId, checkinISO, checkoutISO);
+
+    return {
+      checkinPrevisto: checkinISO,
+      checkoutPrevisto: checkoutISO,
+      dias: dto.noches,
+      habitaciones: evaluadas.filter((e) => e.resultado.disponible).map((e) => e.habitacion),
+    };
+  }
+
+  /**
+   * Complemento de habitacionesDisponibles(): las que SÍ están ocupadas o
+   * sin margen de limpieza en ese rango, con el motivo -- para el botón
+   * "Agregar habitación no disponible" del cuadro de cotización. Cotizar
+   * una habitación no la bloquea de verdad, así que puede tener sentido
+   * ofrecerla igual (ej. el cliente decide más adelante, o se libera antes).
+   */
+  async habitacionesNoDisponibles(
+    client: SupabaseClient,
+    hotelId: string,
+    dto: DisponibilidadCotizacionDto,
+  ) {
+    const checkinISO = `${dto.fechaCheckin}T${dto.horaCheckin}:00`;
+    const fechaCheckout = this.sumarDiasYMD(dto.fechaCheckin, dto.noches);
+    const checkoutISO = `${fechaCheckout}T${dto.horaCheckout}:00`;
+
+    const evaluadas = await this.evaluarDisponibilidadHabitaciones(client, hotelId, checkinISO, checkoutISO);
+
+    return {
+      checkinPrevisto: checkinISO,
+      checkoutPrevisto: checkoutISO,
+      dias: dto.noches,
+      habitaciones: evaluadas
+        .filter((e) => !e.resultado.disponible)
+        .map((e) => ({ ...e.habitacion, motivo: e.resultado.conflicto?.mensaje ?? 'No disponible' })),
+    };
+  }
+
+  private async evaluarDisponibilidadHabitaciones(
+    client: SupabaseClient,
+    hotelId: string,
+    checkinISO: string,
+    checkoutISO: string,
+  ) {
     const { data: habitaciones, error: habError } = await client
       .from('habitaciones')
       .select('id, hab_numero, piso, tipo_id, tipos_habitacion(nombre, aforo_max)')
@@ -52,7 +98,7 @@ export class CotizacionesService {
       .order('hab_numero', { ascending: true });
     if (habError) throw habError;
 
-    const candidatas = await Promise.all(
+    return Promise.all(
       (habitaciones ?? []).map(async (h) => {
         const resultado = await this.disponibilidad.validar(client, {
           hotelId,
@@ -60,15 +106,45 @@ export class CotizacionesService {
           checkinPrevisto: checkinISO,
           checkoutPrevisto: checkoutISO,
         });
-        return resultado.disponible ? h : null;
+        return { habitacion: h, resultado };
       }),
     );
+  }
+
+  /**
+   * Habitaciones disponibles/no disponibles para AGREGAR a una cotización
+   * ya grabada (usa sus propias fechas/horas guardadas), excluyendo las que
+   * ya están en el cuadro.
+   */
+  async habitacionesDisponiblesParaCotizacion(client: SupabaseClient, hotelId: string, id: string) {
+    return this.habitacionesParaCotizacion(client, hotelId, id, true);
+  }
+
+  async habitacionesNoDisponiblesParaCotizacion(client: SupabaseClient, hotelId: string, id: string) {
+    return this.habitacionesParaCotizacion(client, hotelId, id, false);
+  }
+
+  private async habitacionesParaCotizacion(
+    client: SupabaseClient,
+    hotelId: string,
+    id: string,
+    disponibles: boolean,
+  ) {
+    const actual = await this.obtenerDetalle(client, hotelId, id);
+    const checkinISO = `${actual.fecha_desde}T${actual.hora_checkin}`;
+    const checkoutISO = `${actual.fecha_hasta}T${actual.hora_checkout}`;
+
+    const evaluadas = await this.evaluarDisponibilidadHabitaciones(client, hotelId, checkinISO, checkoutISO);
+    const idsEnCuadro = new Set(actual.cotizacion_detalle.map((l: any) => l.habitacion_id));
 
     return {
-      checkinPrevisto: checkinISO,
-      checkoutPrevisto: checkoutISO,
-      dias: dto.noches,
-      habitaciones: candidatas.filter((h): h is NonNullable<typeof h> => h !== null),
+      habitaciones: evaluadas
+        .filter((e) => e.resultado.disponible === disponibles && !idsEnCuadro.has(e.habitacion.id))
+        .map((e) =>
+          disponibles
+            ? e.habitacion
+            : { ...e.habitacion, motivo: e.resultado.conflicto?.mensaje ?? 'No disponible' },
+        ),
     };
   }
 
@@ -95,6 +171,11 @@ export class CotizacionesService {
     const checkoutISO = `${dto.fechaHasta}T${dto.horaCheckout}:00`;
 
     for (const linea of dto.habitaciones) {
+      // "Agregar habitación no disponible": el usuario ya vio el motivo en
+      // pantalla y decidió cotizarla igual -- salta el chequeo acá, pero
+      // sigue siendo obligatorio al convertir a reserva (ReservasService.crear()).
+      if (linea.forzarNoDisponible) continue;
+
       const resultado = await this.disponibilidad.validar(client, {
         hotelId,
         habitacionId: linea.habitacionId,
@@ -106,13 +187,7 @@ export class CotizacionesService {
       }
     }
 
-    const dias = Math.max(
-      1,
-      Math.ceil(
-        (new Date(dto.fechaHasta).getTime() - new Date(dto.fechaDesde).getTime()) /
-          (1000 * 60 * 60 * 24),
-      ),
-    );
+    const dias = this.calcularDias(dto.fechaDesde, dto.fechaHasta);
 
     const totalEstimado = dto.habitaciones.reduce(
       (acc, l) => acc + l.nroPersonas * l.precioPersona * dias,
@@ -150,6 +225,7 @@ export class CotizacionesService {
       precio_persona: l.precioPersona,
       notas: l.notas?.trim() || null,
       subtotal: l.nroPersonas * l.precioPersona * dias,
+      disponibilidad_forzada: !!l.forzarNoDisponible,
     }));
 
     const { error: detalleError } = await client.from('cotizacion_detalle').insert(filas);
@@ -282,17 +358,116 @@ export class CotizacionesService {
       .eq('cotizacion_id', id);
     if (delError) throw delError;
 
-    const totalEstimado = actual.cotizacion_detalle
-      .filter((l: any) => l.id !== lineaId)
-      .reduce((acc: number, l: any) => acc + Number(l.subtotal), 0);
+    await this.recalcularTotal(client, id);
+    return this.obtenerDetalle(client, hotelId, id);
+  }
 
+  /**
+   * Agrega una habitación al cuadro de una cotización ya grabada, con las
+   * mismas fechas/horas de la cotización. Por defecto revalida
+   * disponibilidad igual que crear() -- forzarNoDisponible la salta (botón
+   * "Agregar habitación no disponible").
+   */
+  async agregarLinea(
+    client: SupabaseClient,
+    hotelId: string,
+    id: string,
+    dto: CrearCotizacionDetalleDto,
+  ) {
+    const actual = await this.obtenerDetalle(client, hotelId, id);
+    if (actual.estado === 'convertida') {
+      throw new BadRequestException(
+        'Esta cotización ya fue convertida en reserva; no se puede editar su cuadro',
+      );
+    }
+    if (actual.cotizacion_detalle.some((l: any) => l.habitacion_id === dto.habitacionId)) {
+      throw new ConflictException('Esa habitación ya está en el cuadro de esta cotización');
+    }
+
+    const checkinISO = `${actual.fecha_desde}T${actual.hora_checkin}`;
+    const checkoutISO = `${actual.fecha_hasta}T${actual.hora_checkout}`;
+
+    if (!dto.forzarNoDisponible) {
+      const resultado = await this.disponibilidad.validar(client, {
+        hotelId,
+        habitacionId: dto.habitacionId,
+        checkinPrevisto: checkinISO,
+        checkoutPrevisto: checkoutISO,
+      });
+      if (!resultado.disponible) {
+        throw new ConflictException(resultado.conflicto?.mensaje ?? 'La habitación no está disponible en ese rango');
+      }
+    }
+
+    const dias = this.calcularDias(actual.fecha_desde, actual.fecha_hasta);
+    const { error: insError } = await client.from('cotizacion_detalle').insert({
+      cotizacion_id: id,
+      habitacion_id: dto.habitacionId,
+      nro_personas: dto.nroPersonas,
+      dias,
+      precio_persona: dto.precioPersona,
+      notas: dto.notas?.trim() || null,
+      subtotal: dto.nroPersonas * dto.precioPersona * dias,
+      disponibilidad_forzada: !!dto.forzarNoDisponible,
+    });
+    if (insError) throw insError;
+
+    await this.recalcularTotal(client, id);
+    return this.obtenerDetalle(client, hotelId, id);
+  }
+
+  /**
+   * Edita cantidad de personas, precio por persona y/o notas de una línea
+   * ya grabada (ej. el cliente pidió una habitación más cara, o cambió de
+   * cuántos son). No permite mover la habitación ni las fechas -- para eso
+   * se quita la línea y se agrega otra.
+   */
+  async editarLinea(
+    client: SupabaseClient,
+    hotelId: string,
+    id: string,
+    lineaId: string,
+    dto: EditarCotizacionDetalleDto,
+  ) {
+    const actual = await this.obtenerDetalle(client, hotelId, id);
+    if (actual.estado === 'convertida') {
+      throw new BadRequestException(
+        'Esta cotización ya fue convertida en reserva; no se puede editar su cuadro',
+      );
+    }
+
+    const linea = actual.cotizacion_detalle.find((l: any) => l.id === lineaId);
+    if (!linea) throw new NotFoundException('Línea de cotización no encontrada');
+
+    const nroPersonas = dto.nroPersonas ?? linea.nro_personas;
+    const precioPersona = dto.precioPersona ?? Number(linea.precio_persona ?? 0);
+    const notas = dto.notas !== undefined ? dto.notas.trim() || null : linea.notas;
+    const subtotal = nroPersonas * precioPersona * Number(linea.dias);
+
+    const { error: updLineaError } = await client
+      .from('cotizacion_detalle')
+      .update({ nro_personas: nroPersonas, precio_persona: precioPersona, notas, subtotal })
+      .eq('id', lineaId)
+      .eq('cotizacion_id', id);
+    if (updLineaError) throw updLineaError;
+
+    await this.recalcularTotal(client, id);
+    return this.obtenerDetalle(client, hotelId, id);
+  }
+
+  private async recalcularTotal(client: SupabaseClient, cotizacionId: string) {
+    const { data, error } = await client
+      .from('cotizacion_detalle')
+      .select('subtotal')
+      .eq('cotizacion_id', cotizacionId);
+    if (error) throw error;
+
+    const totalEstimado = (data ?? []).reduce((acc, d) => acc + Number(d.subtotal), 0);
     const { error: updError } = await client
       .from('cotizaciones')
       .update({ total_estimado: totalEstimado })
-      .eq('id', id);
+      .eq('id', cotizacionId);
     if (updError) throw updError;
-
-    return this.obtenerDetalle(client, hotelId, id);
   }
 
   /**
@@ -366,5 +541,12 @@ export class CotizacionesService {
     const d = new Date(Date.UTC(anio, mes - 1, dia));
     d.setUTCDate(d.getUTCDate() + dias);
     return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}`;
+  }
+
+  private calcularDias(fechaDesde: string, fechaHasta: string): number {
+    return Math.max(
+      1,
+      Math.ceil((new Date(fechaHasta).getTime() - new Date(fechaDesde).getTime()) / (1000 * 60 * 60 * 24)),
+    );
   }
 }
