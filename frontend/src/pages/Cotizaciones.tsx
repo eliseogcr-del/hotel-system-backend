@@ -23,6 +23,16 @@ function fmt(n: number): string {
   return Number(n).toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
+// fecha_emision es una columna `date` (YYYY-MM-DD, sin hora) -- new
+// Date('2026-09-26') se interpreta como medianoche UTC, y
+// toLocaleDateString() la muestra en la hora local del navegador: en Perú
+// (UTC-5) eso retrocede al día anterior. Se arma la fecha en UTC y se
+// formatea forzando timeZone: 'UTC' para que no se corra.
+function formatoFechaYMD(fechaYMD: string): string {
+  const [anio, mes, dia] = fechaYMD.split('-').map(Number);
+  return new Date(Date.UTC(anio, mes - 1, dia)).toLocaleDateString('es-PE', { timeZone: 'UTC' });
+}
+
 function hoyYMD(): string {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
@@ -148,7 +158,7 @@ export function Cotizaciones() {
                   <td style={{ ...tdStyle, fontWeight: 500, color: 'var(--text-primary)' }}>
                     {c.huespedes ? `${c.huespedes.nombres} ${c.huespedes.apellidos}` : (c.empresas?.razon_social ?? '—')}
                   </td>
-                  <td style={tdStyle}>{new Date(c.fecha_emision).toLocaleDateString('es-PE')}</td>
+                  <td style={tdStyle}>{formatoFechaYMD(c.fecha_emision)}</td>
                   <td style={{ ...tdStyle, textAlign: 'right' }}>{c.totalPersonas}</td>
                   <td style={{ ...tdStyle, textAlign: 'right', fontWeight: 600 }}>
                     {c.moneda} {fmt(c.total_estimado ?? 0)}
