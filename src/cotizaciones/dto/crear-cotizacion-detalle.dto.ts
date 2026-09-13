@@ -1,4 +1,4 @@
-import { IsInt, IsNumber, IsOptional, IsString, IsUUID, Min } from 'class-validator';
+import { IsBoolean, IsInt, IsNumber, IsOptional, IsString, IsUUID, Min } from 'class-validator';
 
 export class CrearCotizacionDetalleDto {
   @IsUUID()
@@ -17,4 +17,12 @@ export class CrearCotizacionDetalleDto {
   @IsOptional()
   @IsString()
   notas?: string;
+
+  // true = viene del botón "Agregar habitación no disponible": el usuario
+  // vio el motivo (ocupada, sin margen de limpieza, etc.) y decidió
+  // cotizarla igual. Salta el chequeo de disponibilidad.validar() al
+  // grabar -- ver CotizacionesService.crear()/agregarLinea().
+  @IsOptional()
+  @IsBoolean()
+  forzarNoDisponible?: boolean;
 }

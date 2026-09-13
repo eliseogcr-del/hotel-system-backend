@@ -1,4 +1,4 @@
-import { IsBoolean, IsMilitaryTime, IsNumber, IsOptional, Min } from 'class-validator';
+import { IsBoolean, IsMilitaryTime, IsNumber, IsOptional, IsString, Matches, MaxLength, Min } from 'class-validator';
 
 export class ActualizarHotelDto {
   @IsOptional()
@@ -25,4 +25,49 @@ export class ActualizarHotelDto {
   @IsNumber()
   @Min(0)
   saldoInicialCaja?: number;
+
+  // Imagen como data URI (data:image/png;base64,...), no una URL a un
+  // archivo -- ver comentario en sql/schema.sql. Tope generoso (~1.4MB de
+  // imagen real) para no dejar subir fotos de celular sin comprimir.
+  @IsOptional()
+  @IsString()
+  @Matches(/^data:image\/(png|jpe?g|webp);base64,/, {
+    message: 'logoUrl debe ser una imagen en base64 (png, jpg o webp)',
+  })
+  @MaxLength(2_000_000)
+  logoUrl?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(200)
+  razonSocial?: string;
+
+  @IsOptional()
+  @Matches(/^\d{11}$/, { message: 'El RUC debe tener 11 dígitos' })
+  ruc?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(300)
+  direccion?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  ciudad?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(30)
+  telefono?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(150)
+  nombreContacto?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(150)
+  eslogan?: string;
 }
