@@ -509,11 +509,19 @@ export class CotizacionesService {
     const nroPersonas = dto.nroPersonas ?? linea.nro_personas;
     const precioPersona = dto.precioPersona ?? Number(linea.precio_persona ?? 0);
     const notas = dto.notas !== undefined ? dto.notas.trim() || null : linea.notas;
+    const tipoManual =
+      dto.tipoManual !== undefined ? dto.tipoManual.trim() || null : linea.tipo_manual;
     const subtotal = nroPersonas * precioPersona * Number(linea.dias);
 
     const { error: updLineaError } = await client
       .from('cotizacion_detalle')
-      .update({ nro_personas: nroPersonas, precio_persona: precioPersona, notas, subtotal })
+      .update({
+        nro_personas: nroPersonas,
+        precio_persona: precioPersona,
+        notas,
+        tipo_manual: tipoManual,
+        subtotal,
+      })
       .eq('id', lineaId)
       .eq('cotizacion_id', id);
     if (updLineaError) throw updLineaError;

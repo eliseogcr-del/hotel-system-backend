@@ -14,6 +14,7 @@ interface DetalleLinea {
   notas: string | null;
   subtotal: number;
   disponibilidad_forzada: boolean;
+  tipo_manual: string | null;
   habitaciones: { hab_numero: number; tipos_habitacion: { nombre: string } | null } | null;
 }
 
@@ -71,15 +72,21 @@ function formatoFechaYMD(fechaYMD: string): string {
   return new Date(Date.UTC(anio, mes - 1, dia)).toLocaleDateString('es-PE', { timeZone: 'UTC' });
 }
 
-// Solo para la vista de detalle y su PDF (no afecta el tipo real
-// configurado en Configuración, que se sigue usando para tarifas/aforo/
-// etc.): 1 persona se etiqueta "Individual" y más de 5 "Múltiple", sin
-// importar el tipo de habitación real -- el resto de los casos muestra el
-// tipo tal cual.
-function etiquetaTipoCotizacion(l: DetalleLinea): string {
+// Etiqueta que se calcula sola cuando no hay una edición manual (ver abajo):
+// 1 persona -> "Individual", más de 5 -> "Múltiple", el resto de los casos
+// muestra el tipo real configurado por esa habitación.
+function etiquetaTipoAutomatica(l: DetalleLinea): string {
   if (l.nro_personas === 1) return 'Individual';
   if (l.nro_personas > 5) return 'Múltiple';
   return l.habitaciones?.tipos_habitacion?.nombre ?? '—';
+}
+
+// Solo para la vista de detalle y su PDF -- es una plantilla/documento de
+// esta cotización, no afecta tipos_habitacion real ni tarifas/aforo/etc.
+// Si el recepcionista editó la columna a mano (tipo_manual) se muestra tal
+// cual; si no, se usa la etiqueta automática.
+function etiquetaTipoCotizacion(l: DetalleLinea): string {
+  return l.tipo_manual?.trim() || etiquetaTipoAutomatica(l);
 }
 
 function escapeHtml(texto: string): string {
@@ -221,6 +228,7 @@ export function CotizacionDetalle() {
   const [personasEdit, setPersonasEdit] = useState(1);
   const [precioEdit, setPrecioEdit] = useState(0);
   const [notaEdit, setNotaEdit] = useState('');
+  const [tipoEdit, setTipoEdit] = useState('');
   const [guardandoLinea, setGuardandoLinea] = useState(false);
 
   const [panelAgregar, setPanelAgregar] = useState<'disponibles' | 'no_disponibles' | null>(null);
@@ -295,6 +303,7 @@ export function CotizacionDetalle() {
     setPersonasEdit(l.nro_personas);
     setPrecioEdit(Number(l.precio_persona ?? l.precio_noche ?? 0));
     setNotaEdit(l.notas ?? '');
+    setTipoEdit(l.tipo_manual ?? '');
     setError(null);
   }
 
@@ -307,6 +316,7 @@ export function CotizacionDetalle() {
         nroPersonas: personasEdit,
         precioPersona: precioEdit,
         notas: notaEdit.trim(),
+        tipoManual: tipoEdit.trim(),
       });
       setEditandoLineaId(null);
       cargar();
@@ -744,7 +754,21 @@ export function CotizacionDetalle() {
               return (
                 <tr key={l.id} style={{ background: i % 2 === 1 ? 'var(--surface-0)' : 'var(--surface-1)' }}>
                   <td style={tdStyle}>
-                    Hab. {l.habitaciones?.hab_numero} · {etiquetaTipoCotizacion(l)}
+                    {editando ? (
+                      <span style={{ display: 'flex', alignItems: 'center', gap: 4, flexWrap: 'wrap' }}>
+                        <span>Hab. {l.habitaciones?.hab_numero} ·</span>
+                        <input
+                          value={tipoEdit}
+                          onChange={(e) => setTipoEdit(e.target.value)}
+                          placeholder={etiquetaTipoAutomatica(l)}
+                          style={{ ...inputEditStyle, width: 110 }}
+                        />
+                      </span>
+                    ) : (
+                      <>
+                        Hab. {l.habitaciones?.hab_numero} · {etiquetaTipoCotizacion(l)}
+                      </>
+                    )}
                     {l.disponibilidad_forzada && (
                       <span style={{ display: 'block', fontSize: 11, color: 'var(--danger)', fontWeight: 400 }}>
                         ⚠ No disponible al cotizar

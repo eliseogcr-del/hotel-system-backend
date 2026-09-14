@@ -425,7 +425,13 @@ create table cotizacion_detalle (
     -- que esto es solo para avisar en pantalla/PDF que ese cupo no está
     -- garantizado. Al convertir a reserva, el motor de disponibilidad
     -- vuelve a chequear en serio y bloquea si sigue sin estar libre.
-    disponibilidad_forzada boolean not null default false
+    disponibilidad_forzada boolean not null default false,
+    -- Etiqueta de tipo de habitación editable a mano, solo para esta
+    -- cotización (plantilla/documento, no toca tipos_habitacion real).
+    -- Cuando es null, la pantalla y el PDF calculan la etiqueta sola
+    -- (Individual con 1 persona, Múltiple con más de 5, tipo real en el
+    -- resto de los casos) -- ver etiquetaTipoCotizacion en el frontend.
+    tipo_manual text
 );
 
 -- ============================================================================
