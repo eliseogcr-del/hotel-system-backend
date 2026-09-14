@@ -1,7 +1,7 @@
 import { Injectable, Scope, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
-import * as jwt from 'jsonwebtoken';
+import { createRemoteJWKSet, jwtVerify, type JWTPayload } from 'jose';
 
 /**
  * Wrapper del cliente de Supabase.
@@ -20,7 +20,7 @@ export class SupabaseService {
   private readonly url: string;
   private readonly anonKey: string;
   private readonly serviceRoleKey: string;
-  private readonly jwtSecret: string;
+  private readonly jwks: ReturnType<typeof createRemoteJWKSet>;
 
   constructor(private readonly config: ConfigService) {
     this.url = this.config.getOrThrow<string>('SUPABASE_URL');
@@ -28,15 +28,18 @@ export class SupabaseService {
     this.serviceRoleKey = this.config.getOrThrow<string>(
       'SUPABASE_SERVICE_ROLE_KEY',
     );
-    // Settings > API > JWT Settings > JWT Secret en el dashboard de
-    // Supabase -- el mismo secreto con el que Supabase Auth firma los
-    // access tokens (HS256). Con esto AuthGuard valida el token él mismo
-    // (ver verificarAccessToken) en vez de preguntarle a Supabase por red
-    // en cada request -- un bache del servicio de Auth de Supabase (lento
-    // o caído un momento) ya no puede tirar a nadie de su sesión, porque
-    // la base de datos (lo único que de verdad no se puede validar sin
-    // red) sigue siendo la misma consulta de siempre, sin cambios.
-    this.jwtSecret = this.config.getOrThrow<string>('SUPABASE_JWT_SECRET');
+    // Este proyecto ya migró al sistema nuevo de Supabase (JWT Signing
+    // Keys): los access tokens se firman con una llave asimétrica
+    // (ECC/P-256 hoy), no con el "Legacy JWT Secret" compartido -- así
+    // que no hay ningún secreto que guardar acá. jose.createRemoteJWKSet
+    // trae las llaves públicas del proyecto una vez y las cachea (con
+    // refresco automático si aparece una llave nueva por rotación), así
+    // que AuthGuard puede validar la firma localmente sin llamar a
+    // Supabase Auth en cada request -- un bache de ese servicio (lento o
+    // caído un momento) ya no puede tirar a nadie de su sesión.
+    this.jwks = createRemoteJWKSet(
+      new URL(`${this.url}/auth/v1/.well-known/jwks.json`),
+    );
   }
 
   getClientForRequest(accessToken: string): SupabaseClient {
@@ -56,22 +59,22 @@ export class SupabaseService {
 
   /**
    * Valida firma + expiración del access token localmente (sin llamar a
-   * Supabase Auth). Devuelve el id de auth.users (claim `sub`) si es
-   * válido. Los tokens de Supabase van firmados HS256 con este mismo
-   * secreto y llevan aud: 'authenticated' -- se chequea también por si
-   * llega un JWT válido pero de otro propósito (ej. el anon key no es un
-   * JWT firmado con este secreto para un usuario, así que ya fallaría
-   * antes, pero el chequeo de aud es la misma verificación que hace
-   * Supabase Auth del lado de ellos).
+   * Supabase Auth), contra las llaves públicas del proyecto (JWKS).
+   * Devuelve el id de auth.users (claim `sub`) si es válido. Se chequea
+   * también aud: 'authenticated' -- es la misma verificación que hace
+   * Supabase Auth del lado de ellos, para no aceptar un JWT válido pero
+   * de otro propósito.
    */
-  verificarAccessToken(accessToken: string): { userId: string } {
-    let payload: jwt.JwtPayload;
+  async verificarAccessToken(accessToken: string): Promise<{ userId: string }> {
+    let payload: JWTPayload;
     try {
-      payload = jwt.verify(accessToken, this.jwtSecret) as jwt.JwtPayload;
+      const resultado = await jwtVerify(accessToken, this.jwks);
+      payload = resultado.payload;
     } catch {
       throw new UnauthorizedException('Token inválido o expirado');
     }
-    if (payload.aud !== 'authenticated' || typeof payload.sub !== 'string') {
+    const aud = Array.isArray(payload.aud) ? payload.aud[0] : payload.aud;
+    if (aud !== 'authenticated' || typeof payload.sub !== 'string') {
       throw new UnauthorizedException('Token inválido o expirado');
     }
     return { userId: payload.sub };

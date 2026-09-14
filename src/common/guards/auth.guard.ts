@@ -37,7 +37,7 @@ export class AuthGuard implements CanActivate {
     }
 
     const accessToken = authHeader.substring('Bearer '.length);
-    const { userId } = this.supabase.verificarAccessToken(accessToken);
+    const { userId } = await this.supabase.verificarAccessToken(accessToken);
     const client = this.supabase.getClientForRequest(accessToken);
 
     const { data: personalRow, error: personalError } = await client
