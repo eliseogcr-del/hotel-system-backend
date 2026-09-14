@@ -19,6 +19,7 @@
     "class-transformer": "^0.5.1",
     "class-validator": "^0.14.1",
     "imapflow": "^1.7.2",
+    "jose": "^5.10.0",
     "mailparser": "^3.9.15",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.1"
