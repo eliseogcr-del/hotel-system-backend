@@ -612,8 +612,9 @@ export class EstadiasService {
 
   /**
    * Registra un cargo o abono en el libro único de movimientos_cuenta
-   * (ver CLAUDE.md 3.3). 'pago' y 'consumo_bazar' pagado al momento generan
-   * además un ingreso en la caja de la sesión de turno abierta del usuario.
+   * (ver CLAUDE.md 3.3). 'pago', y 'consumo_bazar'/'desayuno'/'mascota'
+   * pagados al momento, generan además un ingreso en la caja de la sesión
+   * de turno abierta del usuario.
    */
   async registrarMovimiento(
     client: SupabaseClient,
@@ -683,9 +684,13 @@ export class EstadiasService {
     }
 
     const esVentaConCatalogo = dto.tipo === 'consumo_bazar' || dto.tipo === 'desayuno';
+    // Mascota no tiene catálogo (es un cargo fijo, sin productoId/tipoDesayunoId)
+    // pero se puede pagar al momento igual que bazar/desayuno, generando su
+    // propio ingreso de caja en vez de quedar como deuda pendiente.
+    const permitePagoAlMomento = esVentaConCatalogo || dto.tipo === 'mascota';
     const montoFinal = dto.tipo === 'pago' ? -Math.abs(montoPago) : montoPago;
-    const pagadoAlMomento = esVentaConCatalogo ? (dto.pagadoAlMomento ?? true) : false;
-    const generaCaja = dto.tipo === 'pago' || (esVentaConCatalogo && pagadoAlMomento);
+    const pagadoAlMomento = permitePagoAlMomento ? (dto.pagadoAlMomento ?? true) : false;
+    const generaCaja = dto.tipo === 'pago' || (permitePagoAlMomento && pagadoAlMomento);
 
     let sesionTurnoId: string | undefined;
     if (generaCaja) {
@@ -719,6 +724,8 @@ export class EstadiasService {
       const cantidad = dto.cantidad ?? 1;
       const descripcion = `${item.nombre}${cantidad > 1 ? ` x${cantidad}` : ''}`;
       notasCargo = dto.notas ? `${descripcion} — ${dto.notas}` : descripcion;
+    } else if (dto.tipo === 'mascota' && !dto.notas) {
+      notasCargo = 'Mascota';
     }
     if (monedaPago === 'USD') {
       const refUsd = `Pago en USD $${montoOriginalUsd!.toFixed(2)} al T.C. compra ${tipoCambioAplicado!.toFixed(3)} = S/. ${montoPago.toFixed(2)}`;
@@ -740,13 +747,13 @@ export class EstadiasService {
       tipoCambioAplicado,
     });
 
-    // La venta con catálogo (bazar/desayuno) pagada al momento genera además
-    // el pago que compensa esa deuda en el libro de la estadía (antes solo
-    // se registraba el ingreso en caja y el cargo quedaba como pendiente).
-    // Ese pago compensatorio -- no el cargo -- es el que corresponde al
-    // ingreso de caja de más abajo.
+    // La venta con catálogo (bazar/desayuno) o el cargo de mascota, pagados
+    // al momento, generan además el pago que compensa esa deuda en el libro
+    // de la estadía (antes solo se registraba el ingreso en caja y el cargo
+    // quedaba como pendiente). Ese pago compensatorio -- no el cargo -- es
+    // el que corresponde al ingreso de caja de más abajo.
     let movimientoPagoId = movimientoCargoId;
-    if (esVentaConCatalogo && pagadoAlMomento) {
+    if (permitePagoAlMomento && pagadoAlMomento) {
       movimientoPagoId = await this.insertarMovimiento(client, estadiaId, {
         tipo: 'pago',
         monto: -Math.abs(dto.monto),
@@ -762,7 +769,9 @@ export class EstadiasService {
           ? 'Pago de huésped'
           : dto.tipo === 'desayuno'
             ? 'Desayuno pagado al momento'
-            : 'Consumo de bazar pagado al momento';
+            : dto.tipo === 'mascota'
+              ? 'Cargo por mascota pagado al momento'
+              : 'Consumo de bazar pagado al momento';
 
       // El cierre de caja (Caja.tsx) lista los movimientos de todas las
       // habitaciones juntos -- "concepto" no puede tocarse porque Reportes

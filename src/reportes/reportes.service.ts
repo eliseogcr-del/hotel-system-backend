@@ -50,18 +50,21 @@ const METODOS_PAGO = ['efectivo', 'transferencia', 'yape', 'tarjeta'];
 // genérico de estadía (alquiler, late, early, cochera, ajustes... todo cae
 // como 'Pago de huésped', ver EstadiasService.registrarMovimiento) -- no
 // hay forma confiable de separar "cuánto de este pago fue alquiler vs
-// late" sin inventar precisión que el dato no tiene. Bazar, Desayuno y
-// Anticipos sí quedan aparte porque generan su propio concepto.
+// late" sin inventar precisión que el dato no tiene. Bazar, Desayuno,
+// Mascota (cuando se paga al momento) y Anticipos sí quedan aparte porque
+// generan su propio concepto.
 const TIPO_INGRESO_LABEL: Record<string, string> = {
   'Pago de huésped': 'Alquiler y otros cargos de estadía',
   'Consumo de bazar pagado al momento': 'Bazar',
   'Desayuno pagado al momento': 'Desayuno',
+  'Cargo por mascota pagado al momento': 'Mascota',
   'Anticipo de reserva': 'Anticipos',
 };
 const TIPOS_INGRESO_ORDEN = [
   'Alquiler y otros cargos de estadía',
   'Bazar',
   'Desayuno',
+  'Mascota',
   'Anticipos',
   'Otros',
 ];
@@ -82,17 +85,19 @@ export interface MovimientoCaja {
 }
 
 // El concepto de caja no distingue de qué cargo viene un pago genérico
-// (alquiler, cochera, mascota, ajustes, saldos pendientes... todo cae como
-// 'Pago de huésped' -- ver EstadiasService.registrarMovimiento). Para no
-// perder esa distinción, si quien registró el pago escribió algo en
-// "Notas" (ej. "Pago de cochera"), se usa ese texto como la categoría en
-// vez del genérico; solo cuando no hay notas cae en el bucket genérico de
-// abajo. Bazar y desayuno sí quedan aparte porque generan su propio
-// concepto cuando se pagan al momento.
+// (alquiler, cochera, mascota no pagada al momento, ajustes, saldos
+// pendientes... todo cae como 'Pago de huésped' -- ver
+// EstadiasService.registrarMovimiento). Para no perder esa distinción, si
+// quien registró el pago escribió algo en "Notas" (ej. "Pago de cochera"),
+// se usa ese texto como la categoría en vez del genérico; solo cuando no
+// hay notas cae en el bucket genérico de abajo. Bazar, desayuno y mascota
+// sí quedan aparte porque generan su propio concepto cuando se pagan al
+// momento.
 const CONCEPTO_LABEL: Record<string, string> = {
   'Pago de huésped': 'Pagos de estadía sin descripción',
   'Consumo de bazar pagado al momento': 'Bazar',
   'Desayuno pagado al momento': 'Desayuno',
+  'Cargo por mascota pagado al momento': 'Mascota',
 };
 
 @Injectable()

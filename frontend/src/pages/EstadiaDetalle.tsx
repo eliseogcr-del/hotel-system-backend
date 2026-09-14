@@ -91,7 +91,7 @@ interface Cochera {
   es_externa: boolean;
 }
 
-const TIPOS_MOVIMIENTO = ['pago', 'consumo_bazar', 'desayuno', 'ajuste', 'early', 'late', 'cochera'];
+const TIPOS_MOVIMIENTO = ['pago', 'consumo_bazar', 'desayuno', 'mascota', 'ajuste', 'early', 'late', 'cochera'];
 const METODOS = ['efectivo', 'transferencia', 'yape', 'tarjeta'];
 const TIPOS_VEHICULO = [
   { value: 'auto', label: 'Auto' },
@@ -105,6 +105,7 @@ const TIPO_LABEL: Record<string, string> = {
   pago: 'Pago',
   consumo_bazar: 'Consumo de bazar',
   desayuno: 'Desayuno',
+  mascota: 'Mascota',
   ajuste: 'Ajuste',
   early: 'Early (entrada temprana)',
   late: 'Late (salida tardía)',
@@ -1279,11 +1280,19 @@ function RegistrarMovimientoForm({
   }, [hotelId]);
 
   const esVentaConCatalogo = tipo === 'consumo_bazar' || tipo === 'desayuno';
+  // Mascota no tiene catálogo (es un cargo fijo, no un producto con precio
+  // configurable) pero sí se puede pagar al momento igual que bazar/desayuno.
+  const permitePagoAlMomento = esVentaConCatalogo || tipo === 'mascota';
   const productosActivos = productos.filter((p) => p.activo);
   const tiposDesayunoActivos = tiposDesayuno.filter((t) => t.activo);
   const catalogo = tipo === 'consumo_bazar' ? productosActivos : tiposDesayunoActivos;
   const itemId = tipo === 'consumo_bazar' ? productoId : tipoDesayunoId;
-  const requiereMetodo = tipo === 'pago' || (esVentaConCatalogo && pagadoAlMomento);
+  const requiereMetodo = tipo === 'pago' || (permitePagoAlMomento && pagadoAlMomento);
+
+  function cambiarTipo(nuevoTipo: string) {
+    setTipo(nuevoTipo);
+    if (nuevoTipo === 'mascota') setMonto('25');
+  }
   const montoPEN =
     tipo === 'pago' && moneda === 'USD' && tipoCambio
       ? Number(monto || 0) * Number(tipoCambio.valor_compra)
@@ -1326,7 +1335,7 @@ function RegistrarMovimientoForm({
         metodoPago: requiereMetodo ? metodoPago : undefined,
         productoId: tipo === 'consumo_bazar' ? productoId : undefined,
         tipoDesayunoId: tipo === 'desayuno' ? tipoDesayunoId : undefined,
-        pagadoAlMomento: esVentaConCatalogo ? pagadoAlMomento : undefined,
+        pagadoAlMomento: permitePagoAlMomento ? pagadoAlMomento : undefined,
         cantidad: esVentaConCatalogo ? Number(cantidad) || 1 : undefined,
         notas: notas || undefined,
       });
@@ -1360,7 +1369,7 @@ function RegistrarMovimientoForm({
     >
       <div>
         <label style={labelStyle}>Tipo</label>
-        <select value={tipo} onChange={(e) => setTipo(e.target.value)} style={inputStyle}>
+        <select value={tipo} onChange={(e) => cambiarTipo(e.target.value)} style={inputStyle}>
           {tiposDisponibles.map((t) => (
             <option key={t} value={t}>
               {TIPO_LABEL[t] ?? t}
@@ -1436,7 +1445,7 @@ function RegistrarMovimientoForm({
           </p>
         )}
       </div>
-      {esVentaConCatalogo && (
+      {permitePagoAlMomento && (
         <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, paddingBottom: 8 }}>
           <input type="checkbox" checked={pagadoAlMomento} onChange={(e) => setPagadoAlMomento(e.target.checked)} />
           Pagó al momento
@@ -1466,7 +1475,7 @@ function RegistrarMovimientoForm({
       <button type="submit" disabled={enviando || (requiereMetodo && !cajaAbierta)} style={btnPrimary}>
         {enviando ? 'Guardando...' : 'Registrar'}
       </button>
-      {esVentaConCatalogo && !pagadoAlMomento && (
+      {permitePagoAlMomento && !pagadoAlMomento && (
         <p style={{ fontSize: 11, color: 'var(--text-muted)', width: '100%', margin: 0 }}>
           No pagó al momento: solo se suma a lo que debe, no genera ingreso de caja ahora.
         </p>
