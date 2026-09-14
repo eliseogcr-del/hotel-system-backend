@@ -343,7 +343,11 @@ create table tipos_desayuno (
 create table movimientos_cuenta (
     id uuid primary key default gen_random_uuid(),
     estadia_id uuid not null references estadias(id) on delete cascade,
-    tipo text not null check (tipo in ('alquiler','consumo_bazar','pago','early','late','ajuste','cochera','desayuno','mascota')),
+    -- 'mascota' es el cargo automático por día que ya trae la reserva
+    -- (con_mascota/cobro_mascota); 'cargo_mascota' es un cobro puntual que
+    -- recepción registra durante la estadía (ej. mascota no declarada al
+    -- reservar), pagable al momento igual que consumo_bazar/desayuno.
+    tipo text not null check (tipo in ('alquiler','consumo_bazar','pago','early','late','ajuste','cochera','desayuno','mascota','cargo_mascota')),
     monto numeric(10,2) not null,       -- positivo = cargo, negativo = abono/pago
     metodo_pago text check (metodo_pago in ('efectivo','transferencia','yape','tarjeta')),
     producto_id uuid references productos_bazar(id),
