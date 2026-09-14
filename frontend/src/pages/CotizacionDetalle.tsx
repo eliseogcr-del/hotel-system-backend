@@ -71,6 +71,16 @@ function formatoFechaYMD(fechaYMD: string): string {
   return new Date(Date.UTC(anio, mes - 1, dia)).toLocaleDateString('es-PE', { timeZone: 'UTC' });
 }
 
+// Solo para esta pantalla (no afecta el tipo real configurado en
+// Configuración, que se sigue usando para tarifas/aforo/etc.): 1 persona
+// se etiqueta "Individual" y más de 5 "Múltiple", sin importar el tipo de
+// habitación real -- el resto de los casos muestra el tipo tal cual.
+function etiquetaTipoCotizacion(l: DetalleLinea): string {
+  if (l.nro_personas === 1) return 'Individual';
+  if (l.nro_personas > 5) return 'Múltiple';
+  return l.habitaciones?.tipos_habitacion?.nombre ?? '—';
+}
+
 function escapeHtml(texto: string): string {
   return texto
     .replace(/&/g, '&amp;')
@@ -733,7 +743,7 @@ export function CotizacionDetalle() {
               return (
                 <tr key={l.id} style={{ background: i % 2 === 1 ? 'var(--surface-0)' : 'var(--surface-1)' }}>
                   <td style={tdStyle}>
-                    {l.habitaciones?.hab_numero} · {l.habitaciones?.tipos_habitacion?.nombre}
+                    Hab. {l.habitaciones?.hab_numero} · {etiquetaTipoCotizacion(l)}
                     {l.disponibilidad_forzada && (
                       <span style={{ display: 'block', fontSize: 11, color: 'var(--danger)', fontWeight: 400 }}>
                         ⚠ No disponible al cotizar
