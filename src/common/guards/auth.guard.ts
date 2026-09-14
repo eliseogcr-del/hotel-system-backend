@@ -10,7 +10,11 @@ import { RequestUser } from '../interfaces/request-user.interface';
 
 /**
  * 1. Extrae el Bearer token del header Authorization.
- * 2. Le pregunta a Supabase Auth quién es (valida firma + expiración).
+ * 2. Valida firma + expiración él mismo, localmente (SupabaseService.
+ *    verificarAccessToken) -- no llama a Supabase Auth por red: un bache
+ *    momentáneo de ese servicio (lento o con timeout) ya no puede tirar a
+ *    nadie de su sesión ni bloquear un request que de otro modo hubiera
+ *    funcionado perfecto contra la base de datos.
  * 3. Carga su fila en `personal` y sus asignaciones en `personal_hotel`.
  * 4. Cuelga todo en request.user para que los controllers/guards siguientes
  *    no vuelvan a pegarle a la base por esto.
@@ -33,19 +37,13 @@ export class AuthGuard implements CanActivate {
     }
 
     const accessToken = authHeader.substring('Bearer '.length);
+    const { userId } = this.supabase.verificarAccessToken(accessToken);
     const client = this.supabase.getClientForRequest(accessToken);
-
-    const { data: authData, error: authError } =
-      await client.auth.getUser(accessToken);
-
-    if (authError || !authData?.user) {
-      throw new UnauthorizedException('Token inválido o expirado');
-    }
 
     const { data: personalRow, error: personalError } = await client
       .from('personal')
       .select('id, nombre, es_super_admin, activo')
-      .eq('auth_user_id', authData.user.id)
+      .eq('auth_user_id', userId)
       .single();
 
     if (personalError || !personalRow || !personalRow.activo) {
@@ -61,7 +59,7 @@ export class AuthGuard implements CanActivate {
       .eq('activo', true);
 
     const user: RequestUser = {
-      authUserId: authData.user.id,
+      authUserId: userId,
       accessToken,
       personalId: personalRow.id,
       nombre: personalRow.nombre,
