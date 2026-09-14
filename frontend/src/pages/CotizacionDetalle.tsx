@@ -71,10 +71,11 @@ function formatoFechaYMD(fechaYMD: string): string {
   return new Date(Date.UTC(anio, mes - 1, dia)).toLocaleDateString('es-PE', { timeZone: 'UTC' });
 }
 
-// Solo para esta pantalla (no afecta el tipo real configurado en
-// Configuración, que se sigue usando para tarifas/aforo/etc.): 1 persona
-// se etiqueta "Individual" y más de 5 "Múltiple", sin importar el tipo de
-// habitación real -- el resto de los casos muestra el tipo tal cual.
+// Solo para la vista de detalle y su PDF (no afecta el tipo real
+// configurado en Configuración, que se sigue usando para tarifas/aforo/
+// etc.): 1 persona se etiqueta "Individual" y más de 5 "Múltiple", sin
+// importar el tipo de habitación real -- el resto de los casos muestra el
+// tipo tal cual.
 function etiquetaTipoCotizacion(l: DetalleLinea): string {
   if (l.nro_personas === 1) return 'Individual';
   if (l.nro_personas > 5) return 'Múltiple';
@@ -101,7 +102,7 @@ function imprimirCotizacionPDF(cotizacion: CotizacionDetalleData, hotel: HotelId
       (l, i) => `
     <tr style="background:${i % 2 === 1 ? '#f2f7fb' : '#ffffff'}">
       <td>${l.habitaciones?.hab_numero ?? '—'}</td>
-      <td>${escapeHtml(l.habitaciones?.tipos_habitacion?.nombre ?? '—')}</td>
+      <td>${escapeHtml(etiquetaTipoCotizacion(l))}</td>
       <td style="text-align:right">${l.nro_personas}</td>
       <td style="text-align:right">${l.precio_persona != null ? fmt(Number(l.precio_persona)) : '—'}</td>
       <td style="text-align:right">${l.dias}</td>
