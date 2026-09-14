@@ -307,6 +307,16 @@ export class CotizacionesService {
       .maybeSingle();
     if (error) throw error;
     if (!data) throw new NotFoundException('Cotización no encontrada');
+
+    // cotizacion_detalle es el lado "muchos" y habitaciones es un embed "a
+    // uno" -- PostgREST no soporta ordenar por una columna de un embed "a
+    // uno" (mismo caso que reserva_habitacion/estadias en
+    // ReservasService.listar()), así que se ordena en memoria. El volumen
+    // por cotización es chico (unas pocas habitaciones), no hace falta
+    // resolverlo a nivel de base de datos.
+    (data as any).cotizacion_detalle = ((data as any).cotizacion_detalle ?? []).sort(
+      (a: any, b: any) => (a.habitaciones?.hab_numero ?? 0) - (b.habitaciones?.hab_numero ?? 0),
+    );
     return data;
   }
 
