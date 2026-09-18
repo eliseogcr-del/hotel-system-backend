@@ -13,7 +13,7 @@ const CODIGO_UNIQUE_VIOLATION = '23505';
 const CODIGO_FOREIGN_KEY_VIOLATION = '23503';
 
 const HOTEL_SELECT =
-  'id, nombre, hora_checkin, hora_checkout, modo_24h, precio_mascota, saldo_inicial_caja, logo_url, razon_social, ruc, direccion, ciudad, telefono, nombre_contacto, eslogan';
+  'id, nombre, hora_checkin, hora_checkout, modo_24h, precio_mascota, saldo_inicial_caja, logo_url, razon_social, ruc, direccion, ciudad, telefono, nombre_contacto, eslogan, agente_whatsapp_activo, umbral_grupo_grande';
 
 @Injectable()
 export class ConfiguracionService {
@@ -46,6 +46,8 @@ export class ConfiguracionService {
     if (dto.telefono !== undefined) cambios.telefono = dto.telefono;
     if (dto.nombreContacto !== undefined) cambios.nombre_contacto = dto.nombreContacto;
     if (dto.eslogan !== undefined) cambios.eslogan = dto.eslogan;
+    if (dto.agenteWhatsappActivo !== undefined) cambios.agente_whatsapp_activo = dto.agenteWhatsappActivo;
+    if (dto.umbralGrupoGrande !== undefined) cambios.umbral_grupo_grande = dto.umbralGrupoGrande;
 
     if (dto.saldoInicialCaja !== undefined) {
       if (await this.yaOperoCaja(hotelId)) {

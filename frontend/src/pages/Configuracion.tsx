@@ -77,6 +77,8 @@ interface HotelConfig {
   telefono: string | null;
   nombre_contacto: string | null;
   eslogan: string | null;
+  agente_whatsapp_activo: boolean;
+  umbral_grupo_grande: number;
 }
 
 type RolHotel = 'admin' | 'recepcion' | 'hk';
@@ -138,6 +140,9 @@ export function Configuracion() {
       {error && <p style={{ color: 'var(--danger)' }}>{error}</p>}
 
       {hotel && <SeccionHotel hotelId={hotelActual.hotelId} hotel={hotel} onCambio={cargarTodo} setError={setError} />}
+      {hotel && (
+        <SeccionAgenteWhatsapp hotelId={hotelActual.hotelId} hotel={hotel} onCambio={cargarTodo} setError={setError} />
+      )}
       {hotel && <SeccionDocumentos hotelId={hotelActual.hotelId} hotel={hotel} onCambio={cargarTodo} setError={setError} />}
       <SeccionPersonal hotelId={hotelActual.hotelId} personal={personal} onCambio={cargarTodo} setError={setError} />
       <SeccionTipos hotelId={hotelActual.hotelId} tipos={tipos} onCambio={cargarTodo} setError={setError} />
@@ -262,6 +267,75 @@ function SeccionHotel({
         {hotel.saldo_inicial_caja_bloqueado
           ? 'El saldo inicial de caja ya no se puede editar: este hotel ya tiene turnos registrados.'
           : 'Efectivo físico con el que arranca la caja al empezar a operar en producción (no se migran movimientos históricos). Se usa una sola vez, en la primera sesión de turno que se abra; después este campo queda bloqueado.'}
+      </p>
+    </section>
+  );
+}
+
+function SeccionAgenteWhatsapp({
+  hotelId,
+  hotel,
+  onCambio,
+  setError,
+}: {
+  hotelId: string;
+  hotel: HotelConfig;
+  onCambio: () => void;
+  setError: (e: string | null) => void;
+}) {
+  const [activo, setActivo] = useState(hotel.agente_whatsapp_activo);
+  const [umbral, setUmbral] = useState(hotel.umbral_grupo_grande);
+  const [guardando, setGuardando] = useState(false);
+
+  async function guardar(e: FormEvent) {
+    e.preventDefault();
+    setGuardando(true);
+    setError(null);
+    try {
+      await api.patch(`/hoteles/${hotelId}`, {
+        agenteWhatsappActivo: activo,
+        umbralGrupoGrande: umbral,
+      });
+      onCambio();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'No se pudo guardar la configuración del agente de WhatsApp');
+    } finally {
+      setGuardando(false);
+    }
+  }
+
+  const linkFormulario = `${window.location.origin}/cotizar/${hotelId}`;
+
+  return (
+    <section>
+      <h2 style={{ fontSize: 15, marginBottom: 10 }}>Agente de WhatsApp (cotización automática)</h2>
+      <p style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 8 }}>
+        Prende/apaga el agente que le manda a los clientes el link del formulario para cotizar solo.
+        Grupos de hasta el umbral configurado se cotizan solos con la tarifa normal x noches; grupos más
+        grandes quedan pendientes de que el hotel defina el precio por persona antes de confirmarse.
+      </p>
+      <form onSubmit={guardar} style={formInlineStyle}>
+        <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13 }}>
+          <input type="checkbox" checked={activo} onChange={(e) => setActivo(e.target.checked)} />
+          Agente activo
+        </label>
+        <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13 }}>
+          Umbral de grupo grande (personas)
+          <input
+            type="number"
+            min={1}
+            step={1}
+            value={umbral}
+            onChange={(e) => setUmbral(Number(e.target.value))}
+            style={{ ...inputStyle, width: 80 }}
+          />
+        </label>
+        <button type="submit" disabled={guardando} style={btnPrimary}>
+          Guardar
+        </button>
+      </form>
+      <p style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 8 }}>
+        Link del formulario para este hotel: <code>{linkFormulario}</code>
       </p>
     </section>
   );

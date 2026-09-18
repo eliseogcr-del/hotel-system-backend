@@ -34,6 +34,7 @@ interface Habitacion {
   saldo: number | null;
   notas: string | null;
   notas_operativas: string | null;
+  visible_whatsapp: boolean;
   cocheraNumero: string | null;
   vehiculoTipo: string | null;
 }
@@ -270,6 +271,22 @@ export function Habitaciones() {
     }
   }
 
+  // A voluntad del recepcionista, editable en cualquier momento: si está en
+  // false, el agente de WhatsApp nunca ofrece esta habitación aunque esté
+  // realmente disponible (política comercial del hotel).
+  async function alternarVisibleWhatsapp(hab: Habitacion) {
+    if (!hotelActual) return;
+    const nuevo = !hab.visible_whatsapp;
+    try {
+      await api.patch(`/hoteles/${hotelActual.hotelId}/habitaciones/${hab.id}/visible-whatsapp`, {
+        visible: nuevo,
+      });
+      setHabitaciones((prev) => prev.map((h) => (h.id === hab.id ? { ...h, visible_whatsapp: nuevo } : h)));
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'No se pudo actualizar');
+    }
+  }
+
   async function marcarDisponible(hab: Habitacion) {
     if (!hotelActual) return;
     try {
@@ -473,7 +490,10 @@ export function Habitaciones() {
               <th style={thStyle}>Adeudado</th>
               <th style={thStyle}>Tarifa/día</th>
               <th style={thStyle}>Notas</th>
-              <th style={{ ...thStyle, borderRight: 'none' }}>¿Mantenim.?</th>
+              <th style={thStyle}>¿Mantenim.?</th>
+              <th style={{ ...thStyle, borderRight: 'none' }} title="Si está apagado, el agente de WhatsApp no ofrece esta habitación">
+                WhatsApp
+              </th>
             </tr>
           </thead>
           <tbody>
@@ -556,13 +576,21 @@ export function Habitaciones() {
                     <NotasCelda notas={h.notas_operativas ?? ''} onGuardar={(n) => guardarNotasHabitacion(h, n)} />
                   )}
                 </td>
-                <td style={{ ...tdStyle, textAlign: 'center', borderRight: 'none' }}>
+                <td style={{ ...tdStyle, textAlign: 'center' }}>
                   <input
                     type="checkbox"
                     checked={h.mantenimiento_planificado}
                     disabled={h.estado !== 'ocupada'}
                     title={h.estado !== 'ocupada' ? 'Solo se puede marcar mientras la habitación está ocupada' : ''}
                     onChange={() => alternarMantenimientoPlanificado(h)}
+                  />
+                </td>
+                <td style={{ ...tdStyle, textAlign: 'center', borderRight: 'none' }}>
+                  <input
+                    type="checkbox"
+                    checked={h.visible_whatsapp}
+                    title="El agente de WhatsApp la ofrece cuando está marcado"
+                    onChange={() => alternarVisibleWhatsapp(h)}
                   />
                 </td>
               </tr>

@@ -41,7 +41,7 @@ export class HabitacionesService {
       .from('habitaciones')
       .select(
         `
-        id, hab_numero, piso, estado, mantenimiento_planificado, notas_operativas,
+        id, hab_numero, piso, estado, mantenimiento_planificado, notas_operativas, visible_whatsapp,
         tipos_habitacion(id, nombre, aforo_max)
       `,
       )
@@ -358,6 +358,30 @@ export class HabitacionesService {
       .eq('id', habitacionId)
       .eq('hotel_id', hotelId)
       .select('id, notas_operativas')
+      .maybeSingle();
+    if (error) throw error;
+    if (!data) throw new NotFoundException('La habitación no existe en este hotel');
+    return data;
+  }
+
+  /**
+   * A voluntad del recepcionista, editable en cualquier momento: si está en
+   * false, el agente de WhatsApp nunca ofrece esta habitación aunque esté
+   * realmente disponible (política comercial del hotel) -- no toca el motor
+   * de disponibilidad real que usan reservas/cotizaciones hechas por el staff.
+   */
+  async actualizarVisibleWhatsapp(
+    client: SupabaseClient,
+    hotelId: string,
+    habitacionId: string,
+    visible: boolean,
+  ) {
+    const { data, error } = await client
+      .from('habitaciones')
+      .update({ visible_whatsapp: visible })
+      .eq('id', habitacionId)
+      .eq('hotel_id', hotelId)
+      .select('id, visible_whatsapp')
       .maybeSingle();
     if (error) throw error;
     if (!data) throw new NotFoundException('La habitación no existe en este hotel');

@@ -149,11 +149,17 @@ export class CotizacionesService {
     };
   }
 
+  // personalId es null cuando la crea el agente de WhatsApp sin
+  // intervención de personal. `opciones` también es para ese caso: una
+  // cotización directa del bot (bajo el umbral, con precio automático) nace
+  // 'aprobada'; una de grupo grande nace 'pendiente_revision' -- ver
+  // CotizacionPublicaService.
   async crear(
     client: SupabaseClient,
     hotelId: string,
     dto: CrearCotizacionDto,
-    personalId: string,
+    personalId: string | null,
+    opciones?: { estado?: 'pendiente' | 'pendiente_revision' | 'aprobada'; origen?: 'manual' | 'whatsapp' },
   ) {
     if (!dto.huespedId && !dto.empresaId) {
       throw new BadRequestException(
@@ -209,10 +215,11 @@ export class CotizacionesService {
         hora_checkin: dto.horaCheckin,
         hora_checkout: dto.horaCheckout,
         moneda: dto.moneda ?? 'PEN',
-        estado: 'pendiente',
+        estado: opciones?.estado ?? 'pendiente',
         total_estimado: totalEstimado,
         creado_por: personalId,
         vence_en: venceEn,
+        origen: opciones?.origen ?? 'manual',
       })
       .select()
       .single();

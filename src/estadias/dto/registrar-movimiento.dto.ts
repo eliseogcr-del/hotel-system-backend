@@ -9,6 +9,13 @@ import {
   Min,
 } from 'class-validator';
 
+// 'mascota' es el cargo automático por día que ya trae la reserva
+// (con_mascota/cobro_mascota, precio_mascota * días -- ver
+// EstadiasService.checkin) y no se registra a mano desde este DTO.
+// 'cargo_mascota' es un concepto aparte: un cobro puntual (ej. una mascota
+// no declarada al reservar) que recepción registra durante la estadía,
+// pagable al momento igual que consumo_bazar/desayuno -- ver
+// migracion_cargo_mascota.sql.
 export type TipoMovimientoCuenta =
   | 'alquiler'
   | 'consumo_bazar'
@@ -18,7 +25,8 @@ export type TipoMovimientoCuenta =
   | 'ajuste'
   | 'cochera'
   | 'desayuno'
-  | 'mascota';
+  | 'mascota'
+  | 'cargo_mascota';
 
 export type MetodoPago = 'efectivo' | 'transferencia' | 'yape' | 'tarjeta';
 
@@ -33,6 +41,7 @@ export class RegistrarMovimientoDto {
     'cochera',
     'desayuno',
     'mascota',
+    'cargo_mascota',
   ])
   tipo: TipoMovimientoCuenta;
 

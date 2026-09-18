@@ -91,7 +91,7 @@ interface Cochera {
   es_externa: boolean;
 }
 
-const TIPOS_MOVIMIENTO = ['pago', 'consumo_bazar', 'desayuno', 'mascota', 'ajuste', 'early', 'late', 'cochera'];
+const TIPOS_MOVIMIENTO = ['pago', 'consumo_bazar', 'desayuno', 'cargo_mascota', 'ajuste', 'early', 'late', 'cochera'];
 const METODOS = ['efectivo', 'transferencia', 'yape', 'tarjeta'];
 const TIPOS_VEHICULO = [
   { value: 'auto', label: 'Auto' },
@@ -105,7 +105,7 @@ const TIPO_LABEL: Record<string, string> = {
   pago: 'Pago',
   consumo_bazar: 'Consumo de bazar',
   desayuno: 'Desayuno',
-  mascota: 'Mascota',
+  cargo_mascota: 'Mascota',
   ajuste: 'Ajuste',
   early: 'Early (entrada temprana)',
   late: 'Late (salida tardía)',
@@ -1280,9 +1280,12 @@ function RegistrarMovimientoForm({
   }, [hotelId]);
 
   const esVentaConCatalogo = tipo === 'consumo_bazar' || tipo === 'desayuno';
-  // Mascota no tiene catálogo (es un cargo fijo, no un producto con precio
-  // configurable) pero sí se puede pagar al momento igual que bazar/desayuno.
-  const permitePagoAlMomento = esVentaConCatalogo || tipo === 'mascota';
+  // cargo_mascota es un cobro puntual (ej. mascota no declarada al
+  // reservar) distinto del cargo automático por día que ya trae la
+  // reserva -- no tiene catálogo (es un monto fijo, no un producto con
+  // precio configurable) pero sí se puede pagar al momento igual que
+  // bazar/desayuno.
+  const permitePagoAlMomento = esVentaConCatalogo || tipo === 'cargo_mascota';
   const productosActivos = productos.filter((p) => p.activo);
   const tiposDesayunoActivos = tiposDesayuno.filter((t) => t.activo);
   const catalogo = tipo === 'consumo_bazar' ? productosActivos : tiposDesayunoActivos;
@@ -1291,7 +1294,7 @@ function RegistrarMovimientoForm({
 
   function cambiarTipo(nuevoTipo: string) {
     setTipo(nuevoTipo);
-    if (nuevoTipo === 'mascota') setMonto('25');
+    if (nuevoTipo === 'cargo_mascota') setMonto('25');
   }
   const montoPEN =
     tipo === 'pago' && moneda === 'USD' && tipoCambio
