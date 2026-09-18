@@ -79,6 +79,29 @@ export class CotizacionPublicaService {
       : this.cotizarGrupo(client, base);
   }
 
+  // Para que el formulario público muestre la hora de check-in/checkout
+  // configurada del hotel como valor por defecto, y avise de una vez si el
+  // agente no está activo (sin esperar a que el cliente llene todo el
+  // formulario para recién enterarse).
+  async obtenerInfoPublica(hotelId: string) {
+    const client = this.supabase.getServiceClient();
+    const { data, error } = await client
+      .from('hoteles')
+      .select('nombre, activo, agente_whatsapp_activo, hora_checkin, hora_checkout')
+      .eq('id', hotelId)
+      .maybeSingle();
+    if (error) throw error;
+    if (!data) {
+      throw new ForbiddenException('El agente de WhatsApp no está disponible para este hotel en este momento.');
+    }
+    return {
+      nombre: data.nombre,
+      agenteActivo: !!(data.activo && data.agente_whatsapp_activo),
+      horaCheckin: aHoraHHMM(data.hora_checkin),
+      horaCheckout: aHoraHHMM(data.hora_checkout),
+    };
+  }
+
   private async cargarHotelConBotActivo(client: SupabaseClient, hotelId: string) {
     const { data, error } = await client
       .from('hoteles')

@@ -1,6 +1,22 @@
-import { useState, type CSSProperties, type FormEvent } from 'react';
+import { useEffect, useState, type CSSProperties, type FormEvent } from 'react';
 import { useParams } from 'react-router-dom';
 import { API_URL } from '../lib/api';
+
+// YYYY-MM-DD + N días -> YYYY-MM-DD, sin líos de zona horaria (mismo patrón
+// que sumarDiasYMD en el backend, ver CotizacionPublicaService).
+function sumarDiasYMD(fechaYMD: string, dias: number): string {
+  const [anio, mes, dia] = fechaYMD.split('-').map(Number);
+  const d = new Date(Date.UTC(anio, mes - 1, dia));
+  d.setUTCDate(d.getUTCDate() + dias);
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}`;
+}
+
+function calcularNoches(fechaDesde: string, fechaHasta: string): number {
+  return Math.max(
+    1,
+    Math.ceil((new Date(fechaHasta).getTime() - new Date(fechaDesde).getTime()) / (1000 * 60 * 60 * 24)),
+  );
+}
 
 type TipoDoc = 'dni' | 'pasaporte' | 'carnet_extranjeria' | 'cedula' | 'otro';
 type TipoVehiculo = 'auto' | 'camioneta' | 'moto' | 'otro';
@@ -32,12 +48,21 @@ interface RespuestaCotizacion {
   };
 }
 
+interface InfoHotel {
+  nombre: string;
+  agenteActivo: boolean;
+  horaCheckin: string;
+  horaCheckout: string;
+}
+
 // Formulario público (sin login) al que el agente de WhatsApp le manda el
 // link al cliente para cotizar solo -- ver CLAUDE.md, agente de WhatsApp.
 // No pasa por api.ts (esa capa asume una sesión de Supabase) ni por
 // ProtectedRoute: se agrega como ruta pública en App.tsx.
 export function CotizarWhatsapp() {
   const { hotelId } = useParams<{ hotelId: string }>();
+  const [info, setInfo] = useState<InfoHotel | null>(null);
+  const [infoError, setInfoError] = useState<string | null>(null);
   const [tipoDoc, setTipoDoc] = useState<TipoDoc>('dni');
   const [nroDoc, setNroDoc] = useState('');
   const [nombres, setNombres] = useState('');
@@ -59,6 +84,46 @@ export function CotizarWhatsapp() {
   const [enviando, setEnviando] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [resultado, setResultado] = useState<RespuestaCotizacion | null>(null);
+
+  useEffect(() => {
+    if (!hotelId) return;
+    fetch(`${API_URL}/publico/hoteles/${hotelId}/cotizaciones-whatsapp/info`)
+      .then(async (res) => {
+        const body = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(body.message ?? 'No se pudo cargar el formulario');
+        return body as InfoHotel;
+      })
+      .then((data) => {
+        setInfo(data);
+        setHoraIngreso(data.horaCheckin);
+        setHoraSalida(data.horaCheckout);
+      })
+      .catch((err) => setInfoError(err instanceof Error ? err.message : 'No se pudo cargar el formulario'));
+  }, [hotelId]);
+
+  // Fecha/hora de salida y cantidad de noches se recalculan entre sí: al
+  // marcar "cambiar salida" o cambiar la fecha de llegada se recalcula la
+  // salida a partir de las noches; si el cliente edita la fecha de salida
+  // directamente, son las noches las que se ajustan solas.
+  function cambiarFechaIngreso(valor: string) {
+    setFechaIngreso(valor);
+    if (cambiarSalida && valor) setFechaSalida(sumarDiasYMD(valor, noches));
+  }
+
+  function cambiarNoches(valor: number) {
+    setNoches(valor);
+    if (cambiarSalida && fechaIngreso) setFechaSalida(sumarDiasYMD(fechaIngreso, valor));
+  }
+
+  function cambiarFechaSalida(valor: string) {
+    setFechaSalida(valor);
+    if (fechaIngreso && valor) setNoches(calcularNoches(fechaIngreso, valor));
+  }
+
+  function alternarCambiarSalida(activar: boolean) {
+    setCambiarSalida(activar);
+    if (activar && fechaIngreso) setFechaSalida(sumarDiasYMD(fechaIngreso, noches));
+  }
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -103,6 +168,35 @@ export function CotizarWhatsapp() {
   }
 
   if (!hotelId) return null;
+
+  if (infoError) {
+    return (
+      <Contenedor>
+        <h1 style={tituloStyle}>No disponible</h1>
+        <p style={{ fontSize: 14 }}>{infoError}</p>
+      </Contenedor>
+    );
+  }
+
+  if (!info) {
+    return (
+      <Contenedor>
+        <p style={{ fontSize: 14, color: 'var(--text-muted)' }}>Cargando...</p>
+      </Contenedor>
+    );
+  }
+
+  if (!info.agenteActivo) {
+    return (
+      <Contenedor>
+        <h1 style={tituloStyle}>Cotizaciones no disponibles</h1>
+        <p style={{ fontSize: 14 }}>
+          Por el momento este hotel no está aceptando cotizaciones automáticas. Escríbenos directamente por
+          WhatsApp y te ayudamos.
+        </p>
+      </Contenedor>
+    );
+  }
 
   if (resultado) {
     return (
@@ -174,7 +268,7 @@ export function CotizarWhatsapp() {
             <input
               type="date"
               value={fechaIngreso}
-              onChange={(e) => setFechaIngreso(e.target.value)}
+              onChange={(e) => cambiarFechaIngreso(e.target.value)}
               style={inputStyle}
               required
             />
@@ -206,7 +300,7 @@ export function CotizarWhatsapp() {
               type="number"
               min={1}
               value={noches}
-              onChange={(e) => setNoches(Math.max(1, Number(e.target.value)))}
+              onChange={(e) => cambiarNoches(Math.max(1, Number(e.target.value)))}
               style={inputStyle}
               required
             />
@@ -214,8 +308,9 @@ export function CotizarWhatsapp() {
         </div>
 
         <label style={checkboxLabelStyle}>
-          <input type="checkbox" checked={cambiarSalida} onChange={(e) => setCambiarSalida(e.target.checked)} />
-          Quiero elegir la fecha/hora de salida (por defecto sale a las 12:00 del día calculado por las noches)
+          <input type="checkbox" checked={cambiarSalida} onChange={(e) => alternarCambiarSalida(e.target.checked)} />
+          Quiero elegir la fecha/hora de salida (por defecto sale a las {info.horaCheckout} del día calculado por
+          las noches)
         </label>
         {cambiarSalida && (
           <div style={filaStyle}>
@@ -223,7 +318,7 @@ export function CotizarWhatsapp() {
               <input
                 type="date"
                 value={fechaSalida}
-                onChange={(e) => setFechaSalida(e.target.value)}
+                onChange={(e) => cambiarFechaSalida(e.target.value)}
                 style={inputStyle}
                 required={cambiarSalida}
               />
