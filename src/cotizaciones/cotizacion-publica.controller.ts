@@ -1,4 +1,4 @@
-import { Body, Controller, Param, Post } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post } from '@nestjs/common';
 import { CotizacionPublicaService } from './cotizacion-publica.service';
 import { CrearCotizacionWhatsappDto } from './dto/crear-cotizacion-whatsapp.dto';
 
@@ -14,6 +14,14 @@ import { CrearCotizacionWhatsappDto } from './dto/crear-cotizacion-whatsapp.dto'
 @Controller('publico/hoteles/:hotelId/cotizaciones-whatsapp')
 export class CotizacionPublicaController {
   constructor(private readonly service: CotizacionPublicaService) {}
+
+  // El formulario público lo llama al cargar, para mostrar la hora de
+  // check-in/checkout configurada del hotel como valor por defecto y avisar
+  // de una vez si el agente no está activo.
+  @Get('info')
+  async info(@Param('hotelId') hotelId: string) {
+    return this.service.obtenerInfoPublica(hotelId);
+  }
 
   @Post()
   async crear(@Param('hotelId') hotelId: string, @Body() dto: CrearCotizacionWhatsappDto) {
