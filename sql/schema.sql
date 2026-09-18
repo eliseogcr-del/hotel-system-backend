@@ -29,6 +29,12 @@ create table hoteles (
     -- Cobro por mascota, por día (igual criterio que la tarifa de
     -- habitación); 0 = sin cobro configurado todavía.
     precio_mascota numeric(10,2) not null default 0,
+    -- Agente de WhatsApp (cotización automática por chat): apagado por
+    -- defecto, el admin lo prende cuando el hotel esté listo. Grupos de más
+    -- de umbral_grupo_grande personas se cotizan en 'pendiente_revision'
+    -- (alguien del hotel define el precio y confirma) en vez de autocotizarse.
+    agente_whatsapp_activo boolean not null default false,
+    umbral_grupo_grande int not null default 10,
     -- Saldo inicial de caja al arrancar en producción (no se migran
     -- movimientos históricos): se usa una sola vez, como saldo_inicial de
     -- la primera sesión de turno del hotel; después queda inerte y su
@@ -141,6 +147,11 @@ create table habitaciones (
     -- estadía o de una tarea HK en curso): avisos como "faltan toallas"
     -- que ayudan a recepción a decidir aun con la habitación disponible.
     notas_operativas text,
+    -- A voluntad del recepcionista (no una regla fija): si está en false, el
+    -- agente de WhatsApp nunca la ofrece aunque esté realmente disponible --
+    -- es una exclusión puramente comercial/de política del hotel, no afecta
+    -- el motor de disponibilidad real que usan reservas/cotizaciones humanas.
+    visible_whatsapp boolean not null default true,
     unique (hotel_id, hab_numero)
 );
 
@@ -400,12 +411,21 @@ create table cotizaciones (
     -- reconstruir el rango exacto al convertir la cotización en reserva.
     hora_checkin time not null default '15:00',
     hora_checkout time not null default '11:00',
-    estado text not null default 'pendiente' check (estado in ('pendiente','aprobada','convertida','vencida','cancelada')),
+    -- 'pendiente_revision': la generó sola el agente de WhatsApp para un
+    -- grupo grande (más del umbral configurado) sin definir precio -- el
+    -- staff completa la tarifa por línea (ya editable, ver editarLinea()) y
+    -- recién ahí la pasa a 'aprobada'. Una cotización 'directa' del bot (bajo
+    -- el umbral) sí trae precio automático y entra como 'aprobada'.
+    estado text not null default 'pendiente' check (estado in ('pendiente','pendiente_revision','aprobada','convertida','vencida','cancelada')),
     moneda text not null default 'PEN',
     total_estimado numeric(10,2),
+    -- null cuando la creó el agente de WhatsApp sin intervención de personal.
     creado_por uuid references personal(id),
     reserva_id uuid references reservas(id),
-    vence_en date
+    vence_en date,
+    -- 'whatsapp': la generó el formulario público del agente, no un
+    -- recepcionista -- solo para poder filtrarlas/reportarlas aparte.
+    origen text not null default 'manual' check (origen in ('manual','whatsapp'))
 );
 
 create table cotizacion_detalle (

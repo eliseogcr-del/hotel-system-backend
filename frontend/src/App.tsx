@@ -2,6 +2,7 @@ import { Navigate, Route, Routes } from 'react-router-dom';
 import { Layout } from './components/Layout';
 import { ProtectedRoute } from './components/ProtectedRoute';
 import { Login } from './pages/Login';
+import { CotizarWhatsapp } from './pages/CotizarWhatsapp';
 import { Habitaciones } from './pages/Habitaciones';
 import { Reservas } from './pages/Reservas';
 import { Huespedes } from './pages/Huespedes';
@@ -20,6 +21,7 @@ export function App() {
   return (
     <Routes>
       <Route path="/login" element={<Login />} />
+      <Route path="/cotizar/:hotelId" element={<CotizarWhatsapp />} />
 
       <Route
         element={

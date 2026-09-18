@@ -17,6 +17,7 @@ import { HabitacionesService } from './habitaciones.service';
 import { ValidarDisponibilidadDto } from './dto/validar-disponibilidad.dto';
 import { AlternarMantenimientoDto } from './dto/alternar-mantenimiento.dto';
 import { ActualizarNotasHabitacionDto } from './dto/actualizar-notas.dto';
+import { AlternarVisibleWhatsappDto } from './dto/alternar-visible-whatsapp.dto';
 
 @Controller('hoteles/:hotelId/habitaciones')
 @UseGuards(AuthGuard, RolesGuard)
@@ -92,5 +93,17 @@ export class HabitacionesController {
   ) {
     const client = this.supabase.getClientForRequest(user.accessToken);
     return this.habitacionesService.actualizarNotas(client, hotelId, id, dto.notas);
+  }
+
+  @Patch(':id/visible-whatsapp')
+  @Roles('admin', 'recepcion')
+  async actualizarVisibleWhatsapp(
+    @Param('hotelId') hotelId: string,
+    @Param('id') id: string,
+    @Body() dto: AlternarVisibleWhatsappDto,
+    @CurrentUser() user: RequestUser,
+  ) {
+    const client = this.supabase.getClientForRequest(user.accessToken);
+    return this.habitacionesService.actualizarVisibleWhatsapp(client, hotelId, id, dto.visible);
   }
 }

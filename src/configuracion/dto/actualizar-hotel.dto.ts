@@ -1,4 +1,4 @@
-import { IsBoolean, IsMilitaryTime, IsNumber, IsOptional, IsString, Matches, MaxLength, Min } from 'class-validator';
+import { IsBoolean, IsInt, IsMilitaryTime, IsNumber, IsOptional, IsString, Matches, MaxLength, Min } from 'class-validator';
 
 export class ActualizarHotelDto {
   @IsOptional()
@@ -70,4 +70,16 @@ export class ActualizarHotelDto {
   @IsString()
   @MaxLength(150)
   eslogan?: string;
+
+  @IsOptional()
+  @IsBoolean()
+  agenteWhatsappActivo?: boolean;
+
+  // Cantidad de personas a partir de la cual una cotización del agente de
+  // WhatsApp deja de autocotizarse (tarifa normal x noches) y queda
+  // 'pendiente_revision' para que el staff defina el precio por persona.
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  umbralGrupoGrande?: number;
 }

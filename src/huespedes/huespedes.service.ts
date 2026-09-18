@@ -37,6 +37,21 @@ export class HuespedesService {
     return data;
   }
 
+  // Usado por el agente de WhatsApp (y disponible para lo que lo necesite):
+  // encuentra el huésped ya registrado con ese documento en el hotel, si
+  // existe, en vez de duplicarlo.
+  async buscarPorDocumento(client: SupabaseClient, hotelId: string, tipoDoc: string, nroDoc: string) {
+    const { data, error } = await client
+      .from('huespedes')
+      .select('*')
+      .eq('hotel_id', hotelId)
+      .eq('tipo_doc', tipoDoc)
+      .eq('nro_doc', nroDoc)
+      .maybeSingle();
+    if (error) throw error;
+    return data;
+  }
+
   async listar(client: SupabaseClient, hotelId: string, query: ListarHuespedesQueryDto) {
     let consulta = client
       .from('huespedes')
