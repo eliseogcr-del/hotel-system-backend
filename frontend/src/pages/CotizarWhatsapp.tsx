@@ -48,11 +48,31 @@ interface RespuestaCotizacion {
   };
 }
 
+interface RespuestaReserva {
+  modo: 'reserva';
+  id: string;
+  importe_final: number;
+  moneda: string;
+}
+
 interface InfoHotel {
   nombre: string;
   agenteActivo: boolean;
   horaCheckin: string;
   horaCheckout: string;
+  // Grupos hasta este tamaño ven la lista de habitaciones reales y reservan
+  // directo; grupos más grandes siguen el flujo de cotización con revisión
+  // humana (ver CLAUDE.md, agente de WhatsApp).
+  umbralGrupoGrande: number;
+}
+
+interface HabitacionDisponible {
+  habitacionId: string;
+  numero: number;
+  tipo: string;
+  aforoMax: number;
+  precioNoche: number;
+  importe: number;
 }
 
 // Formulario público (sin login) al que el agente de WhatsApp le manda el
@@ -83,7 +103,12 @@ export function CotizarWhatsapp() {
   const [horaSalida, setHoraSalida] = useState('12:00');
   const [enviando, setEnviando] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [resultado, setResultado] = useState<RespuestaCotizacion | null>(null);
+  const [resultado, setResultado] = useState<RespuestaCotizacion | RespuestaReserva | null>(null);
+
+  const [habitacionesDisponibles, setHabitacionesDisponibles] = useState<HabitacionDisponible[] | null>(null);
+  const [buscandoHabitaciones, setBuscandoHabitaciones] = useState(false);
+  const [busquedaError, setBusquedaError] = useState<string | null>(null);
+  const [seleccionadas, setSeleccionadas] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     if (!hotelId) return;
@@ -100,6 +125,72 @@ export function CotizarWhatsapp() {
       })
       .catch((err) => setInfoError(err instanceof Error ? err.message : 'No se pudo cargar el formulario'));
   }, [hotelId]);
+
+  // Grupos dentro del umbral configurado ven la lista de habitaciones reales
+  // y reservan directo; grupos más grandes siguen yendo por el flujo viejo
+  // de cotización con revisión humana (ver handleSubmitCotizar más abajo).
+  const personasDentroDelUmbral = !!info && personas > 0 && personas <= info.umbralGrupoGrande;
+
+  const capacidadSeleccionada = (habitacionesDisponibles ?? [])
+    .filter((h) => seleccionadas.has(h.habitacionId))
+    .reduce((acc, h) => acc + h.aforoMax, 0);
+
+  function toggleSeleccion(habitacionId: string) {
+    setSeleccionadas((prev) => {
+      const next = new Set(prev);
+      if (next.has(habitacionId)) next.delete(habitacionId);
+      else next.add(habitacionId);
+      return next;
+    });
+  }
+
+  // En cuanto el cliente completa fecha de entrada, fecha/hora de salida (o
+  // noches) y cantidad de personas, se busca la disponibilidad real -- ver
+  // CLAUDE.md, agente de WhatsApp: "Vamos a hacer un cambio en este
+  // formulario...". Debounce igual que el resto del sistema (300ms) para no
+  // mandar una consulta por cada tecla mientras escriben la cantidad.
+  useEffect(() => {
+    if (!hotelId || !personasDentroDelUmbral) {
+      setHabitacionesDisponibles(null);
+      setSeleccionadas(new Set());
+      return;
+    }
+    if (!fechaIngreso || !horaIngreso) return;
+    if (cambiarSalida ? !fechaSalida : noches < 1) return;
+
+    const t = setTimeout(() => {
+      setBuscandoHabitaciones(true);
+      setBusquedaError(null);
+      fetch(`${API_URL}/publico/hoteles/${hotelId}/cotizaciones-whatsapp/habitaciones-disponibles`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          fechaIngreso,
+          horaIngreso,
+          noches,
+          personas,
+          fechaSalida: cambiarSalida ? fechaSalida : undefined,
+          horaSalida: cambiarSalida ? horaSalida : undefined,
+        }),
+      })
+        .then(async (res) => {
+          const body = await res.json().catch(() => ({}));
+          if (!res.ok) throw new Error(body.message ?? 'No se pudo buscar habitaciones disponibles');
+          return body as { habitaciones: HabitacionDisponible[] };
+        })
+        .then((data) => {
+          setHabitacionesDisponibles(data.habitaciones);
+          setSeleccionadas(new Set());
+        })
+        .catch((err) => {
+          setHabitacionesDisponibles(null);
+          setBusquedaError(err instanceof Error ? err.message : 'No se pudo buscar habitaciones disponibles');
+        })
+        .finally(() => setBuscandoHabitaciones(false));
+    }, 300);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hotelId, personasDentroDelUmbral, fechaIngreso, horaIngreso, noches, personas, cambiarSalida, fechaSalida, horaSalida]);
 
   // Fecha/hora de salida y cantidad de noches se recalculan entre sí: al
   // marcar "cambiar salida" o cambiar la fecha de llegada se recalcula la
@@ -134,7 +225,9 @@ export function CotizarWhatsapp() {
     if (activar && fechaIngreso) setFechaSalida(sumarDiasYMD(fechaIngreso, noches));
   }
 
-  async function handleSubmit(e: FormEvent) {
+  // Camino viejo: grupos por encima del umbral configurado siguen generando
+  // una cotización con revisión humana (ver CotizacionPublicaService.cotizarGrupo).
+  async function handleSubmitCotizar(e: FormEvent) {
     e.preventDefault();
     if (!hotelId) return;
     setEnviando(true);
@@ -176,6 +269,56 @@ export function CotizarWhatsapp() {
     }
   }
 
+  // Camino nuevo: grupos dentro del umbral eligen habitaciones reales con
+  // checkbox y esto crea la reserva directo (no una cotización) -- ver
+  // CotizacionPublicaService.crearReservaDesdeWhatsapp.
+  async function handleSubmitReservar(e: FormEvent) {
+    e.preventDefault();
+    if (!hotelId) return;
+    if (capacidadSeleccionada < personas) {
+      setError('Selecciona habitaciones hasta cubrir la cantidad de personas.');
+      return;
+    }
+    setEnviando(true);
+    setError(null);
+    setResultado(null);
+    try {
+      const res = await fetch(`${API_URL}/publico/hoteles/${hotelId}/cotizaciones-whatsapp/reservas`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          tipoDoc,
+          nroDoc,
+          nombres,
+          apellidos,
+          telefono,
+          fechaIngreso,
+          horaIngreso,
+          noches,
+          personas,
+          mascota,
+          vehiculo,
+          tipoVehiculo: vehiculo ? tipoVehiculo : undefined,
+          facturable,
+          ruc: facturable ? ruc : undefined,
+          razonSocial: facturable ? razonSocial : undefined,
+          fechaSalida: cambiarSalida ? fechaSalida : undefined,
+          horaSalida: cambiarSalida ? horaSalida : undefined,
+          habitacionIds: [...seleccionadas],
+        }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(body.message ?? 'No se pudo crear la reserva');
+      }
+      setResultado({ modo: 'reserva', id: body.id, importe_final: body.importe_final, moneda: body.moneda });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'No se pudo crear la reserva');
+    } finally {
+      setEnviando(false);
+    }
+  }
+
   if (!hotelId) return null;
 
   if (infoError) {
@@ -210,7 +353,17 @@ export function CotizarWhatsapp() {
   if (resultado) {
     return (
       <Contenedor>
-        {resultado.disponible ? (
+        {resultado.modo === 'reserva' ? (
+          <>
+            <h1 style={tituloStyle}>¡Reserva confirmada!</h1>
+            <p style={{ fontSize: 15 }}>
+              Total: <b>S/. {Number(resultado.importe_final ?? 0).toFixed(2)}</b>
+            </p>
+            <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>
+              Te esperamos en la fecha indicada. Si tienes alguna duda, escríbenos por el mismo WhatsApp.
+            </p>
+          </>
+        ) : resultado.disponible ? (
           resultado.modo === 'directo' ? (
             <>
               <h1 style={tituloStyle}>¡Cotización lista!</h1>
@@ -243,7 +396,10 @@ export function CotizarWhatsapp() {
   return (
     <Contenedor>
       <h1 style={tituloStyle}>Cotiza tu estadía</h1>
-      <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+      <form
+        onSubmit={personasDentroDelUmbral ? handleSubmitReservar : handleSubmitCotizar}
+        style={{ display: 'flex', flexDirection: 'column', gap: 12 }}
+      >
         <div style={filaStyle}>
           <Campo label="Tipo de documento">
             <select value={tipoDoc} onChange={(e) => setTipoDoc(e.target.value as TipoDoc)} style={inputStyle}>
@@ -346,6 +502,64 @@ export function CotizarWhatsapp() {
           </div>
         )}
 
+        {personasDentroDelUmbral && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <label style={{ ...checkboxLabelStyle, fontWeight: 600 }}>Habitaciones disponibles</label>
+            {buscandoHabitaciones && (
+              <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>Buscando disponibilidad...</p>
+            )}
+            {busquedaError && <p style={{ fontSize: 13, color: 'var(--danger)' }}>{busquedaError}</p>}
+            {!buscandoHabitaciones && !busquedaError && habitacionesDisponibles?.length === 0 && (
+              <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>
+                No hay habitaciones disponibles para esas fechas y cantidad de personas.
+              </p>
+            )}
+            {!buscandoHabitaciones && habitacionesDisponibles && habitacionesDisponibles.length > 0 && (
+              <>
+                <div style={{ border: '1px solid var(--border)', borderRadius: 8, overflow: 'hidden' }}>
+                  {habitacionesDisponibles.map((h) => {
+                    const marcada = seleccionadas.has(h.habitacionId);
+                    const deshabilitada = !marcada && capacidadSeleccionada >= personas;
+                    return (
+                      <label
+                        key={h.habitacionId}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 10,
+                          padding: '10px 12px',
+                          borderBottom: '1px solid var(--border)',
+                          opacity: deshabilitada ? 0.5 : 1,
+                          cursor: deshabilitada ? 'not-allowed' : 'pointer',
+                        }}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={marcada}
+                          disabled={deshabilitada}
+                          onChange={() => toggleSeleccion(h.habitacionId)}
+                        />
+                        <div style={{ flex: 1 }}>
+                          <div style={{ fontWeight: 600, fontSize: 13 }}>
+                            Hab. {h.numero} · {h.tipo}
+                          </div>
+                          <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Máx. {h.aforoMax} personas</div>
+                        </div>
+                        <div style={{ fontWeight: 700, fontSize: 13, whiteSpace: 'nowrap' }}>
+                          S/. {h.importe.toFixed(2)}
+                        </div>
+                      </label>
+                    );
+                  })}
+                </div>
+                <p style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+                  Seleccionado: {capacidadSeleccionada} / {personas} personas
+                </p>
+              </>
+            )}
+          </div>
+        )}
+
         <label style={checkboxLabelStyle}>
           <input type="checkbox" checked={mascota} onChange={(e) => setMascota(e.target.checked)} />
           ¿Viene con mascota?
@@ -393,8 +607,12 @@ export function CotizarWhatsapp() {
 
         {error && <p style={{ color: 'var(--danger)', fontSize: 13 }}>{error}</p>}
 
-        <button type="submit" disabled={enviando} style={botonStyle}>
-          {enviando ? 'Cotizando...' : 'Cotizar'}
+        <button
+          type="submit"
+          disabled={enviando || (personasDentroDelUmbral && capacidadSeleccionada < personas)}
+          style={botonStyle}
+        >
+          {enviando ? (personasDentroDelUmbral ? 'Reservando...' : 'Cotizando...') : personasDentroDelUmbral ? 'Reservar' : 'Cotizar'}
         </button>
       </form>
     </Contenedor>
