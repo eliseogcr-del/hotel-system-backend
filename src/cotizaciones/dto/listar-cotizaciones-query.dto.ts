@@ -2,7 +2,7 @@ import { IsDateString, IsEnum, IsOptional, IsString } from 'class-validator';
 
 export class ListarCotizacionesQueryDto {
   @IsOptional()
-  @IsEnum(['pendiente', 'aprobada', 'convertida', 'vencida', 'cancelada'])
+  @IsEnum(['pendiente', 'pendiente_revision', 'aprobada', 'convertida', 'vencida', 'cancelada'])
   estado?: string;
 
   // Filtran fecha_emision (cuándo se armó la cotización), no fecha_desde
