@@ -18,6 +18,7 @@ interface TipoHabitacionPrecios {
   precio_corporativo: number;
   precio_web: number;
   precio_por_hora: number | null;
+  precio_individual: number | null;
   precio_costo: number;
 }
 
@@ -303,6 +304,11 @@ export function Reservas() {
             tiposHabitacion.find(
               (t) => t.id === habitaciones.find((h) => h.id === formulario.habitacionId)?.tipos_habitacion?.id,
             )?.precio_normal ?? 0
+          }
+          tarifaIndividual={
+            tiposHabitacion.find(
+              (t) => t.id === habitaciones.find((h) => h.id === formulario.habitacionId)?.tipos_habitacion?.id,
+            )?.precio_individual ?? null
           }
           precioMascotaDia={precioMascotaDia}
           horaSugerida={horaCheckinHotel}
@@ -1096,6 +1102,7 @@ function TarifasModal({
   onClose: () => void;
 }) {
   const hayPorHora = tiposHabitacion.some((t) => t.precio_por_hora != null && Number(t.precio_por_hora) > 0);
+  const hayIndividual = tiposHabitacion.some((t) => t.precio_individual != null && Number(t.precio_individual) > 0);
   const ordenados = [...tiposHabitacion].sort((a, b) => Number(a.precio_normal) - Number(b.precio_normal));
   return (
     <div style={overlayStyle}>
@@ -1109,6 +1116,7 @@ function TarifasModal({
               <th style={thTarifaStyle}>Corp.</th>
               <th style={thTarifaStyle}>Web</th>
               {hayPorHora && <th style={thTarifaStyle}>Hora</th>}
+              {hayIndividual && <th style={thTarifaStyle}>Individual</th>}
             </tr>
           </thead>
           <tbody>
@@ -1121,6 +1129,11 @@ function TarifasModal({
                 {hayPorHora && (
                   <td style={tdTarifaStyle}>
                     {t.precio_por_hora != null ? Number(t.precio_por_hora).toFixed(2) : '—'}
+                  </td>
+                )}
+                {hayIndividual && (
+                  <td style={tdTarifaStyle}>
+                    {t.precio_individual != null ? Number(t.precio_individual).toFixed(2) : '—'}
                   </td>
                 )}
               </tr>

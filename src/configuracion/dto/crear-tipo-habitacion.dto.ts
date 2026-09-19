@@ -35,6 +35,13 @@ export class CrearTipoHabitacionDto {
   @Min(0)
   precioPorHora?: number;
 
+  // Tarifa más baja para cuando este tipo (ej. una matrimonial) se alquila a
+  // una sola persona. Si no se envía, este tipo no admite esa modalidad.
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  precioIndividual?: number;
+
   // Piso: ninguna tarifa (por defecto o editada por recepción) puede
   // registrarse por debajo de este valor. 0 = sin piso configurado.
   @IsOptional()

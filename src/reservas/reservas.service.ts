@@ -47,6 +47,7 @@ interface PreciosTipoHabitacion {
   precio_corporativo: number;
   precio_web: number;
   precio_por_hora: number | null;
+  precio_individual: number | null;
   precio_costo: number;
 }
 
@@ -976,7 +977,7 @@ export class ReservasService {
     const { data: hab, error: habError } = await client
       .from('habitaciones')
       .select(
-        'id, tipo_id, tipos_habitacion(precio_normal, precio_corporativo, precio_web, precio_por_hora, precio_costo)',
+        'id, tipo_id, tipos_habitacion(precio_normal, precio_corporativo, precio_web, precio_por_hora, precio_individual, precio_costo)',
       )
       .eq('id', linea.habitacionId)
       .eq('hotel_id', hotelId)
@@ -1002,6 +1003,7 @@ export class ReservasService {
         precios,
         linea.tipoCliente ?? this.inferirTipoCliente(origen, empresaId),
         linea.tipoAlquiler,
+        linea.nroPersonas,
       );
     }
 
@@ -1197,6 +1199,7 @@ export class ReservasService {
     precios: PreciosTipoHabitacion,
     tipoCliente: TipoCliente,
     tipoAlquiler: TipoAlquiler,
+    nroPersonas: number,
   ): number {
     if (tipoAlquiler === 'por_horas') {
       if (precios.precio_por_hora == null) {
@@ -1205,6 +1208,13 @@ export class ReservasService {
         );
       }
       return Number(precios.precio_por_hora);
+    }
+    // Tipos pensados para 2 (ej. matrimonial) tienen una tarifa más baja
+    // cuando se alquilan a una sola persona (ver ConfiguracionService,
+    // precio_individual). Solo aplica al cliente eventual: empresas/canales
+    // ya tienen su propia tarifa negociada por tipo de habitación.
+    if (tipoCliente === 'normal' && nroPersonas === 1 && precios.precio_individual != null) {
+      return Number(precios.precio_individual);
     }
     if (tipoCliente === 'corporativo') return Number(precios.precio_corporativo);
     if (tipoCliente === 'web') return Number(precios.precio_web);

@@ -82,6 +82,22 @@ export class CotizacionPublicaService {
     return { fechaHasta, horaCheckout, checkinISO, checkoutISO, dias, esLate };
   }
 
+  // Tipos pensados para 2 (ej. matrimonial) tienen una tarifa más baja
+  // cuando la reserva completa es de 1 sola persona -- ver
+  // ConfiguracionService/ReservasService.tarifaSegunTipoCliente
+  // (precio_individual). Solo aplica cuando TODA la reserva pública es de 1
+  // persona: el reparto entre varias habitaciones de un grupo no se
+  // considera "individual" aunque a alguna le toque 1 nada más.
+  private precioNocheEfectivo(
+    tipo: { precio_normal: number; precio_individual: number | null } | null,
+    personasTotales: number,
+  ): number {
+    if (personasTotales === 1 && tipo?.precio_individual != null) {
+      return Number(tipo.precio_individual);
+    }
+    return Number(tipo?.precio_normal ?? 0);
+  }
+
   async crearDesdeWhatsapp(hotelId: string, dto: CrearCotizacionWhatsappDto) {
     const client = this.supabase.getServiceClient();
     const hotel = await this.cargarHotelConBotActivo(client, hotelId);
@@ -141,14 +157,17 @@ export class CotizacionPublicaService {
     return {
       dias,
       esLate,
-      habitaciones: habitaciones.map((h) => ({
-        habitacionId: h.id,
-        numero: h.hab_numero,
-        tipo: h.tipos_habitacion?.nombre ?? '—',
-        aforoMax: h.tipos_habitacion?.aforo_max ?? 0,
-        precioNoche: Number(h.tipos_habitacion?.precio_normal ?? 0),
-        importe: Math.round(Number(h.tipos_habitacion?.precio_normal ?? 0) * dias * 100) / 100,
-      })),
+      habitaciones: habitaciones.map((h) => {
+        const precioNoche = this.precioNocheEfectivo(h.tipos_habitacion, dto.personas);
+        return {
+          habitacionId: h.id,
+          numero: h.hab_numero,
+          tipo: h.tipos_habitacion?.nombre ?? '—',
+          aforoMax: h.tipos_habitacion?.aforo_max ?? 0,
+          precioNoche,
+          importe: Math.round(precioNoche * dias * 100) / 100,
+        };
+      }),
     };
   }
 
@@ -166,7 +185,7 @@ export class CotizacionPublicaService {
 
     const { data: candidatas, error } = await client
       .from('habitaciones')
-      .select('id, hab_numero, tipos_habitacion(nombre, aforo_max, precio_normal)')
+      .select('id, hab_numero, tipos_habitacion(nombre, aforo_max, precio_normal, precio_individual)')
       .eq('hotel_id', hotelId)
       .eq('visible_whatsapp', true)
       .neq('estado', 'bloqueada');
@@ -231,7 +250,7 @@ export class CotizacionPublicaService {
       asignaciones.push({
         habitacionId: h.id,
         nroPersonas: asignadas,
-        precioNoche: Number(h.tipos_habitacion?.precio_normal ?? 0),
+        precioNoche: this.precioNocheEfectivo(h.tipos_habitacion, dto.personas),
       });
       restantes -= asignadas;
     }

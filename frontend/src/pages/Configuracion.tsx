@@ -12,6 +12,7 @@ interface TipoHabitacion {
   precio_corporativo: number;
   precio_web: number;
   precio_por_hora: number | null;
+  precio_individual: number | null;
   precio_costo: number;
 }
 
@@ -778,6 +779,7 @@ function SeccionTipos({
   const [precioCorporativo, setPrecioCorporativo] = useState('');
   const [precioWeb, setPrecioWeb] = useState('');
   const [precioPorHora, setPrecioPorHora] = useState('');
+  const [precioIndividual, setPrecioIndividual] = useState('');
   const [precioCosto, setPrecioCosto] = useState('');
   const [enviando, setEnviando] = useState(false);
 
@@ -794,6 +796,7 @@ function SeccionTipos({
         precioCorporativo: precioCorporativo ? Number(precioCorporativo) : undefined,
         precioWeb: precioWeb ? Number(precioWeb) : undefined,
         precioPorHora: precioPorHora ? Number(precioPorHora) : undefined,
+        precioIndividual: precioIndividual ? Number(precioIndividual) : undefined,
         precioCosto: precioCosto ? Number(precioCosto) : undefined,
       });
       setNombre('');
@@ -801,6 +804,7 @@ function SeccionTipos({
       setPrecioCorporativo('');
       setPrecioWeb('');
       setPrecioPorHora('');
+      setPrecioIndividual('');
       setPrecioCosto('');
       onCambio();
     } catch (err) {
@@ -873,6 +877,7 @@ function SeccionTipos({
                 <span>Corporativo: {t.precio_corporativo}</span>
                 <span>Web: {t.precio_web}</span>
                 <span>Por hora: {t.precio_por_hora ?? '—'}</span>
+                <span>Individual (1 persona): {t.precio_individual ?? '—'}</span>
                 <span style={t.precio_costo > 0 ? {} : { color: 'var(--text-muted)' }}>
                   Costo: {t.precio_costo > 0 ? t.precio_costo : 'sin definir'}
                 </span>
@@ -941,6 +946,15 @@ function SeccionTipos({
           type="number"
           min={0}
           step={0.01}
+          placeholder="Individual, 1 persona (opcional)"
+          value={precioIndividual}
+          onChange={(e) => setPrecioIndividual(e.target.value)}
+          style={{ ...inputStyle, width: 190 }}
+        />
+        <input
+          type="number"
+          min={0}
+          step={0.01}
           placeholder="Precio de costo"
           value={precioCosto}
           onChange={(e) => setPrecioCosto(e.target.value)}
@@ -974,6 +988,9 @@ function EditarTipoForm({
   const [precioCorporativo, setPrecioCorporativo] = useState(String(tipo.precio_corporativo));
   const [precioWeb, setPrecioWeb] = useState(String(tipo.precio_web));
   const [precioPorHora, setPrecioPorHora] = useState(tipo.precio_por_hora != null ? String(tipo.precio_por_hora) : '');
+  const [precioIndividual, setPrecioIndividual] = useState(
+    tipo.precio_individual != null ? String(tipo.precio_individual) : '',
+  );
   const [precioCosto, setPrecioCosto] = useState(String(tipo.precio_costo));
   const [guardando, setGuardando] = useState(false);
 
@@ -990,6 +1007,7 @@ function EditarTipoForm({
         precioCorporativo: Number(precioCorporativo),
         precioWeb: Number(precioWeb),
         precioPorHora: precioPorHora ? Number(precioPorHora) : undefined,
+        precioIndividual: precioIndividual ? Number(precioIndividual) : undefined,
         precioCosto: Number(precioCosto),
       });
       onGuardado();
@@ -1070,6 +1088,18 @@ function EditarTipoForm({
             placeholder="opcional"
             value={precioPorHora}
             onChange={(e) => setPrecioPorHora(e.target.value)}
+            style={{ ...inputStyle, width: 110 }}
+          />
+        </label>
+        <label style={{ display: 'flex', flexDirection: 'column', fontSize: 11, color: 'var(--text-secondary)', gap: 2 }}>
+          Individual (1 persona)
+          <input
+            type="number"
+            min={0}
+            step={0.01}
+            placeholder="opcional"
+            value={precioIndividual}
+            onChange={(e) => setPrecioIndividual(e.target.value)}
             style={{ ...inputStyle, width: 110 }}
           />
         </label>
