@@ -18,11 +18,11 @@ export type TipoCliente = 'normal' | 'corporativo' | 'web';
  * incluir varias habitaciones a la vez, ej. reservas grupales).
  */
 export class CrearReservaHabitacionDto {
-  @IsUUID()
+  @IsUUID(undefined, { message: 'Selecciona una habitación válida.' })
   habitacionId: string;
 
   @IsInt()
-  @Min(1)
+  @Min(1, { message: 'La cantidad de personas debe ser al menos 1.' })
   nroPersonas: number;
 
   @IsOptional()
@@ -36,13 +36,13 @@ export class CrearReservaHabitacionDto {
   @IsBoolean()
   conMascota?: boolean;
 
-  @IsEnum(['pernocte', 'por_horas'])
+  @IsEnum(['pernocte', 'por_horas'], { message: 'Selecciona un tipo de alquiler válido (pernocte o por horas).' })
   tipoAlquiler: TipoAlquiler;
 
-  @IsISO8601()
+  @IsISO8601(undefined, { message: 'La fecha/hora de check-in no es válida.' })
   checkinPrevisto: string;
 
-  @IsISO8601()
+  @IsISO8601(undefined, { message: 'La fecha/hora de checkout no es válida.' })
   checkoutPrevisto: string;
 
   // El recepcionista determina qué tipo de cliente es (empresa, cliente
