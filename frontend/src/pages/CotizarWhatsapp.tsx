@@ -110,9 +110,18 @@ export function CotizarWhatsapp() {
     if (cambiarSalida && valor) setFechaSalida(sumarDiasYMD(valor, noches));
   }
 
-  function cambiarNoches(valor: number) {
+  // 0 es un valor "en blanco" mientras el cliente está escribiendo (ej. borró
+  // el 1 para poner otro número): si clampeáramos a 1 en cada tecla, el campo
+  // nunca llegaría a vaciarse y no se podría reemplazar el valor. Se corrige
+  // solo a 1 recién al salir del campo (onBlur) si quedó en blanco.
+  function cambiarNoches(valorTexto: string) {
+    const valor = valorTexto === '' ? 0 : Math.max(1, Number(valorTexto));
     setNoches(valor);
-    if (cambiarSalida && fechaIngreso) setFechaSalida(sumarDiasYMD(fechaIngreso, valor));
+    if (cambiarSalida && fechaIngreso && valor > 0) setFechaSalida(sumarDiasYMD(fechaIngreso, valor));
+  }
+
+  function cambiarPersonas(valorTexto: string) {
+    setPersonas(valorTexto === '' ? 0 : Math.max(1, Number(valorTexto)));
   }
 
   function cambiarFechaSalida(valor: string) {
@@ -289,8 +298,9 @@ export function CotizarWhatsapp() {
             <input
               type="number"
               min={1}
-              value={personas}
-              onChange={(e) => setPersonas(Math.max(1, Number(e.target.value)))}
+              value={personas === 0 ? '' : personas}
+              onChange={(e) => cambiarPersonas(e.target.value)}
+              onBlur={() => setPersonas((p) => Math.max(1, p))}
               style={inputStyle}
               required
             />
@@ -299,8 +309,9 @@ export function CotizarWhatsapp() {
             <input
               type="number"
               min={1}
-              value={noches}
-              onChange={(e) => cambiarNoches(Math.max(1, Number(e.target.value)))}
+              value={noches === 0 ? '' : noches}
+              onChange={(e) => cambiarNoches(e.target.value)}
+              onBlur={() => cambiarNoches(String(Math.max(1, noches)))}
               style={inputStyle}
               required
             />
