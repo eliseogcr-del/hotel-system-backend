@@ -17,7 +17,7 @@ interface Cotizacion {
   empresas: { razon_social: string } | null;
 }
 
-const ESTADOS = ['pendiente', 'aprobada', 'convertida', 'vencida', 'cancelada'];
+const ESTADOS = ['pendiente', 'pendiente_revision', 'aprobada', 'convertida', 'vencida', 'cancelada'];
 
 function fmt(n: number): string {
   return Number(n).toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
