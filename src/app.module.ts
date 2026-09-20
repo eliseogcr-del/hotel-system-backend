@@ -16,7 +16,8 @@ import { TiposDesayunoModule } from './tipos-desayuno/tipos-desayuno.module';
 import { TurnosModule } from './turnos/turnos.module';
 import { TipoCambioModule } from './tipo-cambio/tipo-cambio.module';
 import { ReportesModule } from './reportes/reportes.module';
-import { BookingInboxModule } from './booking-inbox/booking-inbox.module';
+import { BookingInboxModule } from './booking-inbox/booking-inbox.module;
+import { NotasModule } from './notas/notas.module';
 
 @Module({
   imports: [
@@ -38,6 +39,7 @@ import { BookingInboxModule } from './booking-inbox/booking-inbox.module';
     TipoCambioModule,
     ReportesModule,
     BookingInboxModule,
+    NotasModule,
   ],
 })
 export class AppModule {}
