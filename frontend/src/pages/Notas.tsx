@@ -1,4 +1,4 @@
-import { useEffect, useState, type CSSProperties } from 'react';
+import { useEffect, useState } from 'react';
 import { api, ApiError } from '../lib/api';
 import { useHotel } from '../contexts/HotelContext';
 
@@ -6,7 +6,8 @@ interface Nota {
   id: string;
   fecha_hora: string;
   descripcion: string;
-  usuario_escribio: string;
+  // NotasService.listar() trae usuario_escribio como el join a personal(id, nombre).
+  usuario_escribio: { id: string; nombre: string } | null;
   tipo: 'Informativa' | 'Repetitiva' | 'Mensajeria';
   dirigido_a: 'Recepcionista' | 'HK' | 'Huesped';
   // Para Repetitiva
@@ -78,11 +79,8 @@ export function Notas() {
   };
 
   const manejarCambio = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
-    const { name, value, type, checked } = e.target;
+    const { name, value } = e.target;
     setFormularioData((prev) => {
-      if (type === 'checkbox') {
-        return { ...prev, [name]: checked };
-      }
       // Manejo especial para arrays (adjuntos, telefonos_adicionales)
       if (name === 'adjuntos' || name === 'telefonos_adicionales') {
         // Para simplificar, asumimos que son campos de texto separados por comas
@@ -199,7 +197,7 @@ export function Notas() {
                   </span>
                   <br />
                   <span>
-                    👤 {nota.usuario_escribio} · 📅 {formatoFechaHora(nota.fecha_hora)}
+                    👤 {nota.usuario_escribio?.nombre ?? '—'} · 📅 {formatoFechaHora(nota.fecha_hora)}
                   </span>
                 </div>
               </div>
@@ -215,13 +213,13 @@ export function Notas() {
                   <>
                     📱 Envío: {formatoFechaHora(nota.fecha_hora_envio)} · {' '}
                     {nota.celular_destino || 'Sin destino'}
-                    {nota.adjuntos?.length > 0 && (
+                    {nota.adjuntos && nota.adjuntos.length > 0 && (
                       <>
                         {' · '}
-                        📎 {nota.adjuntos.length} adjunto{s}
+                        📎 {nota.adjuntos.length} adjunto{nota.adjuntos.length > 1 ? 's' : ''}
                       </>
                     )}
-                    {nota.telefonos_adicionales?.length > 0 && (
+                    {nota.telefonos_adicionales && nota.telefonos_adicionales.length > 0 && (
                       <>
                         {' · '}
                         📞 {nota.telefonos_adicionales.length} tel. adicionales
@@ -384,26 +382,6 @@ export function Notas() {
                 <>
                   <div style={{ marginBottom: 16 }}>
                     <label style={{ display: 'block', fontSize: 11, color: 'var(--text-secondary)', marginBottom: 4 }}>
-                      Fecha y hora de envío (opcional, se establece automáticamente al enviar)
-                    </label>
-                    <input
-                      type="datetime-local"
-                      name="fecha_hora_envio"
-                      value={formularioData.fecha_hora_envio || ''}
-                      onChange={manejarCambio}
-                      style={{
-                        width: '100%',
-                        padding: '8px 10px',
-                        border: '1px solid var(--border)',
-                        borderRadius: 'var(--radius)',
-                        fontSize: 13,
-                        boxSizing: 'border-box',
-                      }}
-                    />
-                  </div>
-
-                  <div style={{ marginBottom: 16 }}>
-                    <label style={{ display: 'block', fontSize: 11, color: 'var(--text-secondary)', marginBottom: 4 }}>
                       Celular de destino (WhatsApp)
                     </label>
                     <input
@@ -433,7 +411,7 @@ export function Notas() {
                     <input
                       type="text"
                       name="adjuntos"
-                      value={formularioData.adjuntos.join(', ')}
+                      value={(formularioData.adjuntos ?? []).join(', ')}
                       onChange={manejarCambio}
                       placeholder="https://ejemplo.com/cotizacion.pdf, https://ejemplo.com/promocion.jpg"
                       style={{
@@ -454,7 +432,7 @@ export function Notas() {
                     <input
                       type="tel"
                       name="telefonos_adicionales"
-                      value={formularioData.telefonos_adicionales.join(', ')}
+                      value={(formularioData.telefonos_adicionales ?? []).join(', ')}
                       onChange={manejarCambio}
                       placeholder="+51 999 111 222, +51 999 333 444"
                       style={{

@@ -43,6 +43,6 @@ export class NotasController {
     @CurrentUser() user: RequestUser,
   ) {
     const client = this.supabase.getClientForRequest(user.accessToken);
-    return this.notasService.crear(client, hotelId, dto, user.userId);
+    return this.notasService.crear(client, hotelId, dto, user.personalId);
   }
 }
