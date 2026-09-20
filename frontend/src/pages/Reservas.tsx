@@ -18,6 +18,7 @@ interface TipoHabitacionPrecios {
   precio_corporativo: number;
   precio_web: number;
   precio_por_hora: number | null;
+  precio_individual: number | null;
   precio_costo: number;
 }
 
@@ -51,6 +52,7 @@ interface ReservaCalendario {
   estadiaId: string | null;
   estadoEstadia: string | null;
   huesped: string;
+  origen: string;
 }
 
 function fechaYMD(d: Date): string {
@@ -302,6 +304,11 @@ export function Reservas() {
             tiposHabitacion.find(
               (t) => t.id === habitaciones.find((h) => h.id === formulario.habitacionId)?.tipos_habitacion?.id,
             )?.precio_normal ?? 0
+          }
+          tarifaIndividual={
+            tiposHabitacion.find(
+              (t) => t.id === habitaciones.find((h) => h.id === formulario.habitacionId)?.tipos_habitacion?.id,
+            )?.precio_individual ?? null
           }
           precioMascotaDia={precioMascotaDia}
           horaSugerida={horaCheckinHotel}
@@ -707,6 +714,17 @@ interface SegmentoCelda {
   estadiaId: string | null;
   estadoEstadia: string | null;
   fechaInicio: string;
+  origen: string | null;
+}
+
+// El agente de WhatsApp crea reservas reales (origen='whatsapp') que deben
+// distinguirse a simple vista de las hechas por el staff en el calendario
+// (ver CLAUDE.md, agente de WhatsApp) -- mismo tono que --limpieza-bg del
+// resto del sistema.
+const COLOR_RESERVA_WHATSAPP = '#f59e0b';
+
+function colorSegmento(origen: string | null): string {
+  return origen === 'whatsapp' ? COLOR_RESERVA_WHATSAPP : 'var(--brand)';
 }
 
 // Una celda de un día "partido" (checkout de una reserva con margen para
@@ -770,6 +788,7 @@ function CalendarioReservas({
       estadiaId: item.estadiaId,
       estadoEstadia: item.estadoEstadia,
       fechaInicio,
+      origen: item.origen,
     };
   }
 
@@ -784,6 +803,7 @@ function CalendarioReservas({
       estadiaId: null,
       estadoEstadia: null,
       fechaInicio,
+      origen: null,
     };
   }
 
@@ -1006,7 +1026,7 @@ function CalendarioReservas({
                         style={{
                           ...tdCalStyle,
                           background: c.segmento.ocupado
-                            ? 'var(--brand)'
+                            ? colorSegmento(c.segmento.origen)
                             : bloqueada
                               ? 'repeating-linear-gradient(45deg, var(--surface-2), var(--surface-2) 6px, var(--border) 6px, var(--border) 12px)'
                               : 'transparent',
@@ -1029,7 +1049,7 @@ function CalendarioReservas({
                             title={`Sale: ${c.saliente.huesped}`}
                             style={{
                               flex: 1,
-                              background: 'var(--brand)',
+                              background: colorSegmento(c.saliente.origen),
                               cursor: 'pointer',
                             }}
                           />
@@ -1038,7 +1058,7 @@ function CalendarioReservas({
                             title={c.derecha.ocupado ? `Entra: ${c.derecha.huesped}` : 'Crear reserva (desde el checkout)'}
                             style={{
                               flex: 1,
-                              background: c.derecha.ocupado ? 'var(--brand)' : 'transparent',
+                              background: c.derecha.ocupado ? colorSegmento(c.derecha.origen) : 'transparent',
                               opacity: c.derecha.ocupado ? 0.6 : 1,
                               borderLeft: `1.5px dashed ${CAL_BORDE}`,
                               cursor: 'pointer',
@@ -1082,6 +1102,7 @@ function TarifasModal({
   onClose: () => void;
 }) {
   const hayPorHora = tiposHabitacion.some((t) => t.precio_por_hora != null && Number(t.precio_por_hora) > 0);
+  const hayIndividual = tiposHabitacion.some((t) => t.precio_individual != null && Number(t.precio_individual) > 0);
   const ordenados = [...tiposHabitacion].sort((a, b) => Number(a.precio_normal) - Number(b.precio_normal));
   return (
     <div style={overlayStyle}>
@@ -1095,6 +1116,7 @@ function TarifasModal({
               <th style={thTarifaStyle}>Corp.</th>
               <th style={thTarifaStyle}>Web</th>
               {hayPorHora && <th style={thTarifaStyle}>Hora</th>}
+              {hayIndividual && <th style={thTarifaStyle}>Individual</th>}
             </tr>
           </thead>
           <tbody>
@@ -1107,6 +1129,11 @@ function TarifasModal({
                 {hayPorHora && (
                   <td style={tdTarifaStyle}>
                     {t.precio_por_hora != null ? Number(t.precio_por_hora).toFixed(2) : '—'}
+                  </td>
+                )}
+                {hayIndividual && (
+                  <td style={tdTarifaStyle}>
+                    {t.precio_individual != null ? Number(t.precio_individual).toFixed(2) : '—'}
                   </td>
                 )}
               </tr>

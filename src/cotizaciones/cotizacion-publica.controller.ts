@@ -1,6 +1,8 @@
 import { Body, Controller, Get, Param, Post } from '@nestjs/common';
 import { CotizacionPublicaService } from './cotizacion-publica.service';
 import { CrearCotizacionWhatsappDto } from './dto/crear-cotizacion-whatsapp.dto';
+import { HabitacionesDisponiblesWhatsappDto } from './dto/habitaciones-disponibles-whatsapp.dto';
+import { CrearReservaWhatsappDto } from './dto/crear-reserva-whatsapp.dto';
 
 /**
  * Sin AuthGuard/RolesGuard a propósito: lo abre un cliente desde el link que
@@ -26,5 +28,23 @@ export class CotizacionPublicaController {
   @Post()
   async crear(@Param('hotelId') hotelId: string, @Body() dto: CrearCotizacionWhatsappDto) {
     return this.service.crearDesdeWhatsapp(hotelId, dto);
+  }
+
+  // El formulario lo llama en cuanto el cliente completa fecha de
+  // entrada/salida y personas, para mostrar la lista de habitaciones reales
+  // disponibles con checkboxes (ver CLAUDE.md, agente de WhatsApp).
+  @Post('habitaciones-disponibles')
+  async habitacionesDisponibles(
+    @Param('hotelId') hotelId: string,
+    @Body() dto: HabitacionesDisponiblesWhatsappDto,
+  ) {
+    return this.service.buscarHabitacionesDisponibles(hotelId, dto);
+  }
+
+  // Botón "Reservar" del nuevo flujo: crea la reserva real directo (no una
+  // cotización), con origen='whatsapp' para que el calendario la distinga.
+  @Post('reservas')
+  async crearReserva(@Param('hotelId') hotelId: string, @Body() dto: CrearReservaWhatsappDto) {
+    return this.service.crearReservaDesdeWhatsapp(hotelId, dto);
   }
 }

@@ -91,7 +91,13 @@ export class ConfiguracionService {
     const precioCorporativo = dto.precioCorporativo ?? dto.precioNormal;
     const precioWeb = dto.precioWeb ?? dto.precioNormal;
     this.validarPisoDeCosto(
-      { normal: dto.precioNormal, corporativo: precioCorporativo, web: precioWeb, porHora: dto.precioPorHora },
+      {
+        normal: dto.precioNormal,
+        corporativo: precioCorporativo,
+        web: precioWeb,
+        porHora: dto.precioPorHora,
+        individual: dto.precioIndividual,
+      },
       precioCosto,
     );
 
@@ -107,6 +113,7 @@ export class ConfiguracionService {
         precio_corporativo: precioCorporativo,
         precio_web: precioWeb,
         precio_por_hora: dto.precioPorHora ?? null,
+        precio_individual: dto.precioIndividual ?? null,
         precio_costo: precioCosto,
       })
       .select()
@@ -142,12 +149,13 @@ export class ConfiguracionService {
       dto.precioCorporativo !== undefined ||
       dto.precioWeb !== undefined ||
       dto.precioPorHora !== undefined ||
+      dto.precioIndividual !== undefined ||
       dto.precioCosto !== undefined;
 
     if (tocaPrecios) {
       const { data: actual, error: actualError } = await client
         .from('tipos_habitacion')
-        .select('precio_normal, precio_corporativo, precio_web, precio_por_hora, precio_costo')
+        .select('precio_normal, precio_corporativo, precio_web, precio_por_hora, precio_individual, precio_costo')
         .eq('id', id)
         .eq('hotel_id', hotelId)
         .maybeSingle();
@@ -166,6 +174,12 @@ export class ConfiguracionService {
               : actual.precio_por_hora != null
                 ? Number(actual.precio_por_hora)
                 : undefined,
+          individual:
+            dto.precioIndividual !== undefined
+              ? dto.precioIndividual
+              : actual.precio_individual != null
+                ? Number(actual.precio_individual)
+                : undefined,
         },
         precioCosto,
       );
@@ -180,6 +194,7 @@ export class ConfiguracionService {
     if (dto.precioCorporativo !== undefined) cambios.precio_corporativo = dto.precioCorporativo;
     if (dto.precioWeb !== undefined) cambios.precio_web = dto.precioWeb;
     if (dto.precioPorHora !== undefined) cambios.precio_por_hora = dto.precioPorHora;
+    if (dto.precioIndividual !== undefined) cambios.precio_individual = dto.precioIndividual;
     if (dto.precioCosto !== undefined) cambios.precio_costo = dto.precioCosto;
 
     const { data, error } = await client
@@ -201,7 +216,7 @@ export class ConfiguracionService {
   }
 
   private validarPisoDeCosto(
-    precios: { normal: number; corporativo: number; web: number; porHora?: number },
+    precios: { normal: number; corporativo: number; web: number; porHora?: number; individual?: number },
     precioCosto: number,
   ) {
     if (precioCosto <= 0) return; // sin piso configurado todavía
@@ -210,6 +225,7 @@ export class ConfiguracionService {
       ['corporativo', precios.corporativo],
       ['web', precios.web],
       ['por hora', precios.porHora],
+      ['individual', precios.individual],
     ];
     for (const [nombre, valor] of entradas) {
       if (valor !== undefined && valor < precioCosto) {

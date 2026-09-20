@@ -79,6 +79,7 @@ interface Props {
   habNumero: number;
   aforoMax: number;
   tarifaSugerida: number;
+  tarifaIndividual?: number | null;
   precioMascotaDia: number;
   modo: 'crear' | 'editar';
   fechaInicial?: string; // YYYY-MM-DD, solo modo 'crear'
@@ -160,6 +161,7 @@ export function ReservaFormModal({
   habNumero,
   aforoMax,
   tarifaSugerida,
+  tarifaIndividual,
   precioMascotaDia,
   modo,
   fechaInicial,
@@ -234,6 +236,17 @@ export function ReservaFormModal({
   const [vehiculoTipo, setVehiculoTipo] = useState('');
   const [vehiculoPlaca, setVehiculoPlaca] = useState('');
   const [tarifaDia, setTarifaDia] = useState(tarifaSugerida);
+  // Mientras el recepcionista no toque el campo a mano, la tarifa sugerida
+  // se recalcula sola si cambia la cantidad de personas (ej. una matrimonial
+  // baja a precio_individual cuando se alquila a 1 sola persona -- ver
+  // ConfiguracionService/tarifaSegunTipoCliente). Una vez que la edita, deja
+  // de tocarla: tarifa_dia sigue siendo editable por diseño (CLAUDE.md 3.3).
+  const [tarifaTocada, setTarifaTocada] = useState(false);
+  useEffect(() => {
+    if (modo !== 'crear' || tarifaTocada) return;
+    setTarifaDia(nroPersonas === 1 && tarifaIndividual != null ? tarifaIndividual : tarifaSugerida);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [nroPersonas, tarifaSugerida, tarifaIndividual, modo, tarifaTocada]);
 
   const [anticiposExistentes, setAnticiposExistentes] = useState<AnticipoExistente[]>([]);
   const [anticipoMonto, setAnticipoMonto] = useState('');
@@ -1301,11 +1314,19 @@ export function ReservaFormModal({
                     min={0}
                     step={0.01}
                     value={tarifaDia}
-                    onChange={(e) => setTarifaDia(Number(e.target.value))}
+                    onChange={(e) => {
+                      setTarifaDia(Number(e.target.value));
+                      setTarifaTocada(true);
+                    }}
                     style={inputStyle}
                     required
                   />
                 </div>
+                {nroPersonas === 1 && tarifaIndividual != null && !tarifaTocada && (
+                  <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: '4px 0 0' }}>
+                    Sugerida a S/. {tarifaIndividual.toFixed(2)} por ser 1 sola persona.
+                  </p>
+                )}
                 <div
                   style={{
                     marginTop: 10,

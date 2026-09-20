@@ -24,15 +24,17 @@ export type NacionalidadHuesped = 'peruano' | 'extranjero';
  * ReservasService.crear() y este mismo EstadiasService.checkin().
  */
 export class CheckinRapidoDto {
-  @IsUUID()
+  @IsUUID(undefined, { message: 'Selecciona una habitación válida.' })
   habitacionId: string;
 
   @IsString()
-  @MinLength(1)
+  @MinLength(1, { message: 'Falta el número de documento (DNI/pasaporte) del huésped.' })
   nroDoc: string;
 
   @IsOptional()
-  @IsEnum(['dni', 'pasaporte', 'carnet_extranjeria', 'cedula', 'otro'])
+  @IsEnum(['dni', 'pasaporte', 'carnet_extranjeria', 'cedula', 'otro'], {
+    message: 'Selecciona un tipo de documento válido (DNI, pasaporte, carné de extranjería, cédula u otro).',
+  })
   tipoDoc?: TipoDocHuesped;
 
   // Requeridos solo si el huésped no existe todavía en la base del hotel.
@@ -75,20 +77,20 @@ export class CheckinRapidoDto {
   razonSocial?: string;
 
   @IsInt()
-  @Min(1)
+  @Min(1, { message: 'La cantidad de personas debe ser al menos 1.' })
   nroPersonas: number;
 
   // Tarifa por día editable por recepción (por defecto llega precargada con
   // la tarifa 'normal' del tipo de habitación, calculada en el frontend).
   @IsNumber()
-  @Min(0)
+  @Min(0, { message: 'La tarifa por día no puede ser negativa.' })
   tarifaDia: number;
 
   @IsInt()
-  @Min(1)
+  @Min(1, { message: 'La cantidad de días debe ser al menos 1.' })
   dias: number;
 
-  @IsISO8601()
+  @IsISO8601(undefined, { message: 'La fecha/hora de check-in no es válida.' })
   checkinPrevisto: string;
 
   // Si no viene, se calcula solo: 50% de tarifaDia si el ingreso es antes

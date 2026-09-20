@@ -40,7 +40,7 @@ export class ActualizarReservaLineaDto {
 
   @IsOptional()
   @IsInt()
-  @Min(1)
+  @Min(1, { message: 'La cantidad de personas debe ser al menos 1.' })
   nroPersonas?: number;
 
   @IsOptional()
@@ -56,18 +56,18 @@ export class ActualizarReservaLineaDto {
   observaciones?: string;
 
   @IsOptional()
-  @IsISO8601()
+  @IsISO8601(undefined, { message: 'La fecha/hora de check-in no es válida.' })
   checkinPrevisto?: string;
 
   // Días a hospedarse: el checkout se recalcula como checkin + dias.
   @IsOptional()
   @IsInt()
-  @Min(1)
+  @Min(1, { message: 'La cantidad de días debe ser al menos 1.' })
   diasManual?: number;
 
   @IsOptional()
   @IsNumber()
-  @Min(0)
+  @Min(0, { message: 'La tarifa por día no puede ser negativa.' })
   tarifaDiaManual?: number;
 
   @IsOptional()

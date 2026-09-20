@@ -48,7 +48,14 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
     if (res.status === 401) {
       supabase.auth.signOut();
     }
-    throw new ApiError(res.status, body.message ?? `Error ${res.status}`);
+    // El ValidationPipe global de Nest devuelve `message` como un ARRAY de
+    // strings cuando falla más de una regla (uno por campo/regla) -- sin
+    // esto, ese array terminaba mostrándose crudo (unido por comas, en
+    // inglés) en vez de un mensaje legible que diga qué falta corregir.
+    const mensaje = Array.isArray(body.message)
+      ? body.message.join(' ')
+      : (body.message ?? `Error ${res.status}`);
+    throw new ApiError(res.status, mensaje);
   }
 
   if (res.status === 204) return undefined as T;

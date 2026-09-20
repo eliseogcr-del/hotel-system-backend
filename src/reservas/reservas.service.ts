@@ -47,6 +47,7 @@ interface PreciosTipoHabitacion {
   precio_corporativo: number;
   precio_web: number;
   precio_por_hora: number | null;
+  precio_individual: number | null;
   precio_costo: number;
 }
 
@@ -69,7 +70,10 @@ export class ReservasService {
     client: SupabaseClient,
     hotelId: string,
     dto: CrearReservaDto,
-    personalId: string,
+    // null cuando la crea el agente de WhatsApp sin un usuario logueado
+    // detrás (ver CotizacionPublicaService.crearReservaDesdeWhatsapp) --
+    // creado_por es nullable en el schema justamente para este caso.
+    personalId: string | null,
   ) {
     if (!dto.huespedId && !dto.empresaId) {
       throw new BadRequestException(
@@ -232,8 +236,13 @@ export class ReservasService {
       if (cocheraOcuparError) throw cocheraOcuparError;
     }
 
-    // 6. Anticipo opcional (pago adelantado de la reserva).
+    // 6. Anticipo opcional (pago adelantado de la reserva). Requiere un
+    // personal real detrás (toca la caja de su turno abierto) -- el flujo
+    // sin login del agente de WhatsApp nunca manda anticipoMonto.
     if (dto.anticipoMonto) {
+      if (!personalId) {
+        throw new BadRequestException('Se requiere un usuario para registrar un anticipo.');
+      }
       await this.procesarAnticipo(
         client,
         hotelId,
@@ -340,7 +349,7 @@ export class ReservasService {
       .select(
         `
         id, habitacion_id, fecha_hora_checkin_prevista, fecha_hora_checkout_prevista,
-        reservas!inner(id, estado, hotel_id, huespedes(nombres, apellidos), empresas(razon_social)),
+        reservas!inner(id, estado, hotel_id, origen, huespedes(nombres, apellidos), empresas(razon_social)),
         estadias(id, estado_actual)
       `,
       )
@@ -359,6 +368,11 @@ export class ReservasService {
         checkoutPrevisto: r.fecha_hora_checkout_prevista,
         reservaId: r.reservas.id,
         estadoReserva: r.reservas.estado,
+        // El calendario pinta distinto una reserva creada por el agente de
+        // WhatsApp (ver CLAUDE.md, agente de WhatsApp) para que el staff la
+        // reconozca de un vistazo -- ver EstadoBadge/CalendarioReservas en
+        // Reservas.tsx.
+        origen: r.reservas.origen,
         // Si ya hay una estadía 'en_curso', el huésped ya está físicamente
         // alojado -- el frontend debe llevar a EstadiaDetalle.tsx (el
         // libro real) en vez de abrir el formulario de edición de reserva.
@@ -963,7 +977,7 @@ export class ReservasService {
     const { data: hab, error: habError } = await client
       .from('habitaciones')
       .select(
-        'id, tipo_id, tipos_habitacion(precio_normal, precio_corporativo, precio_web, precio_por_hora, precio_costo)',
+        'id, tipo_id, tipos_habitacion(precio_normal, precio_corporativo, precio_web, precio_por_hora, precio_individual, precio_costo)',
       )
       .eq('id', linea.habitacionId)
       .eq('hotel_id', hotelId)
@@ -989,6 +1003,7 @@ export class ReservasService {
         precios,
         linea.tipoCliente ?? this.inferirTipoCliente(origen, empresaId),
         linea.tipoAlquiler,
+        linea.nroPersonas,
       );
     }
 
@@ -1184,6 +1199,7 @@ export class ReservasService {
     precios: PreciosTipoHabitacion,
     tipoCliente: TipoCliente,
     tipoAlquiler: TipoAlquiler,
+    nroPersonas: number,
   ): number {
     if (tipoAlquiler === 'por_horas') {
       if (precios.precio_por_hora == null) {
@@ -1192,6 +1208,13 @@ export class ReservasService {
         );
       }
       return Number(precios.precio_por_hora);
+    }
+    // Tipos pensados para 2 (ej. matrimonial) tienen una tarifa más baja
+    // cuando se alquilan a una sola persona (ver ConfiguracionService,
+    // precio_individual). Solo aplica al cliente eventual: empresas/canales
+    // ya tienen su propia tarifa negociada por tipo de habitación.
+    if (tipoCliente === 'normal' && nroPersonas === 1 && precios.precio_individual != null) {
+      return Number(precios.precio_individual);
     }
     if (tipoCliente === 'corporativo') return Number(precios.precio_corporativo);
     if (tipoCliente === 'web') return Number(precios.precio_web);

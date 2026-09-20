@@ -3,9 +3,14 @@ import { SupabaseClient } from '@supabase/supabase-js';
 import { SupabaseService } from '../common/supabase/supabase.service';
 import { DisponibilidadService } from '../habitaciones/disponibilidad/disponibilidad.service';
 import { HuespedesService } from '../huespedes/huespedes.service';
+import { ReservasService } from '../reservas/reservas.service';
+import { CrearReservaDto } from '../reservas/dto/crear-reserva.dto';
+import { CrearReservaHabitacionDto } from '../reservas/dto/crear-reserva-habitacion.dto';
 import { CotizacionesService } from './cotizaciones.service';
 import { CrearCotizacionWhatsappDto } from './dto/crear-cotizacion-whatsapp.dto';
 import { CrearCotizacionDto } from './dto/crear-cotizacion.dto';
+import { HabitacionesDisponiblesWhatsappDto } from './dto/habitaciones-disponibles-whatsapp.dto';
+import { CrearReservaWhatsappDto } from './dto/crear-reserva-whatsapp.dto';
 
 function sumarDiasYMD(fechaYMD: string, dias: number): string {
   const [anio, mes, dia] = fechaYMD.split('-').map(Number);
@@ -51,12 +56,16 @@ export class CotizacionPublicaService {
     private readonly disponibilidad: DisponibilidadService,
     private readonly cotizacionesService: CotizacionesService,
     private readonly huespedesService: HuespedesService,
+    private readonly reservasService: ReservasService,
   ) {}
 
-  async crearDesdeWhatsapp(hotelId: string, dto: CrearCotizacionWhatsappDto) {
-    const client = this.supabase.getServiceClient();
-    const hotel = await this.cargarHotelConBotActivo(client, hotelId);
-
+  // Fechas/horas de check-in/checkout + días + late derivan igual en los
+  // tres flujos públicos (cotizar directo/grupo, listar habitaciones,
+  // reservar) -- centralizado acá para no repetir la cuenta tres veces.
+  private resolverFechas(
+    dto: { fechaIngreso: string; horaIngreso: string; noches: number; fechaSalida?: string; horaSalida?: string },
+    hotel: { hora_checkout: string },
+  ) {
     const horaCheckoutHotel = hotel.hora_checkout ? aHoraHHMM(hotel.hora_checkout) : '12:00';
     const horaCheckout = dto.horaSalida ?? horaCheckoutHotel;
     const fechaHasta = dto.fechaSalida ?? sumarDiasYMD(dto.fechaIngreso, dto.noches);
@@ -70,6 +79,30 @@ export class CotizacionPublicaService {
     // El cliente pidió una hora de salida más tarde que el checkout estándar
     // del hotel -- 50% de la tarifa de esa noche (ver charla con el cliente).
     const esLate = horaCheckout > horaCheckoutHotel;
+    return { fechaHasta, horaCheckout, checkinISO, checkoutISO, dias, esLate };
+  }
+
+  // Tipos pensados para 2 (ej. matrimonial) tienen una tarifa más baja
+  // cuando la reserva completa es de 1 sola persona -- ver
+  // ConfiguracionService/ReservasService.tarifaSegunTipoCliente
+  // (precio_individual). Solo aplica cuando TODA la reserva pública es de 1
+  // persona: el reparto entre varias habitaciones de un grupo no se
+  // considera "individual" aunque a alguna le toque 1 nada más.
+  private precioNocheEfectivo(
+    tipo: { precio_normal: number; precio_individual: number | null } | null,
+    personasTotales: number,
+  ): number {
+    if (personasTotales === 1 && tipo?.precio_individual != null) {
+      return Number(tipo.precio_individual);
+    }
+    return Number(tipo?.precio_normal ?? 0);
+  }
+
+  async crearDesdeWhatsapp(hotelId: string, dto: CrearCotizacionWhatsappDto) {
+    const client = this.supabase.getServiceClient();
+    const hotel = await this.cargarHotelConBotActivo(client, hotelId);
+
+    const { fechaHasta, horaCheckout, checkinISO, checkoutISO, dias, esLate } = this.resolverFechas(dto, hotel);
 
     const huesped = await this.buscarOCrearHuesped(client, hotelId, dto);
 
@@ -87,7 +120,7 @@ export class CotizacionPublicaService {
     const client = this.supabase.getServiceClient();
     const { data, error } = await client
       .from('hoteles')
-      .select('nombre, activo, agente_whatsapp_activo, hora_checkin, hora_checkout')
+      .select('nombre, activo, agente_whatsapp_activo, hora_checkin, hora_checkout, umbral_grupo_grande')
       .eq('id', hotelId)
       .maybeSingle();
     if (error) throw error;
@@ -99,7 +132,189 @@ export class CotizacionPublicaService {
       agenteActivo: !!(data.activo && data.agente_whatsapp_activo),
       horaCheckin: aHoraHHMM(data.hora_checkin),
       horaCheckout: aHoraHHMM(data.hora_checkout),
+      // El formulario lo usa para decidir si, al llenar fechas + personas,
+      // muestra la lista de habitaciones reales con reserva directa (grupos
+      // chicos) o el flujo de cotización con revisión humana (grupos
+      // grandes) -- ver CotizacionesModule.cotizarDirecto/cotizarGrupo.
+      umbralGrupoGrande: data.umbral_grupo_grande,
     };
+  }
+
+  /**
+   * Lista de habitaciones REALES disponibles para el rango pedido, para que
+   * el cliente elija con checkboxes cuáles reservar (ver CLAUDE.md, agente
+   * de WhatsApp: "Vamos a hacer un cambio en este formulario..."). Solo
+   * aplica al camino de grupos chicos -- grupos por encima del umbral
+   * siguen yendo por cotizarGrupo() con revisión humana, ver
+   * crearReservaDesdeWhatsapp().
+   */
+  async buscarHabitacionesDisponibles(hotelId: string, dto: HabitacionesDisponiblesWhatsappDto) {
+    const client = this.supabase.getServiceClient();
+    const hotel = await this.cargarHotelConBotActivo(client, hotelId);
+    const { dias, esLate } = this.resolverFechas(dto, hotel);
+
+    const habitaciones = await this.habitacionesDisponiblesReales(client, hotelId, dto, hotel);
+    return {
+      dias,
+      esLate,
+      habitaciones: habitaciones.map((h) => {
+        const precioNoche = this.precioNocheEfectivo(h.tipos_habitacion, dto.personas);
+        return {
+          habitacionId: h.id,
+          numero: h.hab_numero,
+          tipo: h.tipos_habitacion?.nombre ?? '—',
+          aforoMax: h.tipos_habitacion?.aforo_max ?? 0,
+          precioNoche,
+          importe: Math.round(precioNoche * dias * 100) / 100,
+        };
+      }),
+    };
+  }
+
+  // Compartido por buscarHabitacionesDisponibles() (para mostrar la lista) y
+  // crearReservaDesdeWhatsapp() (para recalcular del lado del servidor lo
+  // que el cliente marcó, sin confiar en precio/aforo que pudiera mandar de
+  // vuelta -- ver CrearReservaWhatsappDto).
+  private async habitacionesDisponiblesReales(
+    client: SupabaseClient,
+    hotelId: string,
+    dto: { fechaIngreso: string; horaIngreso: string; noches: number; fechaSalida?: string; horaSalida?: string },
+    hotel: { hora_checkout: string },
+  ) {
+    const { checkinISO, checkoutISO } = this.resolverFechas(dto, hotel);
+
+    const { data: candidatas, error } = await client
+      .from('habitaciones')
+      .select('id, hab_numero, tipos_habitacion(nombre, aforo_max, precio_normal, precio_individual)')
+      .eq('hotel_id', hotelId)
+      .eq('visible_whatsapp', true)
+      .neq('estado', 'bloqueada');
+    if (error) throw error;
+
+    const disponibles: any[] = [];
+    for (const candidata of (candidatas ?? []) as any[]) {
+      const resultado = await this.disponibilidad.validar(client, {
+        hotelId,
+        habitacionId: candidata.id,
+        checkinPrevisto: checkinISO,
+        checkoutPrevisto: checkoutISO,
+      });
+      if (resultado.disponible) disponibles.push(candidata);
+    }
+
+    return disponibles.sort((a, b) => a.hab_numero - b.hab_numero);
+  }
+
+  /**
+   * Botón "Reservar" del formulario público: crea una reserva real (no una
+   * cotización) con origen='whatsapp' para que el calendario la pinte
+   * distinto (ver CLAUDE.md, agente de WhatsApp). El precio y aforo de cada
+   * habitación se vuelven a leer de la base acá mismo -- nunca se confía en
+   * lo que el cliente vio/marcó en el navegador.
+   */
+  async crearReservaDesdeWhatsapp(hotelId: string, dto: CrearReservaWhatsappDto) {
+    const client = this.supabase.getServiceClient();
+    const hotel = await this.cargarHotelConBotActivo(client, hotelId);
+
+    if (dto.personas > hotel.umbral_grupo_grande) {
+      throw new BadRequestException(
+        'Para grupos de este tamaño el hotel confirma el precio manualmente por WhatsApp.',
+      );
+    }
+
+    const { checkinISO, checkoutISO, esLate } = this.resolverFechas(dto, hotel);
+    const huesped = await this.buscarOCrearHuesped(client, hotelId, dto);
+
+    const candidatas = await this.habitacionesDisponiblesReales(client, hotelId, dto, hotel);
+    const elegidas = candidatas.filter((h) => dto.habitacionIds.includes(h.id));
+    if (elegidas.length !== dto.habitacionIds.length) {
+      throw new BadRequestException(
+        'Una o más habitaciones seleccionadas ya no están disponibles. Por favor vuelve a intentarlo.',
+      );
+    }
+
+    // Habitaciones más grandes primero, mismo criterio de reparto que
+    // cotizarGrupo(): cubre la cantidad de personas usando la menor
+    // cantidad de habitaciones posible.
+    const ordenadas = [...elegidas].sort(
+      (a, b) => (b.tipos_habitacion?.aforo_max ?? 0) - (a.tipos_habitacion?.aforo_max ?? 0),
+    );
+
+    let restantes = dto.personas;
+    const asignaciones: { habitacionId: string; nroPersonas: number; precioNoche: number }[] = [];
+    for (const h of ordenadas) {
+      if (restantes <= 0) break;
+      const aforo = h.tipos_habitacion?.aforo_max ?? 0;
+      if (aforo <= 0) continue;
+      const asignadas = Math.min(restantes, aforo);
+      asignaciones.push({
+        habitacionId: h.id,
+        nroPersonas: asignadas,
+        precioNoche: this.precioNocheEfectivo(h.tipos_habitacion, dto.personas),
+      });
+      restantes -= asignadas;
+    }
+
+    if (restantes > 0) {
+      throw new BadRequestException(
+        'Las habitaciones seleccionadas no alcanzan para la cantidad de personas indicada.',
+      );
+    }
+
+    // El cargo de late (si aplica) es único por toda la estadía, no por
+    // habitación -- se anota en la primera línea, mismo criterio que el
+    // cargo de mascota debajo.
+    const cargoLate = esLate ? Math.round(asignaciones[0].precioNoche * 0.5 * 100) / 100 : 0;
+    const cocheraId = dto.vehiculo
+      ? await this.buscarCocheraIdDisponible(client, hotelId, dto.tipoVehiculo)
+      : null;
+
+    const habitacionesDto: CrearReservaHabitacionDto[] = asignaciones.map((a, i) => ({
+      habitacionId: a.habitacionId,
+      nroPersonas: a.nroPersonas,
+      tipoAlquiler: 'pernocte',
+      checkinPrevisto: checkinISO,
+      checkoutPrevisto: checkoutISO,
+      // Mascota/late/cochera son cargos únicos de la estadía completa (ver
+      // CLAUDE.md 3.3/3.1) -- se cargan solo en la primera línea para no
+      // duplicarlos cuando la reserva ocupa varias habitaciones.
+      conMascota: i === 0 ? dto.mascota : false,
+      cobroLate: i === 0 ? cargoLate : 0,
+      cocheraId: i === 0 && cocheraId ? cocheraId : undefined,
+      vehiculoTipo: i === 0 && dto.vehiculo ? dto.tipoVehiculo : undefined,
+      observaciones:
+        i === 0 && dto.vehiculo && !cocheraId
+          ? 'Reserva creada por el agente de WhatsApp: cliente indicó vehículo, sin cochera disponible al momento de reservar.'
+          : undefined,
+    }));
+
+    const reservaDto: CrearReservaDto = {
+      huespedId: huesped.id,
+      origen: 'whatsapp',
+      moneda: 'PEN',
+      facturable: dto.facturable,
+      habitaciones: habitacionesDto,
+    };
+
+    return this.reservasService.crear(client, hotelId, reservaDto, null);
+  }
+
+  private async buscarCocheraIdDisponible(
+    client: SupabaseClient,
+    hotelId: string,
+    tipoVehiculo?: string,
+  ): Promise<string | null> {
+    const tamano = tipoVehiculo === 'camioneta' ? 'grande' : 'chica';
+    const { data, error } = await client
+      .from('cocheras')
+      .select('id')
+      .eq('hotel_id', hotelId)
+      .eq('tamano', tamano)
+      .eq('estado', 'disponible')
+      .limit(1)
+      .maybeSingle();
+    if (error) throw error;
+    return data?.id ?? null;
   }
 
   private async cargarHotelConBotActivo(client: SupabaseClient, hotelId: string) {

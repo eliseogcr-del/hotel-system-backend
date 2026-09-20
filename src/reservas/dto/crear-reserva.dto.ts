@@ -30,7 +30,9 @@ export class CrearReservaDto {
   @IsUUID()
   empresaId?: string;
 
-  @IsEnum(['telefono', 'whatsapp', 'booking', 'airbnb', 'directo', 'walkin'])
+  @IsEnum(['telefono', 'whatsapp', 'booking', 'airbnb', 'directo', 'walkin'], {
+    message: 'Selecciona un origen de reserva válido.',
+  })
   origen: OrigenReserva;
 
   @IsOptional()
@@ -60,7 +62,7 @@ export class CrearReservaDto {
   descuentoTotal?: number;
 
   @IsArray()
-  @ArrayMinSize(1)
+  @ArrayMinSize(1, { message: 'La reserva debe incluir al menos una habitación.' })
   @ValidateNested({ each: true })
   @Type(() => CrearReservaHabitacionDto)
   habitaciones: CrearReservaHabitacionDto[];

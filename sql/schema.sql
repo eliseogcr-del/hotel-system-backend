@@ -131,6 +131,10 @@ create table tipos_habitacion (
     precio_corporativo numeric(10,2) not null default 0,
     precio_web numeric(10,2) not null default 0,
     precio_por_hora numeric(10,2),     -- null = este tipo no admite alquiler por horas
+    -- Tarifa más baja para cuando este tipo (ej. una matrimonial) se alquila
+    -- a una sola persona en vez de a la pareja/aforo completo -- null = este
+    -- tipo no admite esa modalidad, se cobra siempre precio_normal.
+    precio_individual numeric(10,2),
     precio_costo numeric(10,2) not null default 0,  -- 0 = sin piso configurado todavía
     unique (hotel_id, nombre)
 );

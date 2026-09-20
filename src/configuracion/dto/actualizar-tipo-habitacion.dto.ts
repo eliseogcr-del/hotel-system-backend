@@ -39,6 +39,13 @@ export class ActualizarTipoHabitacionDto {
   @Min(0)
   precioPorHora?: number;
 
+  // Tarifa más baja para cuando este tipo (ej. una matrimonial) se alquila a
+  // una sola persona. Si no se envía, este tipo no admite esa modalidad.
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  precioIndividual?: number;
+
   @IsOptional()
   @IsNumber()
   @Min(0)
