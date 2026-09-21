@@ -775,21 +775,6 @@ function VistaTarjetas({
               }}
               title={clickable ? tituloClick : undefined}
             >
-              {origenInfo && (
-                <span
-                  style={{
-                    alignSelf: 'flex-start',
-                    background: colorPorOrigen(origenInfo),
-                    color: '#fff',
-                    fontSize: 10,
-                    fontWeight: 700,
-                    padding: '2px 8px',
-                    borderRadius: 999,
-                  }}
-                >
-                  {labelPorOrigen(origenInfo)}
-                </span>
-              )}
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
                 <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                   {h.vehiculoTipo && (
@@ -869,6 +854,21 @@ function VistaTarjetas({
                     tarjeta
                   />
                 </div>
+              )}
+              {origenInfo && (
+                <span
+                  style={{
+                    alignSelf: 'flex-start',
+                    background: colorPorOrigen(origenInfo),
+                    color: '#fff',
+                    fontSize: 10,
+                    fontWeight: 700,
+                    padding: '2px 8px',
+                    borderRadius: 999,
+                  }}
+                >
+                  {labelPorOrigen(origenInfo)}
+                </span>
               )}
             </div>
           );
