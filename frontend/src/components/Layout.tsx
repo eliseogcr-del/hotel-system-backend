@@ -4,6 +4,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { useHotel } from '../contexts/HotelContext';
 import { useIsMobile } from '../hooks/useIsMobile';
 import { api, ApiError } from '../lib/api';
+import { RecordatorioNotas } from './RecordatorioNotas';
 
 interface TipoCambioVigente {
   fecha: string;
@@ -458,6 +459,8 @@ export function Layout() {
           <Outlet />
         </main>
       </div>
+
+      <RecordatorioNotas />
     </div>
   );
 }

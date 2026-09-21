@@ -1,4 +1,4 @@
-import { IsEnum, IsOptional, IsString, IsUrl, ArrayContains, IsArray } from 'class-validator';
+import { IsEnum, IsIn, IsOptional, IsString, IsUrl, ArrayContains, IsArray, ValidateIf } from 'class-validator';
 
 export enum TipoNota {
   INFORMATIVA = 'Informativa',
@@ -29,6 +29,14 @@ export class CrearNotaDto {
   @IsOptional()
   @IsString()
   fecha_hora_fin_repeticion?: string;
+
+  // Cada cuántos minutos se vuelve a mostrar el popup de la nota mientras
+  // esté dentro de su rango de repetición (ver RecordatorioNotas.tsx).
+  @ValidateIf((o) => o.tipo === TipoNota.REPETITIVA)
+  @IsIn([1, 5, 10, 15, 60], {
+    message: 'Selecciona cada cuánto tiempo se debe repetir el mensaje (1, 5, 10, 15 o 60 minutos).',
+  })
+  periodicidad_minutos?: number;
 
   @IsOptional()
   @IsString()

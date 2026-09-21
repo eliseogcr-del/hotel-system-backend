@@ -13,6 +13,7 @@ interface Nota {
   // Para Repetitiva
   fecha_hora_inicio_repeticion?: string;
   fecha_hora_fin_repeticion?: string;
+  periodicidad_minutos?: number | null;
   // Para Mensajeria
   fecha_hora_envio?: string;
   celular_destino?: string;
@@ -27,11 +28,21 @@ interface CrearNotaDTO {
   // Para Repetitiva
   fecha_hora_inicio_repeticion?: string;
   fecha_hora_fin_repeticion?: string;
+  periodicidad_minutos?: number;
   // Para Mensajeria
   celular_destino?: string;
   adjuntos?: string[];
   telefonos_adicionales?: string[];
 }
+
+// Opciones fijas que pidió el cliente para el popup de RecordatorioNotas.tsx.
+const PERIODICIDAD_OPCIONES: { valor: number; label: string }[] = [
+  { valor: 1, label: 'Cada minuto' },
+  { valor: 5, label: 'Cada 5 minutos' },
+  { valor: 10, label: 'Cada 10 minutos' },
+  { valor: 15, label: 'Cada 15 minutos' },
+  { valor: 60, label: 'Cada hora' },
+];
 
 const TIPO_COLOR: Record<string, { bg: string; text: string }> = {
   Informativa: { bg: 'var(--disponible-bg)', text: 'var(--disponible-text)' },
@@ -57,6 +68,7 @@ export function Notas() {
     dirigido_a: 'Recepcionista',
     fecha_hora_inicio_repeticion: undefined,
     fecha_hora_fin_repeticion: undefined,
+    periodicidad_minutos: undefined,
     celular_destino: undefined,
     adjuntos: [],
     telefonos_adicionales: [],
@@ -87,12 +99,19 @@ export function Notas() {
         const arrayValue = value.split(',').map((item) => item.trim()).filter((item) => item.length > 0);
         return { ...prev, [name]: arrayValue };
       }
+      if (name === 'periodicidad_minutos') {
+        return { ...prev, periodicidad_minutos: value ? Number(value) : undefined };
+      }
       return { ...prev, [name]: value };
     });
   };
 
   const manejarGuardar = async () => {
     if (!hotelActual || !formularioData.descripcion.trim()) return;
+    if (formularioData.tipo === 'Repetitiva' && !formularioData.periodicidad_minutos) {
+      setError('Selecciona cada cuánto tiempo se debe repetir el mensaje.');
+      return;
+    }
 
     try {
       const nuevaNota: CrearNotaDTO = {
@@ -114,6 +133,7 @@ export function Notas() {
         dirigido_a: 'Recepcionista',
         fecha_hora_inicio_repeticion: undefined,
         fecha_hora_fin_repeticion: undefined,
+        periodicidad_minutos: undefined,
         celular_destino: undefined,
         adjuntos: [],
         telefonos_adicionales: [],
@@ -207,6 +227,7 @@ export function Notas() {
                   <>
                     🔁 Repetitiva: {formatoFechaHora(nota.fecha_hora_inicio_repeticion)} →{' '}
                     {formatoFechaHora(nota.fecha_hora_fin_repeticion)}
+                    {nota.periodicidad_minutos ? ` · cada ${nota.periodicidad_minutos} min` : ''}
                   </>
                 )}
                 {nota.tipo === 'Mensajeria' && (
@@ -373,6 +394,39 @@ export function Notas() {
                         boxSizing: 'border-box',
                       }}
                     />
+                  </div>
+
+                  <div style={{ marginBottom: 16 }}>
+                    <label style={{ display: 'block', fontSize: 11, color: 'var(--text-secondary)', marginBottom: 4 }}>
+                      Repetir cada
+                    </label>
+                    <select
+                      name="periodicidad_minutos"
+                      value={formularioData.periodicidad_minutos ?? ''}
+                      onChange={manejarCambio}
+                      required
+                      style={{
+                        width: '100%',
+                        padding: '9px 10px',
+                        border: '1px solid var(--border)',
+                        borderRadius: 'var(--radius)',
+                        fontSize: 13,
+                        boxSizing: 'border-box',
+                      }}
+                    >
+                      <option value="" disabled>
+                        Selecciona la periodicidad
+                      </option>
+                      {PERIODICIDAD_OPCIONES.map((op) => (
+                        <option key={op.valor} value={op.valor}>
+                          {op.label}
+                        </option>
+                      ))}
+                    </select>
+                    <p style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>
+                      Mientras esté dentro del rango de fechas, el mensaje aparecerá en pantalla con esta
+                      frecuencia hasta que le hagan clic.
+                    </p>
                   </div>
                 </>
               )}
