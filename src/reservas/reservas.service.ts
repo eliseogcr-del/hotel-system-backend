@@ -74,6 +74,12 @@ export class ReservasService {
     // detrás (ver CotizacionPublicaService.crearReservaDesdeWhatsapp) --
     // creado_por es nullable en el schema justamente para este caso.
     personalId: string | null,
+    // creadoPorAgente es un flag aparte de dto.origen: origen='whatsapp'
+    // también lo usa el staff a mano cuando el cliente escribió por
+    // WhatsApp con una persona (ver ORIGENES en ReservaFormModal.tsx) --
+    // esto es lo único que el calendario de Reservas usa para pintar
+    // naranja, no el origen.
+    opciones?: { creadoPorAgente?: boolean },
   ) {
     if (!dto.huespedId && !dto.empresaId) {
       throw new BadRequestException(
@@ -159,6 +165,7 @@ export class ReservasService {
         importe_final: importeFinal,
         estado: 'confirmada',
         creado_por: personalId,
+        creado_por_agente: opciones?.creadoPorAgente ?? false,
       })
       .select()
       .single();
@@ -349,7 +356,7 @@ export class ReservasService {
       .select(
         `
         id, habitacion_id, fecha_hora_checkin_prevista, fecha_hora_checkout_prevista,
-        reservas!inner(id, estado, hotel_id, origen, huespedes(nombres, apellidos), empresas(razon_social)),
+        reservas!inner(id, estado, hotel_id, creado_por_agente, huespedes(nombres, apellidos), empresas(razon_social)),
         estadias(id, estado_actual)
       `,
       )
@@ -370,9 +377,11 @@ export class ReservasService {
         estadoReserva: r.reservas.estado,
         // El calendario pinta distinto una reserva creada por el agente de
         // WhatsApp (ver CLAUDE.md, agente de WhatsApp) para que el staff la
-        // reconozca de un vistazo -- ver EstadoBadge/CalendarioReservas en
-        // Reservas.tsx.
-        origen: r.reservas.origen,
+        // reconozca de un vistazo -- ver colorSegmento() en Reservas.tsx.
+        // No es lo mismo que origen='whatsapp' (eso también lo usa el
+        // staff a mano cuando el cliente escribió por WhatsApp con una
+        // persona real).
+        creadoPorAgente: r.reservas.creado_por_agente,
         // Si ya hay una estadía 'en_curso', el huésped ya está físicamente
         // alojado -- el frontend debe llevar a EstadiaDetalle.tsx (el
         // libro real) en vez de abrir el formulario de edición de reserva.

@@ -296,7 +296,7 @@ export class CotizacionPublicaService {
       habitaciones: habitacionesDto,
     };
 
-    return this.reservasService.crear(client, hotelId, reservaDto, null);
+    return this.reservasService.crear(client, hotelId, reservaDto, null, { creadoPorAgente: true });
   }
 
   private async buscarCocheraIdDisponible(
