@@ -53,6 +53,7 @@ const NOTA_SELECT = `
   fecha_hora_inicio_repeticion,
   fecha_hora_fin_repeticion,
   periodicidad_minutos,
+  repite_diario,
   fecha_hora_envio,
   celular_destino,
   adjuntos,
@@ -103,6 +104,7 @@ export class NotasService {
         fecha_hora_inicio_repeticion: aInstanteLima(dto.fecha_hora_inicio_repeticion),
         fecha_hora_fin_repeticion: aInstanteLima(dto.fecha_hora_fin_repeticion),
         periodicidad_minutos: dto.periodicidad_minutos ?? null,
+        repite_diario: dto.repite_diario ?? false,
         celular_destino: dto.celular_destino,
         adjuntos: dto.adjuntos,
         telefonos_adicionales: dto.telefonos_adicionales,
@@ -133,6 +135,7 @@ export class NotasService {
       cambios.fecha_hora_fin_repeticion = aInstanteLima(dto.fecha_hora_fin_repeticion);
     }
     if (dto.periodicidad_minutos !== undefined) cambios.periodicidad_minutos = dto.periodicidad_minutos;
+    if (dto.repite_diario !== undefined) cambios.repite_diario = dto.repite_diario;
     if (dto.celular_destino !== undefined) cambios.celular_destino = dto.celular_destino;
     if (dto.adjuntos !== undefined) cambios.adjuntos = dto.adjuntos;
     if (dto.telefonos_adicionales !== undefined) cambios.telefonos_adicionales = dto.telefonos_adicionales;

@@ -493,10 +493,16 @@ create table notas (
     usuario_escribio uuid not null references personal(id),
     tipo text not null check (tipo in ('Informativa', 'Repetitiva', 'Mensajeria')),
     dirigido_a text not null check (dirigido_a in ('Recepcionista', 'HK', 'Huesped')),
-    -- Para notas repetitivas
+    -- Para notas repetitivas: repite_diario=false (default) usa el rango
+    -- completo inicio..fin con periodicidad_minutos; repite_diario=true
+    -- ignora periodicidad_minutos y se dispara una vez por día a la HORA
+    -- (no la fecha) de fecha_hora_inicio_repeticion, todos los días hasta
+    -- fecha_hora_fin_repeticion (o para siempre si queda null) -- ver
+    -- RecordatorioNotas.tsx.
     fecha_hora_inicio_repeticion timestamptz,
     fecha_hora_fin_repeticion timestamptz,
     periodicidad_minutos int,
+    repite_diario boolean not null default false,
     -- Para notas de mensajería
     fecha_hora_envio timestamptz,
     celular_destino text,

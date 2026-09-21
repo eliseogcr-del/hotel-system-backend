@@ -1,4 +1,4 @@
-import { IsArray, IsEnum, IsIn, IsOptional, IsString, IsUrl, ValidateIf } from 'class-validator';
+import { IsArray, IsBoolean, IsEnum, IsIn, IsOptional, IsString, IsUrl, ValidateIf } from 'class-validator';
 import { DirigidoA, TipoNota } from './crear-nota.dto';
 
 export class ActualizarNotaDto {
@@ -22,9 +22,13 @@ export class ActualizarNotaDto {
   @IsString()
   fecha_hora_fin_repeticion?: string;
 
-  // El formulario de edición siempre manda tipo -- si viene 'Repetitiva',
-  // exige periodicidad igual que al crear (ver CrearNotaDto).
-  @ValidateIf((o) => o.tipo === TipoNota.REPETITIVA)
+  @IsOptional()
+  @IsBoolean()
+  repite_diario?: boolean;
+
+  // El formulario de edición siempre manda tipo -- si viene 'Repetitiva' y
+  // no es modo diario, exige periodicidad igual que al crear (ver CrearNotaDto).
+  @ValidateIf((o) => o.tipo === TipoNota.REPETITIVA && !o.repite_diario)
   @IsIn([1, 5, 10, 15, 60], {
     message: 'Selecciona cada cuánto tiempo se debe repetir el mensaje (1, 5, 10, 15 o 60 minutos).',
   })
