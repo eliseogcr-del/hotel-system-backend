@@ -5,6 +5,7 @@ import { useHotel } from '../contexts/HotelContext';
 import { useIsMobile } from '../hooks/useIsMobile';
 import { CheckinRapidoModal } from '../components/CheckinRapidoModal';
 import { ReservaFormModal } from '../components/ReservaFormModal';
+import { colorPorOrigen, labelPorOrigen } from '../lib/colorOrigen';
 
 type Vista = 'tabla' | 'tarjetas';
 
@@ -16,7 +17,13 @@ interface Habitacion {
   piso: number;
   estado: Estado;
   mantenimiento_planificado: boolean;
-  reservaHoy: { reservaId: string; lineaId: string; huesped: string | null } | null;
+  reservaHoy: {
+    reservaId: string;
+    lineaId: string;
+    huesped: string | null;
+    origen: string | null;
+    creadoPorAgente: boolean;
+  } | null;
   tareaHkEnProceso: {
     tipo: 'limpieza' | 'mantenimiento';
     estado: 'planificado' | 'en_proceso';
@@ -37,6 +44,8 @@ interface Habitacion {
   visible_whatsapp: boolean;
   cocheraNumero: string | null;
   vehiculoTipo: string | null;
+  origen: string | null;
+  creadoPorAgente: boolean;
 }
 
 interface TipoHabitacionPrecios {
@@ -745,6 +754,15 @@ function VistaTarjetas({
           const etiqueta = h.reservaHoy ? 'Reservada' : ESTADO_LABEL[h.estado];
           const notasHk = h.huesped ? null : h.tareaHkEnProceso?.notas ?? null;
           const tituloClick = h.reservaHoy ? 'Ver la reserva y pasarla a estadía' : h.estado === 'disponible' ? 'Hacer check-in' : 'Ver detalle';
+          // Canal de la reserva que ocupa (o va a ocupar hoy) la habitación
+          // -- ver colorOrigen.ts, mismo criterio que la leyenda del
+          // calendario de Reservas. Sin huésped ni reserva de hoy no hay
+          // ningún origen que mostrar.
+          const origenInfo = h.huesped
+            ? { origen: h.origen, creadoPorAgente: h.creadoPorAgente }
+            : h.reservaHoy
+              ? { origen: h.reservaHoy.origen, creadoPorAgente: h.reservaHoy.creadoPorAgente }
+              : null;
           return (
             <div
               key={h.id}
@@ -757,6 +775,21 @@ function VistaTarjetas({
               }}
               title={clickable ? tituloClick : undefined}
             >
+              {origenInfo && (
+                <span
+                  style={{
+                    alignSelf: 'flex-start',
+                    background: colorPorOrigen(origenInfo),
+                    color: '#fff',
+                    fontSize: 10,
+                    fontWeight: 700,
+                    padding: '2px 8px',
+                    borderRadius: 999,
+                  }}
+                >
+                  {labelPorOrigen(origenInfo)}
+                </span>
+              )}
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
                 <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                   {h.vehiculoTipo && (

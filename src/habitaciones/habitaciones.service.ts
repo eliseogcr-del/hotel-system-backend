@@ -83,7 +83,7 @@ export class HabitacionesService {
       .select(
         `
         habitacion_id, tarifa_dia, fecha_hora_checkout_prevista, observaciones,
-        reservas!inner(hotel_id, huespedes(nombres, apellidos)),
+        reservas!inner(hotel_id, origen, creado_por_agente, huespedes(nombres, apellidos)),
         estadias!inner(id, checkin_real, estado_actual),
         cocheras(numero, tipo_vehiculo_permitido),
         vehiculos(tipo, placa)
@@ -114,7 +114,7 @@ export class HabitacionesService {
       .select(
         `
         id, habitacion_id, fecha_hora_checkin_prevista,
-        reservas!inner(id, hotel_id, estado, huespedes(nombres, apellidos), empresas(razon_social)),
+        reservas!inner(id, hotel_id, estado, origen, creado_por_agente, huespedes(nombres, apellidos), empresas(razon_social)),
         estadias(id)
       `,
       )
@@ -126,7 +126,13 @@ export class HabitacionesService {
 
     const reservaHoyPorHabitacion = new Map<
       string,
-      { reservaId: string; lineaId: string; huesped: string | null }
+      {
+        reservaId: string;
+        lineaId: string;
+        huesped: string | null;
+        origen: string | null;
+        creadoPorAgente: boolean;
+      }
     >();
     for (const linea of (reservasSinCheckin ?? []) as any[]) {
       if (linea.estadias) continue;
@@ -136,6 +142,8 @@ export class HabitacionesService {
         reservaId: linea.reservas.id,
         lineaId: linea.id,
         huesped: huesped ? `${huesped.nombres} ${huesped.apellidos}` : (empresa?.razon_social ?? null),
+        origen: linea.reservas.origen ?? null,
+        creadoPorAgente: linea.reservas.creado_por_agente ?? false,
       });
     }
 
@@ -186,6 +194,10 @@ export class HabitacionesService {
         notas: linea.observaciones,
         cocheraNumero: linea.cocheras?.numero ?? null,
         vehiculoTipo: linea.vehiculos?.tipo ?? null,
+        // Para el badge de canal en la tarjeta (ver colorOrigen.ts en el
+        // frontend) -- mismo criterio que el calendario de Reservas.
+        origen: linea.reservas?.origen ?? null,
+        creadoPorAgente: linea.reservas?.creado_por_agente ?? false,
       });
     }
 
@@ -209,6 +221,8 @@ export class HabitacionesService {
         notas: null,
         cocheraNumero: null,
         vehiculoTipo: null,
+        origen: null,
+        creadoPorAgente: false,
       }),
     }));
   }
