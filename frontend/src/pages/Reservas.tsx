@@ -52,7 +52,7 @@ interface ReservaCalendario {
   estadiaId: string | null;
   estadoEstadia: string | null;
   huesped: string;
-  origen: string;
+  creadoPorAgente: boolean;
 }
 
 function fechaYMD(d: Date): string {
@@ -714,17 +714,19 @@ interface SegmentoCelda {
   estadiaId: string | null;
   estadoEstadia: string | null;
   fechaInicio: string;
-  origen: string | null;
+  creadoPorAgente: boolean;
 }
 
-// El agente de WhatsApp crea reservas reales (origen='whatsapp') que deben
-// distinguirse a simple vista de las hechas por el staff en el calendario
-// (ver CLAUDE.md, agente de WhatsApp) -- mismo tono que --limpieza-bg del
-// resto del sistema.
+// El agente de WhatsApp crea reservas reales (creado_por_agente=true) que
+// deben distinguirse a simple vista de las hechas por el staff en el
+// calendario (ver CLAUDE.md, agente de WhatsApp) -- mismo tono que
+// --limpieza-bg del resto del sistema. OJO: no es lo mismo que
+// origen='whatsapp', que el staff también usa a mano cuando el cliente
+// escribió por WhatsApp con una persona real, no con el agente.
 const COLOR_RESERVA_WHATSAPP = '#f59e0b';
 
-function colorSegmento(origen: string | null): string {
-  return origen === 'whatsapp' ? COLOR_RESERVA_WHATSAPP : 'var(--brand)';
+function colorSegmento(creadoPorAgente: boolean): string {
+  return creadoPorAgente ? COLOR_RESERVA_WHATSAPP : 'var(--brand)';
 }
 
 // Una celda de un día "partido" (checkout de una reserva con margen para
@@ -788,7 +790,7 @@ function CalendarioReservas({
       estadiaId: item.estadiaId,
       estadoEstadia: item.estadoEstadia,
       fechaInicio,
-      origen: item.origen,
+      creadoPorAgente: item.creadoPorAgente,
     };
   }
 
@@ -803,7 +805,7 @@ function CalendarioReservas({
       estadiaId: null,
       estadoEstadia: null,
       fechaInicio,
-      origen: null,
+      creadoPorAgente: false,
     };
   }
 
@@ -1026,7 +1028,7 @@ function CalendarioReservas({
                         style={{
                           ...tdCalStyle,
                           background: c.segmento.ocupado
-                            ? colorSegmento(c.segmento.origen)
+                            ? colorSegmento(c.segmento.creadoPorAgente)
                             : bloqueada
                               ? 'repeating-linear-gradient(45deg, var(--surface-2), var(--surface-2) 6px, var(--border) 6px, var(--border) 12px)'
                               : 'transparent',
@@ -1049,7 +1051,7 @@ function CalendarioReservas({
                             title={`Sale: ${c.saliente.huesped}`}
                             style={{
                               flex: 1,
-                              background: colorSegmento(c.saliente.origen),
+                              background: colorSegmento(c.saliente.creadoPorAgente),
                               cursor: 'pointer',
                             }}
                           />
@@ -1058,7 +1060,7 @@ function CalendarioReservas({
                             title={c.derecha.ocupado ? `Entra: ${c.derecha.huesped}` : 'Crear reserva (desde el checkout)'}
                             style={{
                               flex: 1,
-                              background: c.derecha.ocupado ? colorSegmento(c.derecha.origen) : 'transparent',
+                              background: c.derecha.ocupado ? colorSegmento(c.derecha.creadoPorAgente) : 'transparent',
                               opacity: c.derecha.ocupado ? 0.6 : 1,
                               borderLeft: `1.5px dashed ${CAL_BORDE}`,
                               cursor: 'pointer',

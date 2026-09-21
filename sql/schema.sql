@@ -245,6 +245,12 @@ create table reservas (
     importe_final numeric(10,2),
     estado text not null default 'confirmada' check (estado in ('pendiente_revision','confirmada','cancelada')),
     creado_por uuid references personal(id),
+    -- true solo si la creó el agente de WhatsApp (formulario público sin
+    -- login). No confundir con origen='whatsapp', que también se usa para
+    -- reservas hechas a mano por recepción cuando el cliente escribe por
+    -- WhatsApp con una persona -- el calendario de Reservas pinta de
+    -- naranja según este flag, nunca según el origen.
+    creado_por_agente boolean not null default false,
     created_at timestamptz not null default now(),
     motivo_cancelacion text,
     cancelado_por uuid references personal(id),
