@@ -14,6 +14,7 @@ interface Nota {
   fecha_hora_inicio_repeticion?: string;
   fecha_hora_fin_repeticion?: string;
   periodicidad_minutos?: number | null;
+  repite_diario?: boolean;
   // Para Mensajeria
   fecha_hora_envio?: string;
   celular_destino?: string;
@@ -29,6 +30,7 @@ interface CrearNotaDTO {
   fecha_hora_inicio_repeticion?: string;
   fecha_hora_fin_repeticion?: string;
   periodicidad_minutos?: number;
+  repite_diario?: boolean;
   // Para Mensajeria
   celular_destino?: string;
   adjuntos?: string[];
@@ -71,6 +73,14 @@ function aInputDatetimeLocal(iso: string | undefined | null): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
+// Para mostrar "a las HH:mm" en el modo diario -- solo interesa la hora,
+// no la fecha (ver RecordatorioNotas.tsx).
+function soloHora(iso: string | undefined | null): string {
+  if (!iso) return '—';
+  const d = new Date(iso);
+  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+}
+
 const labelFiltroStyle = { fontSize: 11, color: 'var(--text-secondary)', display: 'block', marginBottom: 3 } as const;
 
 const inputFiltroStyle = {
@@ -94,6 +104,7 @@ export function Notas() {
     fecha_hora_inicio_repeticion: undefined,
     fecha_hora_fin_repeticion: undefined,
     periodicidad_minutos: undefined,
+    repite_diario: false,
     celular_destino: undefined,
     adjuntos: [],
     telefonos_adicionales: [],
@@ -144,6 +155,16 @@ export function Notas() {
     });
   };
 
+  function alternarRepiteDiario(activo: boolean) {
+    setFormularioData((prev) => ({
+      ...prev,
+      repite_diario: activo,
+      // Modo diario no usa periodicidad_minutos -- se limpia para no
+      // mandar un valor viejo que ya no aplica.
+      periodicidad_minutos: activo ? undefined : prev.periodicidad_minutos,
+    }));
+  }
+
   function cerrarFormulario() {
     setFormularioAbierto(false);
     setNotaEditandoId(null);
@@ -154,6 +175,7 @@ export function Notas() {
       fecha_hora_inicio_repeticion: undefined,
       fecha_hora_fin_repeticion: undefined,
       periodicidad_minutos: undefined,
+      repite_diario: false,
       celular_destino: undefined,
       adjuntos: [],
       telefonos_adicionales: [],
@@ -169,6 +191,7 @@ export function Notas() {
       fecha_hora_inicio_repeticion: aInputDatetimeLocal(nota.fecha_hora_inicio_repeticion),
       fecha_hora_fin_repeticion: aInputDatetimeLocal(nota.fecha_hora_fin_repeticion),
       periodicidad_minutos: nota.periodicidad_minutos ?? undefined,
+      repite_diario: nota.repite_diario ?? false,
       celular_destino: nota.celular_destino ?? undefined,
       adjuntos: nota.adjuntos ?? [],
       telefonos_adicionales: nota.telefonos_adicionales ?? [],
@@ -178,7 +201,15 @@ export function Notas() {
 
   const manejarGuardar = async () => {
     if (!hotelActual || !formularioData.descripcion.trim()) return;
-    if (formularioData.tipo === 'Repetitiva' && !formularioData.periodicidad_minutos) {
+    if (formularioData.tipo === 'Repetitiva' && !formularioData.fecha_hora_inicio_repeticion) {
+      setError(
+        formularioData.repite_diario
+          ? 'Indica la hora a la que debe aparecer todos los días.'
+          : 'Indica la fecha y hora de inicio de la repetición.',
+      );
+      return;
+    }
+    if (formularioData.tipo === 'Repetitiva' && !formularioData.repite_diario && !formularioData.periodicidad_minutos) {
       setError('Selecciona cada cuánto tiempo se debe repetir el mensaje.');
       return;
     }
@@ -317,7 +348,16 @@ export function Notas() {
               </div>
 
               <div style={{ display: 'flex', gap: 8, fontSize: 12, color: 'var(--text-secondary)' }}>
-                {nota.tipo === 'Repetitiva' && (
+                {nota.tipo === 'Repetitiva' && nota.repite_diario && (
+                  <>
+                    🔁 Diaria a las {soloHora(nota.fecha_hora_inicio_repeticion)}, desde{' '}
+                    {formatoFechaHora(nota.fecha_hora_inicio_repeticion)}
+                    {nota.fecha_hora_fin_repeticion
+                      ? ` hasta ${formatoFechaHora(nota.fecha_hora_fin_repeticion)}`
+                      : ' (sin fecha de fin)'}
+                  </>
+                )}
+                {nota.tipo === 'Repetitiva' && !nota.repite_diario && (
                   <>
                     🔁 Repetitiva: {formatoFechaHora(nota.fecha_hora_inicio_repeticion)} →{' '}
                     {formatoFechaHora(nota.fecha_hora_fin_repeticion)}
@@ -466,9 +506,31 @@ export function Notas() {
               {/* Campos condicionales para Repetitiva */}
               {formularioData.tipo === 'Repetitiva' && (
                 <>
+                  <label
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 6,
+                      fontSize: 13,
+                      marginBottom: 16,
+                      background: 'var(--surface-2)',
+                      padding: '8px 10px',
+                      borderRadius: 'var(--radius)',
+                    }}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={!!formularioData.repite_diario}
+                      onChange={(e) => alternarRepiteDiario(e.target.checked)}
+                    />
+                    Repetir todos los días a esta hora (para no tener que volver a crearla)
+                  </label>
+
                   <div style={{ marginBottom: 16 }}>
                     <label style={{ display: 'block', fontSize: 11, color: 'var(--text-secondary)', marginBottom: 4 }}>
-                      Fecha y hora de inicio de repetición
+                      {formularioData.repite_diario
+                        ? 'Desde cuándo, y a qué hora aparece cada día'
+                        : 'Fecha y hora de inicio de repetición'}
                     </label>
                     <input
                       type="datetime-local"
@@ -488,7 +550,9 @@ export function Notas() {
 
                   <div style={{ marginBottom: 16 }}>
                     <label style={{ display: 'block', fontSize: 11, color: 'var(--text-secondary)', marginBottom: 4 }}>
-                      Fecha y hora de fin de repetición
+                      {formularioData.repite_diario
+                        ? 'Hasta cuándo (opcional -- déjalo vacío para que sea indefinido)'
+                        : 'Fecha y hora de fin de repetición'}
                     </label>
                     <input
                       type="datetime-local"
@@ -506,38 +570,45 @@ export function Notas() {
                     />
                   </div>
 
-                  <div style={{ marginBottom: 16 }}>
-                    <label style={{ display: 'block', fontSize: 11, color: 'var(--text-secondary)', marginBottom: 4 }}>
-                      Repetir cada
-                    </label>
-                    <select
-                      name="periodicidad_minutos"
-                      value={formularioData.periodicidad_minutos ?? ''}
-                      onChange={manejarCambio}
-                      required
-                      style={{
-                        width: '100%',
-                        padding: '9px 10px',
-                        border: '1px solid var(--border)',
-                        borderRadius: 'var(--radius)',
-                        fontSize: 13,
-                        boxSizing: 'border-box',
-                      }}
-                    >
-                      <option value="" disabled>
-                        Selecciona la periodicidad
-                      </option>
-                      {PERIODICIDAD_OPCIONES.map((op) => (
-                        <option key={op.valor} value={op.valor}>
-                          {op.label}
-                        </option>
-                      ))}
-                    </select>
-                    <p style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>
-                      Mientras esté dentro del rango de fechas, el mensaje aparecerá en pantalla con esta
-                      frecuencia hasta que le hagan clic.
+                  {formularioData.repite_diario ? (
+                    <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: '-8px 0 16px' }}>
+                      Va a aparecer una vez cada día a la hora indicada arriba, hasta la fecha de fin (o para
+                      siempre si la dejas vacía).
                     </p>
-                  </div>
+                  ) : (
+                    <div style={{ marginBottom: 16 }}>
+                      <label style={{ display: 'block', fontSize: 11, color: 'var(--text-secondary)', marginBottom: 4 }}>
+                        Repetir cada
+                      </label>
+                      <select
+                        name="periodicidad_minutos"
+                        value={formularioData.periodicidad_minutos ?? ''}
+                        onChange={manejarCambio}
+                        required
+                        style={{
+                          width: '100%',
+                          padding: '9px 10px',
+                          border: '1px solid var(--border)',
+                          borderRadius: 'var(--radius)',
+                          fontSize: 13,
+                          boxSizing: 'border-box',
+                        }}
+                      >
+                        <option value="" disabled>
+                          Selecciona la periodicidad
+                        </option>
+                        {PERIODICIDAD_OPCIONES.map((op) => (
+                          <option key={op.valor} value={op.valor}>
+                            {op.label}
+                          </option>
+                        ))}
+                      </select>
+                      <p style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>
+                        Mientras esté dentro del rango de fechas, el mensaje aparecerá en pantalla con esta
+                        frecuencia hasta que le hagan clic.
+                      </p>
+                    </div>
+                  )}
                 </>
               )}
 
