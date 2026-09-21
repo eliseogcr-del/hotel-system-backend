@@ -356,7 +356,7 @@ export class ReservasService {
       .select(
         `
         id, habitacion_id, fecha_hora_checkin_prevista, fecha_hora_checkout_prevista,
-        reservas!inner(id, estado, hotel_id, creado_por_agente, huespedes(nombres, apellidos), empresas(razon_social)),
+        reservas!inner(id, estado, hotel_id, origen, creado_por_agente, huespedes(nombres, apellidos), empresas(razon_social)),
         estadias(id, estado_actual)
       `,
       )
@@ -375,12 +375,12 @@ export class ReservasService {
         checkoutPrevisto: r.fecha_hora_checkout_prevista,
         reservaId: r.reservas.id,
         estadoReserva: r.reservas.estado,
-        // El calendario pinta distinto una reserva creada por el agente de
-        // WhatsApp (ver CLAUDE.md, agente de WhatsApp) para que el staff la
-        // reconozca de un vistazo -- ver colorSegmento() en Reservas.tsx.
-        // No es lo mismo que origen='whatsapp' (eso también lo usa el
-        // staff a mano cuando el cliente escribió por WhatsApp con una
-        // persona real).
+        // El calendario pinta un color distinto por canal (ver
+        // colorSegmento()/leyenda en Reservas.tsx): WhatsApp humano,
+        // Booking/Airbnb, agente de WhatsApp (prioridad sobre el origen,
+        // aunque también sea 'whatsapp') u otro. origen y creadoPorAgente
+        // son campos independientes -- ver CLAUDE.md, agente de WhatsApp.
+        origen: r.reservas.origen,
         creadoPorAgente: r.reservas.creado_por_agente,
         // Si ya hay una estadía 'en_curso', el huésped ya está físicamente
         // alojado -- el frontend debe llevar a EstadiaDetalle.tsx (el
