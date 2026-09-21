@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { api, ApiError } from '../lib/api';
 import { useHotel } from '../contexts/HotelContext';
 import { ReservaFormModal } from '../components/ReservaFormModal';
+import { colorPorOrigen, LEYENDA_COLORES_ORIGEN } from '../lib/colorOrigen';
 
 interface Habitacion {
   id: string;
@@ -719,33 +720,16 @@ interface SegmentoCelda {
   creadoPorAgente: boolean;
 }
 
-// Leyenda de colores del calendario, por canal de la reserva -- ver
-// colorSegmento() y <LeyendaColores/> más abajo. creado_por_agente tiene
-// prioridad sobre origen (una reserva del agente sigue teniendo
-// origen='whatsapp', pero se pinta como agente, no como WhatsApp humano).
-const COLOR_AGENTE = '#f59e0b'; // naranja
-const COLOR_WHATSAPP = '#16a34a'; // verde
-const COLOR_OTA = '#7c3aed'; // morado (Booking/Airbnb)
-const COLOR_OTRO = '#6b7280'; // gris (teléfono, directo, walk-in...)
-
-const LEYENDA_COLORES: { color: string; label: string }[] = [
-  { color: COLOR_AGENTE, label: 'Agente de WhatsApp' },
-  { color: COLOR_WHATSAPP, label: 'WhatsApp' },
-  { color: COLOR_OTA, label: 'Booking / Airbnb' },
-  { color: COLOR_OTRO, label: 'Otro' },
-];
-
+// Colores por canal de la reserva -- compartidos con el indicador de las
+// tarjetas de Habitaciones, ver lib/colorOrigen.ts.
 function colorSegmento(segmento: { creadoPorAgente: boolean; origen: string | null }): string {
-  if (segmento.creadoPorAgente) return COLOR_AGENTE;
-  if (segmento.origen === 'whatsapp') return COLOR_WHATSAPP;
-  if (segmento.origen === 'booking' || segmento.origen === 'airbnb') return COLOR_OTA;
-  return COLOR_OTRO;
+  return colorPorOrigen(segmento);
 }
 
 function LeyendaColores() {
   return (
     <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, alignItems: 'center', fontSize: 12 }}>
-      {LEYENDA_COLORES.map((item) => (
+      {LEYENDA_COLORES_ORIGEN.map((item) => (
         <span key={item.label} style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
           <span
             style={{
