@@ -56,12 +56,37 @@ const DIRIGIDO_A_ICONO: Record<string, string> = {
   Huesped: '🏨',
 };
 
+function hoyYMD(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+// Convierte un ISO guardado en la base a lo que espera un <input
+// type="datetime-local">: "YYYY-MM-DDTHH:mm" en hora del navegador, sin
+// zona -- mismo formato que ya produce ese input al escribir a mano.
+function aInputDatetimeLocal(iso: string | undefined | null): string {
+  if (!iso) return '';
+  const d = new Date(iso);
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+const labelFiltroStyle = { fontSize: 11, color: 'var(--text-secondary)', display: 'block', marginBottom: 3 } as const;
+
+const inputFiltroStyle = {
+  padding: '8px 10px',
+  border: '1px solid var(--border)',
+  borderRadius: 'var(--radius)',
+  fontSize: 13,
+} as const;
+
 export function Notas() {
   const { hotelActual } = useHotel();
   const [notas, setNotas] = useState<Nota[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [formularioAbierto, setFormularioAbierto] = useState(false);
+  const [notaEditandoId, setNotaEditandoId] = useState<string | null>(null);
   const [formularioData, setFormularioData] = useState<CrearNotaDTO>({
     descripcion: '',
     tipo: 'Informativa',
@@ -74,17 +99,30 @@ export function Notas() {
     telefonos_adicionales: [],
   });
 
+  // Por defecto se ven las notas de hoy (hora Lima, ver
+  // NotasService.listar()); el recepcionista puede ampliar el rango o
+  // filtrar por tipo.
+  const [filtroDesde, setFiltroDesde] = useState(hoyYMD);
+  const [filtroHasta, setFiltroHasta] = useState(hoyYMD);
+  const [filtroTipo, setFiltroTipo] = useState('');
+
   useEffect(() => {
     if (!hotelActual) return;
     cargarNotas();
-  }, [hotelActual]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hotelActual, filtroDesde, filtroHasta, filtroTipo]);
 
   const cargarNotas = () => {
     if (!hotelActual) return;
     setLoading(true);
     setError(null);
+    const params = new URLSearchParams();
+    if (filtroDesde) params.set('desde', filtroDesde);
+    if (filtroHasta) params.set('hasta', filtroHasta);
+    if (filtroTipo) params.set('tipo', filtroTipo);
+    const query = params.toString() ? `?${params.toString()}` : '';
     api
-      .get<Nota[]>(`/hoteles/${hotelActual.hotelId}/notas`)
+      .get<Nota[]>(`/hoteles/${hotelActual.hotelId}/notas${query}`)
       .then(setNotas)
       .catch((err) => setError(err instanceof ApiError ? err.message : 'Error al cargar notas'))
       .finally(() => setLoading(false));
@@ -106,6 +144,38 @@ export function Notas() {
     });
   };
 
+  function cerrarFormulario() {
+    setFormularioAbierto(false);
+    setNotaEditandoId(null);
+    setFormularioData({
+      descripcion: '',
+      tipo: 'Informativa',
+      dirigido_a: 'Recepcionista',
+      fecha_hora_inicio_repeticion: undefined,
+      fecha_hora_fin_repeticion: undefined,
+      periodicidad_minutos: undefined,
+      celular_destino: undefined,
+      adjuntos: [],
+      telefonos_adicionales: [],
+    });
+  }
+
+  function abrirEdicion(nota: Nota) {
+    setNotaEditandoId(nota.id);
+    setFormularioData({
+      descripcion: nota.descripcion,
+      tipo: nota.tipo,
+      dirigido_a: nota.dirigido_a,
+      fecha_hora_inicio_repeticion: aInputDatetimeLocal(nota.fecha_hora_inicio_repeticion),
+      fecha_hora_fin_repeticion: aInputDatetimeLocal(nota.fecha_hora_fin_repeticion),
+      periodicidad_minutos: nota.periodicidad_minutos ?? undefined,
+      celular_destino: nota.celular_destino ?? undefined,
+      adjuntos: nota.adjuntos ?? [],
+      telefonos_adicionales: nota.telefonos_adicionales ?? [],
+    });
+    setFormularioAbierto(true);
+  }
+
   const manejarGuardar = async () => {
     if (!hotelActual || !formularioData.descripcion.trim()) return;
     if (formularioData.tipo === 'Repetitiva' && !formularioData.periodicidad_minutos) {
@@ -125,19 +195,12 @@ export function Notas() {
         telefonos_adicionales: formularioData.telefonos_adicionales || [],
       };
 
-      await api.post<Nota>(`/hoteles/${hotelActual.hotelId}/notas`, nuevaNota);
-      setFormularioAbierto(false);
-      setFormularioData({
-        descripcion: '',
-        tipo: 'Informativa',
-        dirigido_a: 'Recepcionista',
-        fecha_hora_inicio_repeticion: undefined,
-        fecha_hora_fin_repeticion: undefined,
-        periodicidad_minutos: undefined,
-        celular_destino: undefined,
-        adjuntos: [],
-        telefonos_adicionales: [],
-      });
+      if (notaEditandoId) {
+        await api.patch<Nota>(`/hoteles/${hotelActual.hotelId}/notas/${notaEditandoId}`, nuevaNota);
+      } else {
+        await api.post<Nota>(`/hoteles/${hotelActual.hotelId}/notas`, nuevaNota);
+      }
+      cerrarFormulario();
       cargarNotas(); // Recargar lista
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Error al guardar nota');
@@ -170,6 +233,37 @@ export function Notas() {
           }}
         >
           + Nueva Nota
+        </button>
+      </div>
+
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'flex-end', marginBottom: 16 }}>
+        <div>
+          <label style={labelFiltroStyle}>Desde</label>
+          <input type="date" value={filtroDesde} onChange={(e) => setFiltroDesde(e.target.value)} style={inputFiltroStyle} />
+        </div>
+        <div>
+          <label style={labelFiltroStyle}>Hasta</label>
+          <input type="date" value={filtroHasta} onChange={(e) => setFiltroHasta(e.target.value)} style={inputFiltroStyle} />
+        </div>
+        <div>
+          <label style={labelFiltroStyle}>Tipo</label>
+          <select value={filtroTipo} onChange={(e) => setFiltroTipo(e.target.value)} style={inputFiltroStyle}>
+            <option value="">Todos los tipos</option>
+            <option value="Informativa">Informativa</option>
+            <option value="Repetitiva">Repetitiva</option>
+            <option value="Mensajeria">Mensajería</option>
+          </select>
+        </div>
+        <button
+          type="button"
+          onClick={() => {
+            setFiltroDesde(hoyYMD());
+            setFiltroHasta(hoyYMD());
+            setFiltroTipo('');
+          }}
+          style={{ ...inputFiltroStyle, background: 'transparent', cursor: 'pointer' }}
+        >
+          Ver solo hoy
         </button>
       </div>
 
@@ -249,6 +343,22 @@ export function Notas() {
                   </>
                 )}
               </div>
+
+              <button
+                type="button"
+                onClick={() => abrirEdicion(nota)}
+                style={{
+                  padding: '5px 10px',
+                  background: 'transparent',
+                  border: '1px solid var(--border)',
+                  borderRadius: 'var(--radius)',
+                  fontSize: 12,
+                  color: 'var(--text-secondary)',
+                  cursor: 'pointer',
+                }}
+              >
+                Editar
+              </button>
             </div>
           ))}
           {notas.length === 0 && (
@@ -280,7 +390,7 @@ export function Notas() {
             maxWidth: '480px',
             boxSizing: 'border-box',
           }}>
-            <h2 style={{ fontSize: 18, marginBottom: 20 }}>Nueva Nota</h2>
+            <h2 style={{ fontSize: 18, marginBottom: 20 }}>{notaEditandoId ? 'Editar Nota' : 'Nueva Nota'}</h2>
 
             <form onSubmit={(e) => {
               e.preventDefault();
@@ -505,7 +615,7 @@ export function Notas() {
               <div style={{ display: 'flex', gap: 10, marginTop: 24 }}>
                 <button
                   type="button"
-                  onClick={() => setFormularioAbierto(false)}
+                  onClick={cerrarFormulario}
                   style={{
                     padding: '8px 14px',
                     background: 'transparent',
@@ -531,7 +641,7 @@ export function Notas() {
                     cursor: 'pointer',
                   }}
                 >
-                  Guardar Nota
+                  {notaEditandoId ? 'Guardar cambios' : 'Guardar Nota'}
                 </button>
               </div>
             </form>
