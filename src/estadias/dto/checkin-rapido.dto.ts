@@ -12,6 +12,7 @@ import {
   Min,
   MinLength,
 } from 'class-validator';
+import { OrigenReserva } from '../../reservas/dto/crear-reserva.dto';
 
 export type TipoDocHuesped = 'dni' | 'pasaporte' | 'carnet_extranjeria' | 'cedula' | 'otro';
 export type NacionalidadHuesped = 'peruano' | 'extranjero';
@@ -126,4 +127,22 @@ export class CheckinRapidoDto {
   @IsOptional()
   @IsString()
   vehiculoPlaca?: string;
+
+  // Canal por el que llegó el huésped (reservas.origen). Se llama distinto
+  // de 'origen' a propósito: ese campo ya significa "país de origen" del
+  // huésped extranjero, arriba. Si no viene, se asume 'walkin' (llegó
+  // directo al mostrador sin reserva previa), pero se puede indicar otro
+  // (ej. llamó por teléfono y se atendió el check-in directo sin pasar por
+  // el módulo de Reservas).
+  @IsOptional()
+  @IsEnum(['telefono', 'whatsapp', 'booking', 'airbnb', 'directo', 'walkin'], {
+    message: 'Selecciona un origen de reserva válido.',
+  })
+  origenReserva?: OrigenReserva;
+
+  // Notas libres sobre esta línea (mismo campo 'Observaciones' del
+  // formulario de Reservas).
+  @IsOptional()
+  @IsString()
+  observaciones?: string;
 }

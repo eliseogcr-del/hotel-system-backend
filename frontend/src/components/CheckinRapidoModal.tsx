@@ -11,6 +11,8 @@ const TIPOS_DOC = [
   { value: 'otro', label: 'Otro' },
 ];
 
+const ORIGENES = ['walkin', 'telefono', 'whatsapp', 'booking', 'airbnb', 'directo'];
+
 const TIPOS_VEHICULO = [
   { value: 'auto', label: 'Auto' },
   { value: 'camioneta', label: 'Camioneta' },
@@ -89,6 +91,9 @@ export function CheckinRapidoModal({
   const [ruc, setRuc] = useState('');
   const [razonSocial, setRazonSocial] = useState('');
   const [facturable, setFacturable] = useState(false);
+
+  const [origenReserva, setOrigenReserva] = useState('walkin');
+  const [observaciones, setObservaciones] = useState('');
 
   const [nroPersonas, setNroPersonas] = useState(1);
   const [tipoCliente, setTipoCliente] = useState<TipoCliente>('normal');
@@ -220,6 +225,8 @@ export function CheckinRapidoModal({
         vehiculoMarca: tieneVehiculo ? vehiculoMarca.trim() || undefined : undefined,
         vehiculoTipo: tieneVehiculo ? vehiculoTipo.trim() || undefined : undefined,
         vehiculoPlaca: tieneVehiculo ? vehiculoPlaca.trim() || undefined : undefined,
+        origenReserva,
+        observaciones: observaciones.trim() || undefined,
       });
       onCreado();
       onClose();
@@ -438,6 +445,27 @@ export function CheckinRapidoModal({
                     onChange={(e) => setDias(Number(e.target.value))}
                     style={inputStyle}
                     required
+                  />
+                </div>
+              </div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 8 }}>
+                <div style={{ width: 150 }}>
+                  <label style={labelStyle}>Origen</label>
+                  <select value={origenReserva} onChange={(e) => setOrigenReserva(e.target.value)} style={inputStyle}>
+                    {ORIGENES.map((o) => (
+                      <option key={o} value={o}>
+                        {o}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div style={{ flex: 1, minWidth: 180 }}>
+                  <label style={labelStyle}>Observaciones</label>
+                  <input
+                    value={observaciones}
+                    onChange={(e) => setObservaciones(e.target.value)}
+                    placeholder="Ej. huésped extra no registrado, pidió toallas adicionales..."
+                    style={inputStyle}
                   />
                 </div>
               </div>

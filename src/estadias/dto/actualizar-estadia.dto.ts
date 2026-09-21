@@ -1,4 +1,5 @@
-import { IsBoolean, IsInt, IsNumber, IsOptional, IsString, IsUUID, Min } from 'class-validator';
+import { IsBoolean, IsEnum, IsInt, IsNumber, IsOptional, IsString, IsUUID, Min } from 'class-validator';
+import { OrigenReserva } from '../../reservas/dto/crear-reserva.dto';
 
 /**
  * Editar una estadía en curso: cambiar la tarifa diaria (aplica hacia
@@ -71,4 +72,20 @@ export class ActualizarEstadiaDto {
   @IsOptional()
   @IsUUID()
   nuevoHuespedId?: string;
+
+  // Canal por el que llegó el huésped (Booking, WhatsApp, teléfono, etc.).
+  // Vive en 'reservas', igual que en el módulo de Reservas -- se corrige acá
+  // por si quedó mal registrado o cambió (ej. se enteraron que en realidad
+  // fue por Booking).
+  @IsOptional()
+  @IsEnum(['telefono', 'whatsapp', 'booking', 'airbnb', 'directo', 'walkin'], {
+    message: 'Selecciona un origen de reserva válido.',
+  })
+  origen?: OrigenReserva;
+
+  // Notas libres sobre esta línea de reserva (mismo campo que
+  // 'Observaciones' en el formulario de Reservas -- reserva_habitacion.observaciones).
+  @IsOptional()
+  @IsString()
+  observaciones?: string;
 }
