@@ -478,6 +478,33 @@ create table importaciones_canal (
     error_detalle text
 );
 
+-- Avisos internos del staff (no confundir con notas_operativas de
+-- habitaciones ni con observaciones de reserva_habitacion). 'Repetitiva'
+-- dispara un popup en el navegador cada periodicidad_minutos mientras el
+-- reloj esté entre fecha_hora_inicio_repeticion y fin (ver
+-- RecordatorioNotas.tsx); 'Mensajeria' es para un futuro envío por
+-- WhatsApp, todavía no implementado (fecha_hora_envio la fija ese proceso,
+-- nunca el formulario de creación).
+create table notas (
+    id uuid primary key default gen_random_uuid(),
+    hotel_id uuid not null references hoteles(id) on delete cascade,
+    fecha_hora timestamptz not null default now(),
+    descripcion text not null,
+    usuario_escribio uuid not null references personal(id),
+    tipo text not null check (tipo in ('Informativa', 'Repetitiva', 'Mensajeria')),
+    dirigido_a text not null check (dirigido_a in ('Recepcionista', 'HK', 'Huesped')),
+    -- Para notas repetitivas
+    fecha_hora_inicio_repeticion timestamptz,
+    fecha_hora_fin_repeticion timestamptz,
+    periodicidad_minutos int,
+    -- Para notas de mensajería
+    fecha_hora_envio timestamptz,
+    celular_destino text,
+    adjuntos text[],
+    telefonos_adicionales text[],
+    created_at timestamptz not null default now()
+);
+
 -- ============================================================================
 -- ÍNDICES DE APOYO
 -- ============================================================================
@@ -507,6 +534,7 @@ create index idx_estadias_estado_actual on estadias(estado_actual);
 -- (Caja.tsx al cargar, anticipos en efectivo) filtra por
 -- personal_hotel_id + estado en cada request.
 create index idx_sesiones_turno_personal_hotel_estado on sesiones_turno(personal_hotel_id, estado);
+create index idx_notas_hotel on notas(hotel_id);
 
 -- ============================================================================
 -- FUNCIONES DE APOYO PARA RLS
@@ -580,6 +608,7 @@ alter table cotizaciones enable row level security;
 alter table cotizacion_detalle enable row level security;
 alter table importaciones_canal enable row level security;
 alter table tipo_cambio enable row level security;
+alter table notas enable row level security;
 
 -- Patrón general: super_admin ve todo; el resto solo ve datos de sus hoteles asignados.
 
@@ -758,3 +787,6 @@ create policy p_movimientos_caja_insert on movimientos_caja for insert
             where ph.personal_id = my_personal_id()
         )
     );
+
+create policy p_notas on notas for all
+    using (is_super_admin() or hotel_id in (select my_hotel_ids()));
