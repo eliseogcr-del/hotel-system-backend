@@ -16,6 +16,7 @@ import { NuevaCotizacion } from './pages/NuevaCotizacion';
 import { CotizacionDetalle } from './pages/CotizacionDetalle';
 import { Configuracion } from './pages/Configuracion';
 import { Reportes } from './pages/Reportes';
+import { Notas } from './pages/Notas';
 
 export function App() {
   return (
@@ -44,6 +45,7 @@ export function App() {
         <Route path="/cotizaciones/:id" element={<CotizacionDetalle />} />
         <Route path="/configuracion" element={<Configuracion />} />
         <Route path="/reportes" element={<Reportes />} />
+        <Route path="/notas" element={<Notas />} />
       </Route>
 
       <Route path="*" element={<Navigate to="/" replace />} />
