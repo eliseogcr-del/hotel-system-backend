@@ -20,7 +20,7 @@ import { ActualizarEstadiaDto } from './dto/actualizar-estadia.dto';
 import { EditarMovimientoDto } from './dto/editar-movimiento.dto';
 import { TrasladarHabitacionDto } from './dto/trasladar-habitacion.dto';
 import { ReservasService } from '../reservas/reservas.service';
-import { CrearReservaDto } from '../reservas/dto/crear-reserva.dto';
+import { CrearReservaDto, OrigenReserva } from '../reservas/dto/crear-reserva.dto';
 import { TipoCambioService } from '../tipo-cambio/tipo-cambio.service';
 import { SupabaseService } from '../common/supabase/supabase.service';
 
@@ -73,12 +73,15 @@ interface EstadiaConReserva {
     nro_personas: number;
     incluye_desayuno: boolean;
     cochera_id: string | null;
+    observaciones: string | null;
     habitaciones: { hab_numero: number; piso: number; tipo_id: string } | null;
     reservas: {
       id: string;
       hotel_id: string;
       estado: string;
       huesped_id: string;
+      origen: OrigenReserva;
+      creado_por_agente: boolean;
       huespedes: {
         nombres: string;
         apellidos: string;
@@ -581,7 +584,7 @@ export class EstadiasService {
 
     const reservaDto: CrearReservaDto = {
       huespedId,
-      origen: 'walkin',
+      origen: dto.origenReserva ?? 'walkin',
       facturable: dto.facturable,
       habitaciones: [
         {
@@ -598,6 +601,7 @@ export class EstadiasService {
           vehiculoMarca: dto.vehiculoMarca,
           vehiculoTipo: dto.vehiculoTipo,
           vehiculoPlaca: dto.vehiculoPlaca,
+          observaciones: dto.observaciones,
         },
       ],
     };
@@ -1194,7 +1198,9 @@ export class EstadiasService {
       dto.nroPersonas === undefined &&
       dto.incluyeDesayuno === undefined &&
       dto.nuevoHuespedId === undefined &&
-      dto.facturable === undefined
+      dto.facturable === undefined &&
+      dto.origen === undefined &&
+      dto.observaciones === undefined
     ) {
       throw new BadRequestException('No se enviaron cambios');
     }
@@ -1223,6 +1229,17 @@ export class EstadiasService {
       if (reasignarError) throw reasignarError;
     }
 
+    // El canal de contacto (origen) vive en 'reservas', no en
+    // 'reserva_habitacion' -- se guarda con su propio update, igual que
+    // nuevoHuespedId más arriba.
+    if (dto.origen !== undefined) {
+      const { error: origenError } = await client
+        .from('reservas')
+        .update({ origen: dto.origen })
+        .eq('id', estadia.reserva_habitacion.reservas.id);
+      if (origenError) throw origenError;
+    }
+
     const tarifaFinal = dto.tarifaDiaNueva ?? Number(estadia.reserva_habitacion.tarifa_dia);
 
     if (dto.tarifaDiaNueva !== undefined) {
@@ -1241,6 +1258,7 @@ export class EstadiasService {
     if (dto.tarifaDiaNueva !== undefined) cambiosLinea.tarifa_dia = dto.tarifaDiaNueva;
     if (dto.nroPersonas !== undefined) cambiosLinea.nro_personas = dto.nroPersonas;
     if (dto.incluyeDesayuno !== undefined) cambiosLinea.incluye_desayuno = dto.incluyeDesayuno;
+    if (dto.observaciones !== undefined) cambiosLinea.observaciones = dto.observaciones;
 
     if (dto.diasAdicionales) {
       const { data: rhActual, error: rhError } = await client
@@ -1462,10 +1480,10 @@ export class EstadiasService {
         `
         id, estado_actual, saldo, checkin_real, checkout_real, facturable,
         reserva_habitacion!inner(
-          id, habitacion_id, subtotal, tarifa_dia, dias, nro_personas, incluye_desayuno, cochera_id,
+          id, habitacion_id, subtotal, tarifa_dia, dias, nro_personas, incluye_desayuno, cochera_id, observaciones,
           habitaciones(hab_numero, piso, tipo_id),
           reservas!inner(
-            id, hotel_id, estado, huesped_id,
+            id, hotel_id, estado, huesped_id, origen, creado_por_agente,
             huespedes(nombres, apellidos, tipo_doc, nro_doc, telefono, correo, nacionalidad, origen, fecha_nacimiento, ruc, razon_social)
           ),
           vehiculos(id, marca, tipo, placa)

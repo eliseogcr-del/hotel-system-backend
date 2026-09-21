@@ -4,6 +4,7 @@ import { api, ApiError } from '../lib/api';
 import { useHotel } from '../contexts/HotelContext';
 import { useIsMobile } from '../hooks/useIsMobile';
 import { buscarHuespedPorDni, buscarHuespedPorRuc, buscarHuespedesPorTexto, type Huesped } from '../lib/huespedes';
+import { colorPorOrigen, labelPorOrigen } from '../lib/colorOrigen';
 
 interface MovimientoCuenta {
   id: string;
@@ -50,8 +51,14 @@ interface EstadiaDetalleData {
     nro_personas: number;
     incluye_desayuno: boolean;
     cochera_id: string | null;
+    observaciones: string | null;
     habitaciones: { hab_numero: number; piso: number; tipo_id: string } | null;
-    reservas: { huesped_id: string; huespedes: HuespedInfo | null } | null;
+    reservas: {
+      huesped_id: string;
+      origen: string;
+      creado_por_agente: boolean;
+      huespedes: HuespedInfo | null;
+    } | null;
     vehiculos: VehiculoInfo | null;
   };
 }
@@ -93,6 +100,7 @@ interface Cochera {
 
 const TIPOS_MOVIMIENTO = ['pago', 'consumo_bazar', 'desayuno', 'cargo_mascota', 'ajuste', 'early', 'late', 'cochera'];
 const METODOS = ['efectivo', 'transferencia', 'yape', 'tarjeta'];
+const ORIGENES = ['telefono', 'whatsapp', 'booking', 'airbnb', 'directo', 'walkin'];
 const TIPOS_VEHICULO = [
   { value: 'auto', label: 'Auto' },
   { value: 'camioneta', label: 'Camioneta' },
@@ -280,9 +288,34 @@ export function EstadiaDetalle() {
             ? `${estadia.reserva_habitacion.reservas.huespedes.nombres} ${estadia.reserva_habitacion.reservas.huespedes.apellidos}`
             : '—'}
         </h1>
-        <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '4px 0 0' }}>
+        <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '4px 0 0', display: 'flex', alignItems: 'center', gap: 8 }}>
           Estado: {estadia.estado_actual}
+          {estadia.reserva_habitacion.reservas && (
+            <span
+              style={{
+                background: colorPorOrigen({
+                  creadoPorAgente: estadia.reserva_habitacion.reservas.creado_por_agente,
+                  origen: estadia.reserva_habitacion.reservas.origen,
+                }),
+                color: '#fff',
+                borderRadius: 999,
+                padding: '2px 8px',
+                fontSize: 11,
+                fontWeight: 600,
+              }}
+            >
+              {labelPorOrigen({
+                creadoPorAgente: estadia.reserva_habitacion.reservas.creado_por_agente,
+                origen: estadia.reserva_habitacion.reservas.origen,
+              })}
+            </span>
+          )}
         </p>
+        {estadia.reserva_habitacion.observaciones && (
+          <p style={{ fontSize: 12, color: 'var(--text-secondary)', margin: '4px 0 0' }}>
+            Observaciones: {estadia.reserva_habitacion.observaciones}
+          </p>
+        )}
       </div>
 
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 24, marginBottom: 20 }}>
@@ -363,6 +396,8 @@ export function EstadiaDetalle() {
           huesped={estadia.reserva_habitacion.reservas?.huespedes ?? null}
           cocheraActualId={estadia.reserva_habitacion.cochera_id}
           vehiculoActual={estadia.reserva_habitacion.vehiculos}
+          origenActual={estadia.reserva_habitacion.reservas?.origen ?? 'walkin'}
+          observacionesActual={estadia.reserva_habitacion.observaciones}
           onClose={() => setMostrarEditar(false)}
           onGuardado={() => {
             setMostrarEditar(false);
@@ -576,6 +611,8 @@ function EditarEstadiaModal({
   huesped,
   cocheraActualId,
   vehiculoActual,
+  origenActual,
+  observacionesActual,
   onClose,
   onGuardado,
 }: {
@@ -593,6 +630,8 @@ function EditarEstadiaModal({
   huesped: HuespedInfo | null;
   cocheraActualId: string | null;
   vehiculoActual: VehiculoInfo | null;
+  origenActual: string;
+  observacionesActual: string | null;
   onClose: () => void;
   onGuardado: () => void;
 }) {
@@ -623,6 +662,8 @@ function EditarEstadiaModal({
   const [diasAdicionales, setDiasAdicionales] = useState('');
   const [incluyeDesayuno, setIncluyeDesayuno] = useState(incluyeDesayunoActual);
   const [facturable, setFacturable] = useState(facturableActual);
+  const [origenReserva, setOrigenReserva] = useState(origenActual);
+  const [observaciones, setObservaciones] = useState(observacionesActual ?? '');
 
   const [tieneVehiculo, setTieneVehiculo] = useState(!!vehiculoActual);
   const [vehiculoMarca, setVehiculoMarca] = useState(vehiculoActual?.marca ?? '');
@@ -729,6 +770,8 @@ function EditarEstadiaModal({
       if (nroPersonas !== nroPersonasActual) cambiosEstadia.nroPersonas = nroPersonas;
       if (incluyeDesayuno !== incluyeDesayunoActual) cambiosEstadia.incluyeDesayuno = incluyeDesayuno;
       if (facturable !== facturableActual) cambiosEstadia.facturable = facturable;
+      if (origenReserva !== origenActual) cambiosEstadia.origen = origenReserva;
+      if (observaciones !== (observacionesActual ?? '')) cambiosEstadia.observaciones = observaciones;
       if (tieneVehiculo) {
         if (vehiculoMarca !== (vehiculoActual?.marca ?? '')) cambiosEstadia.vehiculoMarca = vehiculoMarca;
         if (vehiculoTipo !== (vehiculoActual?.tipo ?? '')) cambiosEstadia.vehiculoTipo = vehiculoTipo;
@@ -1046,6 +1089,32 @@ function EditarEstadiaModal({
               <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: '6px 0 0' }}>
                 Cambiar la tarifa aplica desde ahora en adelante; no recalcula los cargos ya registrados.
               </p>
+            </div>
+          </div>
+
+          {/* ---------- Origen y observaciones ---------- */}
+          <div style={cardStyle}>
+            <p style={cardTitleStyle}>Origen y observaciones</p>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 8 }}>
+              <div style={{ width: 150 }}>
+                <label style={labelStyle}>Origen</label>
+                <select value={origenReserva} onChange={(e) => setOrigenReserva(e.target.value)} style={inputStyle}>
+                  {ORIGENES.map((o) => (
+                    <option key={o} value={o}>
+                      {o}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div style={{ flex: 1, minWidth: 220 }}>
+                <label style={labelStyle}>Observaciones</label>
+                <input
+                  value={observaciones}
+                  onChange={(e) => setObservaciones(e.target.value)}
+                  placeholder="Ej. huésped extra no registrado, pidió toallas adicionales..."
+                  style={inputStyle}
+                />
+              </div>
             </div>
           </div>
 
