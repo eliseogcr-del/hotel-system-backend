@@ -20,6 +20,7 @@ interface Nota {
   celular_destino?: string;
   adjuntos?: string[]; // URLs de cotizaciones o imágenes
   telefonos_adicionales?: string[]; // Otros números a quienes enviar
+  visible: boolean;
 }
 
 interface CrearNotaDTO {
@@ -57,11 +58,6 @@ const DIRIGIDO_A_ICONO: Record<string, string> = {
   HK: '🧹',
   Huesped: '🏨',
 };
-
-function hoyYMD(): string {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-}
 
 // Convierte un ISO guardado en la base a lo que espera un <input
 // type="datetime-local">: "YYYY-MM-DDTHH:mm" en hora del navegador, sin
@@ -110,33 +106,43 @@ export function Notas() {
     telefonos_adicionales: [],
   });
 
-  // Por defecto se ven las notas de hoy (hora Lima, ver
-  // NotasService.listar()); el recepcionista puede ampliar el rango o
-  // filtrar por tipo.
-  const [filtroDesde, setFiltroDesde] = useState(hoyYMD);
-  const [filtroHasta, setFiltroHasta] = useState(hoyYMD);
+  // Por defecto se ven las notas visibles (todas, sin importar cuándo se
+  // crearon); el check "Visible" de cada nota decide si sigue apareciendo
+  // acá. El recepcionista puede cambiar a "No visibles" para ver las que
+  // se ocultaron, y filtrar por tipo. Siempre ordenado de más reciente a
+  // más antigua (lo hace el backend, ver NotasService.listar()).
+  const [filtroVisible, setFiltroVisible] = useState<'true' | 'false'>('true');
   const [filtroTipo, setFiltroTipo] = useState('');
 
   useEffect(() => {
     if (!hotelActual) return;
     cargarNotas();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hotelActual, filtroDesde, filtroHasta, filtroTipo]);
+  }, [hotelActual, filtroVisible, filtroTipo]);
 
   const cargarNotas = () => {
     if (!hotelActual) return;
     setLoading(true);
     setError(null);
     const params = new URLSearchParams();
-    if (filtroDesde) params.set('desde', filtroDesde);
-    if (filtroHasta) params.set('hasta', filtroHasta);
+    params.set('visible', filtroVisible);
     if (filtroTipo) params.set('tipo', filtroTipo);
-    const query = params.toString() ? `?${params.toString()}` : '';
+    const query = `?${params.toString()}`;
     api
       .get<Nota[]>(`/hoteles/${hotelActual.hotelId}/notas${query}`)
       .then(setNotas)
       .catch((err) => setError(err instanceof ApiError ? err.message : 'Error al cargar notas'))
       .finally(() => setLoading(false));
+  };
+
+  const alternarVisible = async (nota: Nota) => {
+    if (!hotelActual) return;
+    try {
+      await api.patch<Nota>(`/hoteles/${hotelActual.hotelId}/notas/${nota.id}`, { visible: !nota.visible });
+      cargarNotas();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'No se pudo cambiar la visibilidad de la nota');
+    }
   };
 
   const manejarCambio = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
@@ -269,12 +275,15 @@ export function Notas() {
 
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'flex-end', marginBottom: 16 }}>
         <div>
-          <label style={labelFiltroStyle}>Desde</label>
-          <input type="date" value={filtroDesde} onChange={(e) => setFiltroDesde(e.target.value)} style={inputFiltroStyle} />
-        </div>
-        <div>
-          <label style={labelFiltroStyle}>Hasta</label>
-          <input type="date" value={filtroHasta} onChange={(e) => setFiltroHasta(e.target.value)} style={inputFiltroStyle} />
+          <label style={labelFiltroStyle}>Ver</label>
+          <select
+            value={filtroVisible}
+            onChange={(e) => setFiltroVisible(e.target.value as 'true' | 'false')}
+            style={inputFiltroStyle}
+          >
+            <option value="true">Visibles</option>
+            <option value="false">No visibles</option>
+          </select>
         </div>
         <div>
           <label style={labelFiltroStyle}>Tipo</label>
@@ -285,17 +294,6 @@ export function Notas() {
             <option value="Mensajeria">Mensajería</option>
           </select>
         </div>
-        <button
-          type="button"
-          onClick={() => {
-            setFiltroDesde(hoyYMD());
-            setFiltroHasta(hoyYMD());
-            setFiltroTipo('');
-          }}
-          style={{ ...inputFiltroStyle, background: 'transparent', cursor: 'pointer' }}
-        >
-          Ver solo hoy
-        </button>
       </div>
 
       {error && <p style={{ color: 'var(--danger)' }}>{error}</p>}
@@ -319,31 +317,40 @@ export function Notas() {
                 borderRadius: 'var(--radius)',
               }}
             >
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 200 }}>
-                <div>
-                  <strong>{nota.descripcion}</strong>
-                </div>
-                <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
-                  <span>
-                    {DIRIGIDO_A_ICONO[nota.dirigido_a]} {nota.dirigido_a}
-                    {' · '}
-                    <span
-                      style={{
-                        background: TIPO_COLOR[nota.tipo].bg,
-                        color: TIPO_COLOR[nota.tipo].text,
-                        fontSize: 10,
-                        padding: '2px 6px',
-                        borderRadius: 999,
-                        fontWeight: 500,
-                      }}
-                    >
-                      {nota.tipo}
+              <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, minWidth: 200 }}>
+                <input
+                  type="checkbox"
+                  checked={nota.visible}
+                  onChange={() => alternarVisible(nota)}
+                  title={nota.visible ? 'Marcar como no visible (se oculta)' : 'Marcar como visible (vuelve a aparecer)'}
+                  style={{ marginTop: 4, cursor: 'pointer' }}
+                />
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                  <div>
+                    <strong>{nota.descripcion}</strong>
+                  </div>
+                  <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+                    <span>
+                      {DIRIGIDO_A_ICONO[nota.dirigido_a]} {nota.dirigido_a}
+                      {' · '}
+                      <span
+                        style={{
+                          background: TIPO_COLOR[nota.tipo].bg,
+                          color: TIPO_COLOR[nota.tipo].text,
+                          fontSize: 10,
+                          padding: '2px 6px',
+                          borderRadius: 999,
+                          fontWeight: 500,
+                        }}
+                      >
+                        {nota.tipo}
+                      </span>
                     </span>
-                  </span>
-                  <br />
-                  <span>
-                    👤 {nota.usuario_escribio?.nombre ?? '—'} · 📅 {formatoFechaHora(nota.fecha_hora)}
-                  </span>
+                    <br />
+                    <span>
+                      👤 {nota.usuario_escribio?.nombre ?? '—'} · 📅 {formatoFechaHora(nota.fecha_hora)}
+                    </span>
+                  </div>
                 </div>
               </div>
 

@@ -1,19 +1,15 @@
-import { IsDateString, IsEnum, IsOptional } from 'class-validator';
+import { IsEnum, IsIn, IsOptional } from 'class-validator';
 import { TipoNota } from './crear-nota.dto';
 
 export class ListarNotasQueryDto {
-  // Filtran fecha_hora (cuándo se escribió la nota), en calendario Lima --
-  // ver fechaLimaAInstante() en notas.service.ts. Por defecto el frontend
-  // manda las de hoy.
-  @IsOptional()
-  @IsDateString()
-  desde?: string;
-
-  @IsOptional()
-  @IsDateString()
-  hasta?: string;
-
   @IsOptional()
   @IsEnum(TipoNota)
   tipo?: TipoNota;
+
+  // 'true' (default si no se manda) trae las notas visibles; 'false' trae
+  // las que se ocultaron (notas.visible=false) -- ver NotasService.listar().
+  // Viene como string porque es un query param.
+  @IsOptional()
+  @IsIn(['true', 'false'])
+  visible?: string;
 }
