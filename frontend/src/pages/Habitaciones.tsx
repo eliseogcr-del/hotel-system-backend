@@ -24,6 +24,11 @@ interface Habitacion {
     origen: string | null;
     creadoPorAgente: boolean;
   } | null;
+  // Solo viene con valor si la habitación está realmente disponible (sin
+  // reservaHoy): días de margen antes de topar con la próxima reserva
+  // futura, dentro de una ventana de 30 días. null = ninguna reserva
+  // encontrada en esos 30 días (se muestra "Más de 30 días").
+  diasHastaProximaReserva: number | null;
   tareaHkEnProceso: {
     tipo: 'limpieza' | 'mantenimiento';
     estado: 'planificado' | 'en_proceso';
@@ -868,6 +873,14 @@ function VistaTarjetas({
                   }}
                 >
                   {labelPorOrigen(origenInfo)}
+                </span>
+              )}
+              {!h.huesped && !h.reservaHoy && h.estado === 'disponible' && (
+                <span style={{ fontSize: 11, color: 'var(--text-secondary)' }}>
+                  📅{' '}
+                  {h.diasHastaProximaReserva == null
+                    ? 'Disponible más de 30 días'
+                    : `Disponible ${h.diasHastaProximaReserva} día${h.diasHastaProximaReserva === 1 ? '' : 's'}`}
                 </span>
               )}
             </div>

@@ -24,6 +24,19 @@ function fechaLimaAInstante(fechaYMD: string): Date {
   return new Date(relojLima.getTime() + PERU_UTC_OFFSET_MS);
 }
 
+function sumarDiasYMD(fechaYMD: string, dias: number): string {
+  const [anio, mes, dia] = fechaYMD.split('-').map(Number);
+  const d = new Date(Date.UTC(anio, mes - 1, dia));
+  d.setUTCDate(d.getUTCDate() + dias);
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}`;
+}
+
+// Diferencia en días de calendario (Lima) entre dos 'YYYY-MM-DD'.
+function diferenciaDiasYMD(desdeYMD: string, hastaYMD: string): number {
+  const msPorDia = 24 * 60 * 60 * 1000;
+  return Math.round((fechaLimaAInstante(hastaYMD).getTime() - fechaLimaAInstante(desdeYMD).getTime()) / msPorDia);
+}
+
 @Injectable()
 export class HabitacionesService {
   constructor(private readonly disponibilidad: DisponibilidadService) {}
@@ -147,6 +160,38 @@ export class HabitacionesService {
       });
     }
 
+    // Para las habitaciones realmente disponibles (sin huésped ni reserva
+    // de hoy), cuántos días de margen quedan antes de que se tope con la
+    // próxima reserva futura -- para que recepción sepa de un vistazo si
+    // conviene ofrecerla para una estadía larga. Ventana de 30 días: más
+    // allá de eso el frontend muestra "Más de 30 días" sin necesidad de
+    // calcular la fecha exacta (ver diasHastaProximaReserva más abajo).
+    const ventanaFinInstante = fechaLimaAInstante(sumarDiasYMD(hoyTexto, 31));
+
+    const { data: proximasReservas, error: proximasReservasError } = await client
+      .from('reserva_habitacion')
+      .select(
+        `
+        habitacion_id, fecha_hora_checkin_prevista,
+        reservas!inner(hotel_id, estado)
+      `,
+      )
+      .eq('reservas.hotel_id', hotelId)
+      .neq('reservas.estado', 'cancelada')
+      .gte('fecha_hora_checkin_prevista', finHoyInstante.toISOString())
+      .lt('fecha_hora_checkin_prevista', ventanaFinInstante.toISOString())
+      .order('fecha_hora_checkin_prevista', { ascending: true });
+    if (proximasReservasError) throw proximasReservasError;
+
+    const diasHastaProximaReservaPorHabitacion = new Map<string, number>();
+    for (const linea of (proximasReservas ?? []) as any[]) {
+      // Ordenado ascendente por fecha -- la primera vez que aparece cada
+      // habitación es su reserva futura más próxima.
+      if (diasHastaProximaReservaPorHabitacion.has(linea.habitacion_id)) continue;
+      const checkinYMD = fechaYMD(comoRelojLima(new Date(linea.fecha_hora_checkin_prevista)));
+      diasHastaProximaReservaPorHabitacion.set(linea.habitacion_id, diferenciaDiasYMD(hoyTexto, checkinYMD));
+    }
+
     const estadiaIds = (lineasActivas ?? []).map((l: any) => l.estadias.id);
     const movimientosPorEstadia = new Map<string, { tipo: string; monto: number }[]>();
 
@@ -201,30 +246,42 @@ export class HabitacionesService {
       });
     }
 
-    return (habitaciones ?? []).map((hab) => ({
-      ...hab,
+    return (habitaciones ?? []).map((hab) => {
       // Solo tiene sentido avisar "hay que pasar a estadía" si la
       // habitación está físicamente libre ahora mismo -- si está ocupada,
       // en limpieza, etc, ese estado real manda sobre el aviso de reserva.
-      reservaHoy: hab.estado === 'disponible' ? (reservaHoyPorHabitacion.get(hab.id) ?? null) : null,
-      tareaHkEnProceso: tareaEnProcesoPorHabitacion.get(hab.id) ?? null,
-      ...(detallePorHabitacion.get(hab.id) ?? {
-        estadiaId: null,
-        huesped: null,
-        checkinReal: null,
-        checkoutPrevisto: null,
-        tarifaDia: null,
-        totalAlquiler: null,
-        totalOtrosServicios: null,
-        totalPagado: null,
-        saldo: null,
-        notas: null,
-        cocheraNumero: null,
-        vehiculoTipo: null,
-        origen: null,
-        creadoPorAgente: false,
-      }),
-    }));
+      const reservaHoy = hab.estado === 'disponible' ? (reservaHoyPorHabitacion.get(hab.id) ?? null) : null;
+      // El aviso de "días disponible" solo aplica a una habitación
+      // genuinamente libre ahora mismo -- si ya tiene una reserva de hoy
+      // sin check-in, esa reserva es la próxima, no tiene sentido mostrar
+      // el margen hasta "la siguiente después de esa".
+      const diasHastaProximaReserva =
+        hab.estado === 'disponible' && !reservaHoy
+          ? (diasHastaProximaReservaPorHabitacion.get(hab.id) ?? null)
+          : null;
+      return {
+        ...hab,
+        reservaHoy,
+        diasHastaProximaReserva,
+        tareaHkEnProceso: tareaEnProcesoPorHabitacion.get(hab.id) ?? null,
+        ...(detallePorHabitacion.get(hab.id) ?? {
+          estadiaId: null,
+          huesped: null,
+          checkinReal: null,
+          checkoutPrevisto: null,
+          tarifaDia: null,
+          totalAlquiler: null,
+          totalOtrosServicios: null,
+          totalPagado: null,
+          saldo: null,
+          notas: null,
+          cocheraNumero: null,
+          vehiculoTipo: null,
+          origen: null,
+          creadoPorAgente: false,
+        }),
+      };
+    });
   }
 
   /**
