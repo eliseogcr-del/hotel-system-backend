@@ -9,25 +9,6 @@ import { ListarNotasQueryDto } from './dto/listar-notas-query.dto';
 // medianoche UTC por error.
 const PERU_UTC_OFFSET_MS = 5 * 60 * 60 * 1000;
 
-function desdeRelojLima(relojLima: Date): Date {
-  return new Date(relojLima.getTime() + PERU_UTC_OFFSET_MS);
-}
-
-// Convierte una fecha 'YYYY-MM-DD' (hora Lima) al instante UTC real de esa
-// medianoche en Lima.
-function fechaLimaAInstante(fechaYMD: string): Date {
-  const [anio, mes, dia] = fechaYMD.split('-').map(Number);
-  const relojLima = new Date(Date.UTC(anio, mes - 1, dia, 0, 0, 0, 0));
-  return desdeRelojLima(relojLima);
-}
-
-function sumarDiasYMD(fechaYMD: string, dias: number): string {
-  const [anio, mes, dia] = fechaYMD.split('-').map(Number);
-  const d = new Date(Date.UTC(anio, mes - 1, dia));
-  d.setUTCDate(d.getUTCDate() + dias);
-  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}`;
-}
-
 // El <input type="datetime-local"> del formulario (Notas.tsx) manda
 // "YYYY-MM-DDTHH:mm" en hora del navegador, SIN zona -- si eso se guarda
 // tal cual en una columna timestamptz, Postgres lo interpreta con el
@@ -57,27 +38,26 @@ const NOTA_SELECT = `
   fecha_hora_envio,
   celular_destino,
   adjuntos,
-  telefonos_adicionales
+  telefonos_adicionales,
+  visible
 `;
 
 @Injectable()
 export class NotasService {
   /**
    * Obtiene las notas de un hotel, ordenadas de más reciente a más antigua
-   * (fecha_hora, la de creación). desde/hasta filtran por día calendario en
-   * hora Lima; por defecto el frontend manda las de hoy.
+   * (fecha_hora, la de creación). Ya no filtra por fecha -- siempre trae
+   * todas las notas visibles (o todas las ocultas, si se pide
+   * visible='false'), sin importar cuándo se crearon. "Visible" es un
+   * check que se puede desactivar por nota (ver actualizar()) para
+   * sacarla de la vista sin borrarla; por defecto (sin filtro) solo se
+   * traen las visibles.
    */
   async listar(client: SupabaseClient, hotelId: string, filtros: ListarNotasQueryDto) {
     let query = client.from('notas').select(NOTA_SELECT).eq('hotel_id', hotelId);
 
     if (filtros.tipo) query = query.eq('tipo', filtros.tipo);
-    if (filtros.desde) query = query.gte('fecha_hora', fechaLimaAInstante(filtros.desde).toISOString());
-    // Límite superior exclusivo (medianoche del día siguiente) -- evita
-    // líos de redondeo con "23:59:59.999" y sigue siendo el mismo instante
-    // real que "hasta las 23:59:59 hora Lima de ese día".
-    if (filtros.hasta) {
-      query = query.lt('fecha_hora', fechaLimaAInstante(sumarDiasYMD(filtros.hasta, 1)).toISOString());
-    }
+    query = query.eq('visible', filtros.visible !== 'false');
 
     const { data: notas, error } = await query.order('fecha_hora', { ascending: false });
     if (error) throw error;
@@ -139,6 +119,7 @@ export class NotasService {
     if (dto.celular_destino !== undefined) cambios.celular_destino = dto.celular_destino;
     if (dto.adjuntos !== undefined) cambios.adjuntos = dto.adjuntos;
     if (dto.telefonos_adicionales !== undefined) cambios.telefonos_adicionales = dto.telefonos_adicionales;
+    if (dto.visible !== undefined) cambios.visible = dto.visible;
 
     const { data: nota, error } = await client
       .from('notas')

@@ -47,4 +47,10 @@ export class ActualizarNotaDto {
   @IsArray()
   @IsString({ each: true })
   telefonos_adicionales?: string[];
+
+  // Para ocultar una nota sin borrarla (deja de aparecer en el listado por
+  // defecto y en RecordatorioNotas.tsx) -- ver ListarNotasQueryDto.visible.
+  @IsOptional()
+  @IsBoolean()
+  visible?: boolean;
 }

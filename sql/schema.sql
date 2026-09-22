@@ -514,6 +514,10 @@ create table notas (
     celular_destino text,
     adjuntos text[],
     telefonos_adicionales text[],
+    -- Check para ocultar una nota sin borrarla (ej. ya no aplica, quedó
+    -- resuelta). Al quedar en false deja de aparecer en el listado por
+    -- defecto y en el popup de recordatorios (ver NotasService.listar()).
+    visible boolean not null default true,
     created_at timestamptz not null default now()
 );
 

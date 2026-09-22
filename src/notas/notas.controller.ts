@@ -27,7 +27,7 @@ export class NotasController {
     private readonly supabase: SupabaseService,
   ) {}
 
-  // Obtener las notas de un hotel (filtrables por rango de fechas y tipo)
+  // Obtener las notas de un hotel (filtrables por tipo y por visibilidad)
   @Get()
   @Roles('admin', 'recepcion', 'hk')
   async listar(
