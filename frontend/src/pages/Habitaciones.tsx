@@ -876,7 +876,7 @@ function VistaTarjetas({
                 </span>
               )}
               {!h.huesped && !h.reservaHoy && h.estado === 'disponible' && (
-                <span style={{ fontSize: 11, color: 'var(--text-secondary)' }}>
+                <span style={{ fontSize: 11, fontWeight: 700, color: ESTADO_COLOR_INTENSO.disponible.text }}>
                   📅{' '}
                   {h.diasHastaProximaReserva == null
                     ? 'Disponible más de 30 días'
