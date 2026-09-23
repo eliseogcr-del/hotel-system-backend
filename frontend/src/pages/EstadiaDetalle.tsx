@@ -777,8 +777,18 @@ function EditarEstadiaModal({
         if (vehiculoTipo !== (vehiculoActual?.tipo ?? '')) cambiosEstadia.vehiculoTipo = vehiculoTipo;
         if (vehiculoPlaca !== (vehiculoActual?.placa ?? '')) cambiosEstadia.vehiculoPlaca = vehiculoPlaca;
         if (cocheraId && cocheraId !== cocheraActualId) cambiosEstadia.cocheraId = cocheraId;
-      } else if (cocheraActualId) {
-        cambiosEstadia.quitarCochera = true;
+      } else if (vehiculoActual) {
+        // Se desmarcó "tiene vehículo" habiendo un vehículo cargado: limpia
+        // sus datos y libera la cochera si tenía una asignada. Los 3 campos
+        // del vehículo se mandan siempre (aunque ya estuvieran vacíos) para
+        // que quede un cambio real que guardar -- si no, al desmarcar un
+        // vehículo sin cochera ni datos cargados no había ningún campo que
+        // difiriera y el formulario quedaba trabado en "No hay cambios para
+        // guardar".
+        cambiosEstadia.vehiculoMarca = '';
+        cambiosEstadia.vehiculoTipo = '';
+        cambiosEstadia.vehiculoPlaca = '';
+        if (cocheraActualId) cambiosEstadia.quitarCochera = true;
       }
       if (reasignando) cambiosEstadia.nuevoHuespedId = huespedIdActivo;
 
