@@ -62,9 +62,18 @@ export class HuespedesService {
 
     const buscar = query.buscar?.trim().replace(/[,()%]/g, '');
     if (buscar) {
-      consulta = consulta.or(
-        `nombres.ilike.%${buscar}%,apellidos.ilike.%${buscar}%,nro_doc.ilike.%${buscar}%,ruc.ilike.%${buscar}%,razon_social.ilike.%${buscar}%`,
-      );
+      // Varias palabras (ej. "carlos rios"): cada palabra debe matchear
+      // ALGÚN campo, pero no necesariamente el mismo -- así "carlos rios"
+      // encuentra a Carlos (nombres) Rios (apellidos) aunque ningún campo
+      // individual contenga el texto completo. Encadenar un .or() por
+      // palabra las combina con AND entre sí (comportamiento por defecto
+      // de PostgREST al encadenar filtros), y cada .or() sigue siendo el
+      // OR de siempre entre los 5 campos buscables.
+      for (const palabra of buscar.split(/\s+/)) {
+        consulta = consulta.or(
+          `nombres.ilike.%${palabra}%,apellidos.ilike.%${palabra}%,nro_doc.ilike.%${palabra}%,ruc.ilike.%${palabra}%,razon_social.ilike.%${palabra}%`,
+        );
+      }
     }
 
     const { data, error } = await consulta;

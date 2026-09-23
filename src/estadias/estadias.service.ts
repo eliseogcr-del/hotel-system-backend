@@ -852,10 +852,18 @@ export class EstadiasService {
         .eq('reservas.hotel_id', hotelId);
 
       if (busqueda) {
-        q = q.or(
-          `nombres.ilike.%${busqueda}%,apellidos.ilike.%${busqueda}%,nro_doc.ilike.%${busqueda}%,ruc.ilike.%${busqueda}%,razon_social.ilike.%${busqueda}%`,
-          { referencedTable: 'reservas.huespedes' },
-        );
+        // Varias palabras (ej. "carlos rios"): cada palabra debe matchear
+        // ALGÚN campo, no necesariamente el mismo -- así encuentra a Carlos
+        // (nombres) Rios (apellidos) aunque ningún campo individual
+        // contenga el texto completo. Encadenar un .or() por palabra las
+        // combina con AND entre sí (comportamiento por defecto de
+        // PostgREST al encadenar filtros).
+        for (const palabra of busqueda.split(/\s+/)) {
+          q = q.or(
+            `nombres.ilike.%${palabra}%,apellidos.ilike.%${palabra}%,nro_doc.ilike.%${palabra}%,ruc.ilike.%${palabra}%,razon_social.ilike.%${palabra}%`,
+            { referencedTable: 'reservas.huespedes' },
+          );
+        }
       }
       if (filtros.estado) {
         q = q.eq('estadias.estado_actual', filtros.estado);
@@ -918,10 +926,13 @@ export class EstadiasService {
           .eq('estado_actual', 'finalizada');
 
         if (busqueda) {
-          q = q.or(
-            `nombres.ilike.%${busqueda}%,apellidos.ilike.%${busqueda}%,nro_doc.ilike.%${busqueda}%,ruc.ilike.%${busqueda}%,razon_social.ilike.%${busqueda}%`,
-            { referencedTable: 'reserva_habitacion.reservas.huespedes' },
-          );
+          // Ver el comentario en construirQuery() más arriba.
+          for (const palabra of busqueda.split(/\s+/)) {
+            q = q.or(
+              `nombres.ilike.%${palabra}%,apellidos.ilike.%${palabra}%,nro_doc.ilike.%${palabra}%,ruc.ilike.%${palabra}%,razon_social.ilike.%${palabra}%`,
+              { referencedTable: 'reserva_habitacion.reservas.huespedes' },
+            );
+          }
         }
         if (filtros.conSaldo) {
           q = q.gt('saldo', 0);
