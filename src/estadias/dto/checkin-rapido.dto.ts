@@ -94,6 +94,17 @@ export class CheckinRapidoDto {
   @IsISO8601(undefined, { message: 'La fecha/hora de check-in no es válida.' })
   checkinPrevisto: string;
 
+  // Si recepción elige directamente la fecha/hora de salida programada (en
+  // vez de dejar que se calcule sola a partir de "dias" + la hora de
+  // check-out del hotel), se manda acá. Cuando viene, manda por encima de
+  // "dias": EstadiasService.checkinRapido() no fuerza diasManual y deja que
+  // ReservasService.crear() derive los días reales de la diferencia de
+  // fechas (mismo criterio que el resto del sistema -- una salida el mismo
+  // día del check-in siempre cuenta como 1 día).
+  @IsOptional()
+  @IsISO8601(undefined, { message: 'La fecha/hora de salida programada no es válida.' })
+  checkoutPrevisto?: string;
+
   // Si no viene, se calcula solo: 50% de tarifaDia si el ingreso es antes
   // de hora_checkin del hotel. Enviar 0 explícito para anularlo desde el
   // formulario.

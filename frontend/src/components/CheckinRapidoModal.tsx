@@ -27,6 +27,38 @@ function ahoraLocal(): string {
   return d.toISOString().slice(0, 16);
 }
 
+// Date -> "YYYY-MM-DDTHH:mm" en hora local del navegador, el formato que
+// espera un <input type="datetime-local">.
+function aDatetimeLocal(d: Date): string {
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+// Mismo cálculo que EstadiasService.calcularCheckoutPrevisto() en el
+// backend, para poder previsualizar la salida programada en el formulario
+// sin ida y vuelta al servidor: check-in + días, a la hora de check-out
+// configurada del hotel (o exactamente 24h*días después si el hotel opera
+// en modo 24h).
+function calcularCheckoutLocal(checkin: Date, dias: number, horaCheckoutHotel: string | undefined, modo24h: boolean): Date {
+  if (modo24h) {
+    return new Date(checkin.getTime() + dias * 24 * 60 * 60 * 1000);
+  }
+  const [hh, mm] = (horaCheckoutHotel ?? '12:00').split(':').map(Number);
+  const salida = new Date(checkin);
+  salida.setDate(salida.getDate() + dias);
+  salida.setHours(hh, mm, 0, 0);
+  return salida;
+}
+
+// Mismo criterio (ceil, mínimo 1 día) que ReservasService.calcularDias() en
+// el backend: una salida programada el mismo día del check-in siempre
+// cuenta como 1 día, aunque el huésped entre de mañana y salga esa misma
+// noche.
+function calcularDiasDesdeCheckout(checkin: Date, checkout: Date): number {
+  const dias = Math.ceil((checkout.getTime() - checkin.getTime()) / (24 * 60 * 60 * 1000));
+  return Math.max(1, dias);
+}
+
 type TipoCliente = 'normal' | 'corporativo' | 'web';
 
 interface TipoHabitacionPrecios {
@@ -53,6 +85,8 @@ interface Props {
   habNumero: number;
   habTipo?: string | null;
   precios: TipoHabitacionPrecios | null;
+  horaCheckoutHotel?: string;
+  modo24h: boolean;
   onClose: () => void;
   onCreado: () => void;
 }
@@ -70,6 +104,8 @@ export function CheckinRapidoModal({
   habNumero,
   habTipo,
   precios,
+  horaCheckoutHotel,
+  modo24h,
   onClose,
   onCreado,
 }: Props) {
@@ -100,6 +136,14 @@ export function CheckinRapidoModal({
   const [tarifaDia, setTarifaDia] = useState(precioSegunTipoCliente(precios, 'normal'));
   const [dias, setDias] = useState(1);
   const [checkinPrevisto, setCheckinPrevisto] = useState(ahoraLocal());
+  const [checkoutPrevisto, setCheckoutPrevisto] = useState(() =>
+    aDatetimeLocal(calcularCheckoutLocal(new Date(ahoraLocal()), 1, horaCheckoutHotel, modo24h)),
+  );
+  // true apenas recepción edita la salida programada directamente en vez
+  // de dejar que se calcule sola a partir de "Días" -- a partir de ahí el
+  // checkout elegido manda y son los días los que se recalculan (ver
+  // cambiarCheckoutPrevisto/cambiarDias/cambiarCheckinPrevisto más abajo).
+  const [checkoutEditadoManual, setCheckoutEditadoManual] = useState(false);
   const [cobroEarly, setCobroEarly] = useState('');
   const [incluyeDesayuno, setIncluyeDesayuno] = useState(false);
 
@@ -124,6 +168,42 @@ export function CheckinRapidoModal({
   function cambiarTipoCliente(valor: TipoCliente) {
     setTipoCliente(valor);
     setTarifaDia(precioSegunTipoCliente(precios, valor));
+  }
+
+  // "Días" y "Fecha y hora de salida programada" están sincronizados en
+  // ambos sentidos (igual que fecha/noches/salida en CotizarWhatsapp.tsx):
+  // editar días recalcula la salida (check-in + días, hora de check-out del
+  // hotel); editar la salida directamente recalcula los días, y esa
+  // elección manual queda fija aunque después se cambie el check-in (solo
+  // se reajustan los días para reflejar la nueva diferencia).
+  function cambiarDias(valorTexto: string) {
+    const valor = valorTexto === '' ? 0 : Math.max(1, Number(valorTexto));
+    setDias(valor);
+    setCheckoutEditadoManual(false);
+    if (valor > 0 && checkinPrevisto) {
+      setCheckoutPrevisto(
+        aDatetimeLocal(calcularCheckoutLocal(new Date(checkinPrevisto), valor, horaCheckoutHotel, modo24h)),
+      );
+    }
+  }
+
+  function cambiarCheckoutPrevisto(valor: string) {
+    setCheckoutPrevisto(valor);
+    setCheckoutEditadoManual(true);
+    if (valor && checkinPrevisto) {
+      setDias(calcularDiasDesdeCheckout(new Date(checkinPrevisto), new Date(valor)));
+    }
+  }
+
+  function cambiarCheckinPrevisto(valor: string) {
+    setCheckinPrevisto(valor);
+    if (checkoutEditadoManual) {
+      if (valor && checkoutPrevisto) {
+        setDias(calcularDiasDesdeCheckout(new Date(valor), new Date(checkoutPrevisto)));
+      }
+    } else if (valor && dias > 0) {
+      setCheckoutPrevisto(aDatetimeLocal(calcularCheckoutLocal(new Date(valor), dias, horaCheckoutHotel, modo24h)));
+    }
   }
 
   function seleccionarHuesped(h: Huesped) {
@@ -219,6 +299,7 @@ export function CheckinRapidoModal({
         tarifaDia,
         dias,
         checkinPrevisto: new Date(checkinPrevisto).toISOString(),
+        checkoutPrevisto: checkoutEditadoManual ? new Date(checkoutPrevisto).toISOString() : undefined,
         cobroEarlyManual: cobroEarly === '' ? undefined : Number(cobroEarly),
         incluyeDesayuno,
         cocheraId: tieneVehiculo && cocheraId ? cocheraId : undefined,
@@ -442,7 +523,7 @@ export function CheckinRapidoModal({
                     type="number"
                     min={1}
                     value={dias}
-                    onChange={(e) => setDias(Number(e.target.value))}
+                    onChange={(e) => cambiarDias(e.target.value)}
                     style={inputStyle}
                     required
                   />
@@ -469,22 +550,36 @@ export function CheckinRapidoModal({
                   />
                 </div>
               </div>
-              <div style={{ marginBottom: 8 }}>
-                <label style={labelStyle}>Fecha y hora de check-in</label>
-                <input
-                  type="datetime-local"
-                  value={checkinPrevisto}
-                  onChange={(e) => setCheckinPrevisto(e.target.value)}
-                  style={inputStyle}
-                  required
-                />
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 8 }}>
+                <div style={{ flex: 1, minWidth: 160 }}>
+                  <label style={labelStyle}>Fecha y hora de check-in</label>
+                  <input
+                    type="datetime-local"
+                    value={checkinPrevisto}
+                    onChange={(e) => cambiarCheckinPrevisto(e.target.value)}
+                    style={inputStyle}
+                    required
+                  />
+                </div>
+                <div style={{ flex: 1, minWidth: 160 }}>
+                  <label style={labelStyle}>Fecha y hora de salida programada</label>
+                  <input
+                    type="datetime-local"
+                    value={checkoutPrevisto}
+                    onChange={(e) => cambiarCheckoutPrevisto(e.target.value)}
+                    style={inputStyle}
+                    required
+                  />
+                </div>
               </div>
               <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13 }}>
                 <input type="checkbox" checked={incluyeDesayuno} onChange={(e) => setIncluyeDesayuno(e.target.checked)} />
                 Incluye desayuno (cortesía, no se cobra)
               </label>
               <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: '6px 0 0' }}>
-                La salida programada se calcula sola (check-in + días, según la hora de check-out del hotel).
+                La salida programada se calcula sola a partir de los días (check-in + días, según la hora de
+                check-out del hotel) -- o edítala directamente y los días se ajustan solos (si sale el mismo día
+                del check-in, siempre cuenta como 1 día).
               </p>
             </div>
 

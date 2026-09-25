@@ -74,6 +74,7 @@ interface EstadiaConReserva {
     incluye_desayuno: boolean;
     cochera_id: string | null;
     observaciones: string | null;
+    fecha_hora_checkout_prevista: string;
     habitaciones: { hab_numero: number; piso: number; tipo_id: string } | null;
     reservas: {
       id: string;
@@ -574,7 +575,19 @@ export class EstadiasService {
     const huespedId = await this.resolverHuesped(client, hotelId, dto);
     const hotel = await this.obtenerConfigHotel(client, hotelId);
     const checkinDate = new Date(dto.checkinPrevisto);
-    const checkoutPrevisto = this.calcularCheckoutPrevisto(checkinDate, dto.dias, hotel);
+    // Si recepción eligió la fecha/hora de salida directamente, esa manda
+    // -- se omite diasManual para que ReservasService.crear() derive los
+    // días reales de la diferencia de fechas (ceil, mínimo 1 día: una
+    // salida programada el mismo día del check-in siempre cuenta como 1).
+    // Si no, se mantiene el cálculo de siempre (dias + hora de check-out
+    // del hotel) y se fija diasManual con el valor exacto que pidió
+    // recepción (ver el comentario de diasManual en
+    // CrearReservaHabitacionDto sobre por qué hace falta fijarlo ahí).
+    const checkoutElegido = dto.checkoutPrevisto ? new Date(dto.checkoutPrevisto) : null;
+    if (checkoutElegido && checkoutElegido <= checkinDate) {
+      throw new BadRequestException('La fecha/hora de salida programada debe ser posterior al check-in.');
+    }
+    const checkoutPrevisto = checkoutElegido ?? this.calcularCheckoutPrevisto(checkinDate, dto.dias, hotel);
     const cobroEarly = this.calcularCobroEarly(
       checkinDate,
       dto.tarifaDia,
@@ -594,7 +607,7 @@ export class EstadiasService {
           checkinPrevisto: checkinDate.toISOString(),
           checkoutPrevisto: checkoutPrevisto.toISOString(),
           tarifaDiaManual: dto.tarifaDia,
-          diasManual: dto.dias,
+          diasManual: checkoutElegido ? undefined : dto.dias,
           cobroEarly,
           incluyeDesayuno: dto.incluyeDesayuno,
           cocheraId: dto.cocheraId,
@@ -1201,6 +1214,7 @@ export class EstadiasService {
     if (
       dto.tarifaDiaNueva === undefined &&
       dto.diasAdicionales === undefined &&
+      dto.checkoutPrevistoNuevo === undefined &&
       dto.cocheraId === undefined &&
       !dto.quitarCochera &&
       dto.vehiculoMarca === undefined &&
@@ -1271,7 +1285,16 @@ export class EstadiasService {
     if (dto.incluyeDesayuno !== undefined) cambiosLinea.incluye_desayuno = dto.incluyeDesayuno;
     if (dto.observaciones !== undefined) cambiosLinea.observaciones = dto.observaciones;
 
-    if (dto.diasAdicionales) {
+    // Dos formas de tocar la salida programada, mutuamente excluyentes:
+    // diasAdicionales es un delta relativo (ej. "+1 día"); checkoutPrevistoNuevo
+    // fija una fecha/hora absoluta (ej. adelantarla a hoy a una hora puntual,
+    // no solo "un día menos" preservando la hora que ya tenía). Cualquiera de
+    // los dos termina resolviendo el mismo par (diasDelta, nuevoCheckout) que
+    // alimenta tanto el update de la línea como el cobro/ajuste de abajo.
+    let diasDelta: number | undefined;
+    let nuevoCheckout: Date | undefined;
+
+    if (dto.checkoutPrevistoNuevo !== undefined || dto.diasAdicionales) {
       const { data: rhActual, error: rhError } = await client
         .from('reserva_habitacion')
         .select('dias, fecha_hora_checkout_prevista')
@@ -1279,25 +1302,44 @@ export class EstadiasService {
         .single();
       if (rhError) throw rhError;
 
-      const diasNuevos = Number(rhActual.dias) + dto.diasAdicionales;
+      if (dto.checkoutPrevistoNuevo !== undefined) {
+        const checkinReal = new Date(estadia.checkin_real!);
+        nuevoCheckout = new Date(dto.checkoutPrevistoNuevo);
+        if (nuevoCheckout <= checkinReal) {
+          throw new BadRequestException('La fecha/hora de salida programada debe ser posterior al check-in.');
+        }
+        // Mismo criterio (ceil, mínimo 1 día) que ReservasService.calcularDias():
+        // una salida programada el mismo día del check-in siempre cuenta como
+        // 1 día, aunque el huésped entre de mañana y salga esa misma noche.
+        const diasNuevosTotal = Math.max(
+          1,
+          Math.ceil((nuevoCheckout.getTime() - checkinReal.getTime()) / (24 * 60 * 60 * 1000)),
+        );
+        diasDelta = diasNuevosTotal - Number(rhActual.dias);
+      } else {
+        // Solo se llega acá cuando dto.diasAdicionales fue truthy (ver la
+        // condición del if de arriba), nunca undefined ni 0.
+        diasDelta = dto.diasAdicionales!;
+        nuevoCheckout = new Date(
+          new Date(rhActual.fecha_hora_checkout_prevista).getTime() + diasDelta * 24 * 60 * 60 * 1000,
+        );
+      }
+
+      const diasNuevos = Number(rhActual.dias) + diasDelta;
       if (diasNuevos < 1) {
         throw new BadRequestException(
           `No se puede reducir: la estadía quedaría con ${diasNuevos} día(s). El mínimo es 1 día.`,
         );
       }
 
-      const nuevoCheckout = new Date(
-        new Date(rhActual.fecha_hora_checkout_prevista).getTime() +
-          dto.diasAdicionales * 24 * 60 * 60 * 1000,
-      );
-      if (dto.diasAdicionales < 0 && nuevoCheckout.getTime() <= Date.now()) {
+      if (nuevoCheckout.getTime() <= Date.now()) {
         // Si el checkout corregido quedara en el pasado, procesarSalidasVencidas()
         // (que corre solo, ver más abajo) lo volvería a extender apenas
         // pase 1 hora -- deshaciendo la corrección sin que nadie se dé
         // cuenta. Mejor rechazarlo con un mensaje claro que dejar ese
         // comportamiento confuso.
         throw new BadRequestException(
-          'No se puede reducir tantos días: la salida programada quedaría en el pasado (el sistema la volvería a extender sola). Reduce menos días o corrige la hora de check-in primero.',
+          'No se puede fijar esa salida: quedaría en el pasado (el sistema la volvería a extender sola). Elige una fecha/hora futura, o corrige la hora de check-in primero.',
         );
       }
 
@@ -1362,23 +1404,24 @@ export class EstadiasService {
       if (facturableError) throw facturableError;
     }
 
-    if (dto.diasAdicionales) {
-      if (dto.diasAdicionales > 0) {
+    if (diasDelta) {
+      if (diasDelta > 0) {
         await this.insertarMovimiento(client, estadiaId, {
           tipo: 'alquiler',
-          monto: tarifaFinal * dto.diasAdicionales,
-          notas: `Extensión de estadía: +${dto.diasAdicionales} día(s)`,
+          monto: tarifaFinal * diasDelta,
+          notas: `Extensión de estadía: +${diasDelta} día(s)`,
           registradoPor: personalId,
         });
       } else {
-        // Reducción de días (ej. error de digitación en el check-in): se
-        // reversa con un 'ajuste' negativo por el monto exacto de más que
-        // se había cobrado, en vez de tocar el cargo de 'alquiler' original
-        // ya registrado (nunca se editan movimientos ya posteados).
+        // Reducción de días (ej. error de digitación en el check-in, o se
+        // adelantó la salida): se reversa con un 'ajuste' negativo por el
+        // monto exacto de más que se había cobrado, en vez de tocar el
+        // cargo de 'alquiler' original ya registrado (nunca se editan
+        // movimientos ya posteados).
         await this.insertarMovimiento(client, estadiaId, {
           tipo: 'ajuste',
-          monto: tarifaFinal * dto.diasAdicionales,
-          notas: `Corrección de estadía: ${dto.diasAdicionales} día(s) (se cobraron de más)`,
+          monto: tarifaFinal * diasDelta,
+          notas: `Corrección de estadía: ${diasDelta} día(s) (se cobraron de más)`,
           registradoPor: personalId,
         });
       }
@@ -1492,6 +1535,7 @@ export class EstadiasService {
         id, estado_actual, saldo, checkin_real, checkout_real, facturable,
         reserva_habitacion!inner(
           id, habitacion_id, subtotal, tarifa_dia, dias, nro_personas, incluye_desayuno, cochera_id, observaciones,
+          fecha_hora_checkout_prevista,
           habitaciones(hab_numero, piso, tipo_id),
           reservas!inner(
             id, hotel_id, estado, huesped_id, origen, creado_por_agente,
