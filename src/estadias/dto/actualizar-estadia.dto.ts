@@ -1,4 +1,4 @@
-import { IsBoolean, IsEnum, IsInt, IsNumber, IsOptional, IsString, IsUUID, Min } from 'class-validator';
+import { IsBoolean, IsEnum, IsInt, IsISO8601, IsNumber, IsOptional, IsString, IsUUID, Min } from 'class-validator';
 import { OrigenReserva } from '../../reservas/dto/crear-reserva.dto';
 
 /**
@@ -23,6 +23,16 @@ export class ActualizarEstadiaDto {
   @IsInt()
   @Min(-90)
   diasAdicionales?: number;
+
+  // Alternativa a diasAdicionales: en vez de un delta relativo, fija
+  // directamente la fecha/hora de salida programada (ej. adelantarla al
+  // día de hoy con una hora puntual, no solo "un día menos" preservando la
+  // hora que ya tenía). Si viene, manda por encima de diasAdicionales --
+  // ver EstadiasService.actualizar(), donde ambos caminos terminan en el
+  // mismo cálculo de diferencia de días para el cobro/ajuste.
+  @IsOptional()
+  @IsISO8601(undefined, { message: 'La fecha/hora de salida programada no es válida.' })
+  checkoutPrevistoNuevo?: string;
 
   // Cochera a asignar (debe estar 'disponible', o ser la que ya tiene esta
   // estadía). Se ignora si quitarCochera viene en true.

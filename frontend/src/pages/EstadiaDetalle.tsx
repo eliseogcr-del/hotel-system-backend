@@ -52,6 +52,7 @@ interface EstadiaDetalleData {
     incluye_desayuno: boolean;
     cochera_id: string | null;
     observaciones: string | null;
+    fecha_hora_checkout_prevista: string;
     habitaciones: { hab_numero: number; piso: number; tipo_id: string } | null;
     reservas: {
       huesped_id: string;
@@ -145,6 +146,22 @@ function ahoraLocal(): string {
   d.setSeconds(0, 0);
   d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
   return d.toISOString().slice(0, 16);
+}
+
+// ISO guardado en la base -> "YYYY-MM-DDTHH:mm" en hora local del
+// navegador, el formato que espera un <input type="datetime-local">.
+function aDatetimeLocal(iso: string): string {
+  const d = new Date(iso);
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+// Mismo criterio (ceil, mínimo 1 día) que ReservasService.calcularDias() y
+// EstadiasService.actualizar() en el backend: una salida programada el
+// mismo día del check-in siempre cuenta como 1 día.
+function calcularNochesDesdeCheckout(checkin: Date, checkout: Date): number {
+  const noches = Math.ceil((checkout.getTime() - checkin.getTime()) / (24 * 60 * 60 * 1000));
+  return Math.max(1, noches);
 }
 
 export function EstadiaDetalle() {
@@ -387,6 +404,7 @@ export function EstadiaDetalle() {
           checkinReal={estadia.checkin_real}
           tarifaActual={estadia.reserva_habitacion.tarifa_dia}
           diasActuales={estadia.reserva_habitacion.dias}
+          checkoutActual={estadia.reserva_habitacion.fecha_hora_checkout_prevista}
           nroPersonasActual={estadia.reserva_habitacion.nro_personas}
           incluyeDesayunoActual={estadia.reserva_habitacion.incluye_desayuno}
           facturableActual={estadia.facturable}
@@ -603,6 +621,7 @@ function EditarEstadiaModal({
   checkinReal,
   tarifaActual,
   diasActuales,
+  checkoutActual,
   nroPersonasActual,
   incluyeDesayunoActual,
   facturableActual,
@@ -621,6 +640,7 @@ function EditarEstadiaModal({
   checkinReal: string | null;
   tarifaActual: number;
   diasActuales: number;
+  checkoutActual: string;
   nroPersonasActual: number;
   incluyeDesayunoActual: boolean;
   facturableActual: boolean;
@@ -659,7 +679,15 @@ function EditarEstadiaModal({
   const [nroPersonas, setNroPersonas] = useState(nroPersonasActual);
   const [tipoCliente, setTipoCliente] = useState<TipoCliente>('normal');
   const [tarifaDiaNueva, setTarifaDiaNueva] = useState(String(tarifaActual));
-  const [diasAdicionales, setDiasAdicionales] = useState('');
+  const [nochesTotal, setNochesTotal] = useState(diasActuales);
+  const [checkoutPrevisto, setCheckoutPrevisto] = useState(aDatetimeLocal(checkoutActual));
+  // true apenas se edita la salida programada directamente en vez de la
+  // cantidad de noches -- a partir de ahí se manda la fecha/hora elegida
+  // tal cual (EstadiasService.actualizar() deriva las noches solo, mismo
+  // criterio de "mismo día = 1 noche"); si no, se manda un delta relativo
+  // de noches que preserva la hora de salida que ya tenía (mismo mecanismo
+  // que ya existía).
+  const [checkoutEditadoManual, setCheckoutEditadoManual] = useState(false);
   const [incluyeDesayuno, setIncluyeDesayuno] = useState(incluyeDesayunoActual);
   const [facturable, setFacturable] = useState(facturableActual);
   const [origenReserva, setOrigenReserva] = useState(origenActual);
@@ -686,6 +714,32 @@ function EditarEstadiaModal({
   function cambiarTipoCliente(valor: TipoCliente) {
     setTipoCliente(valor);
     setTarifaDiaNueva(String(precioSegunTipoCliente(precios, valor)));
+  }
+
+  // "Cantidad de noches" y "Fecha y hora de salida programada" están
+  // sincronizados en ambos sentidos. Editar noches desplaza el checkout
+  // ACTUAL (checkoutActual) esa cantidad de días de diferencia respecto a
+  // diasActuales -- preserva la hora de salida que ya tenía, igual que el
+  // delta relativo de antes. Editar el checkout directamente recalcula las
+  // noches desde el check-in real, y esa elección manual queda fija.
+  function cambiarNoches(valorTexto: string) {
+    const valor = valorTexto === '' ? 0 : Math.max(1, Number(valorTexto));
+    setNochesTotal(valor);
+    setCheckoutEditadoManual(false);
+    if (valor > 0) {
+      const nuevoCheckout = new Date(
+        new Date(checkoutActual).getTime() + (valor - diasActuales) * 24 * 60 * 60 * 1000,
+      );
+      setCheckoutPrevisto(aDatetimeLocal(nuevoCheckout.toISOString()));
+    }
+  }
+
+  function cambiarCheckoutPrevisto(valor: string) {
+    setCheckoutPrevisto(valor);
+    setCheckoutEditadoManual(true);
+    if (valor && checkinReal) {
+      setNochesTotal(calcularNochesDesdeCheckout(new Date(checkinReal), new Date(valor)));
+    }
   }
 
   function seleccionarHuesped(h: Huesped) {
@@ -766,7 +820,11 @@ function EditarEstadiaModal({
       const cambiosEstadia: Record<string, string | number | boolean> = {};
       const tarifaNum = Number(tarifaDiaNueva);
       if (tarifaNum !== tarifaActual) cambiosEstadia.tarifaDiaNueva = tarifaNum;
-      if (diasAdicionales) cambiosEstadia.diasAdicionales = Number(diasAdicionales);
+      if (checkoutEditadoManual) {
+        cambiosEstadia.checkoutPrevistoNuevo = new Date(checkoutPrevisto).toISOString();
+      } else if (nochesTotal !== diasActuales) {
+        cambiosEstadia.diasAdicionales = nochesTotal - diasActuales;
+      }
       if (nroPersonas !== nroPersonasActual) cambiosEstadia.nroPersonas = nroPersonas;
       if (incluyeDesayuno !== incluyeDesayunoActual) cambiosEstadia.incluyeDesayuno = incluyeDesayuno;
       if (facturable !== facturableActual) cambiosEstadia.facturable = facturable;
@@ -1037,22 +1095,17 @@ function EditarEstadiaModal({
                     <option value="web">Web</option>
                   </select>
                 </div>
-                <div style={{ width: 150 }}>
-                  <label style={labelStyle}>Días a agregar/quitar</label>
+                <div style={{ width: 110 }}>
+                  <label style={labelStyle}>Cantidad de noches</label>
                   <input
                     type="number"
-                    placeholder="0"
-                    value={diasAdicionales}
-                    onChange={(e) => setDiasAdicionales(e.target.value)}
+                    min={1}
+                    value={nochesTotal}
+                    onChange={(e) => cambiarNoches(e.target.value)}
                     style={inputStyle}
                   />
                 </div>
               </div>
-              <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: '0 0 8px' }}>
-                Días actuales: {diasActuales}. Un número positivo (ej. 2) extiende la salida programada y genera
-                el cargo de alquiler correspondiente; uno negativo (ej. -2) la acorta y revierte lo cobrado de
-                más con un ajuste — para corregir un error al registrar los días, ej. en el check-in.
-              </p>
               <div style={{ marginBottom: 8 }}>
                 <label style={labelStyle}>Fecha y hora de check-in</label>
                 <input
@@ -1065,6 +1118,23 @@ function EditarEstadiaModal({
                   No se puede editar: es el momento real en que ingresó el huésped.
                 </p>
               </div>
+              <div style={{ marginBottom: 8 }}>
+                <label style={labelStyle}>Fecha y hora de salida programada</label>
+                <input
+                  type="datetime-local"
+                  value={checkoutPrevisto}
+                  onChange={(e) => cambiarCheckoutPrevisto(e.target.value)}
+                  style={inputStyle}
+                  required
+                />
+              </div>
+              <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: '0 0 8px' }}>
+                Noches actuales: {diasActuales}. Al cambiar la cantidad de noches, la salida programada se
+                desplaza esa diferencia de días manteniendo la hora que ya tenía -- o edita la fecha/hora de
+                salida directamente (ej. adelantarla a hoy a una hora puntual) y las noches se ajustan solas (si
+                sale el mismo día del check-in, siempre cuenta como 1 noche). Extender genera el cargo de
+                alquiler correspondiente; acortar revierte lo cobrado de más con un ajuste.
+              </p>
               <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, marginBottom: 6 }}>
                 <input type="checkbox" checked={incluyeDesayuno} onChange={(e) => setIncluyeDesayuno(e.target.checked)} />
                 Incluye desayuno (cortesía, no se cobra)

@@ -765,6 +765,8 @@ export function Habitaciones() {
           habNumero={checkinHab.hab_numero}
           habTipo={checkinHab.tipos_habitacion?.nombre}
           precios={preciosDe(checkinHab.tipos_habitacion?.id)}
+          horaCheckoutHotel={horaCheckoutHotel}
+          modo24h={modo24h}
           onClose={() => setCheckinHab(null)}
           onCreado={cargarSiAutomatico}
         />
