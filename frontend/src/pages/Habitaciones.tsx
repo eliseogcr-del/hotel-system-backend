@@ -866,12 +866,12 @@ function VistaTarjetas({
                 </span>
               )}
               {h.huesped && h.checkinReal && (
-                <span style={{ fontSize: 11, fontWeight: 700, color: '#fde047' }}>
+                <span style={{ fontSize: 11, fontWeight: 700, color: '#000000' }}>
                   Chk in: {formatoFechaHora(h.checkinReal)}
                 </span>
               )}
               {h.huesped && h.checkoutPrevisto && (
-                <span style={{ fontSize: 11, fontWeight: 700, color: '#fde047' }}>
+                <span style={{ fontSize: 11, fontWeight: 700, color: '#000000' }}>
                   Chk out: {formatoFechaHora(h.checkoutPrevisto)}
                 </span>
               )}
