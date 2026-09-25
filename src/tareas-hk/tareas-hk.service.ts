@@ -4,6 +4,7 @@ import { CrearTareaHkDto } from './dto/crear-tarea-hk.dto';
 import { AsignarTareaHkDto } from './dto/asignar-tarea-hk.dto';
 import { ActualizarNotasTareaHkDto } from './dto/actualizar-notas-tarea-hk.dto';
 import { ListarTareasHkQueryDto } from './dto/listar-tareas-hk-query.dto';
+import { MarcarSinMantenimientoDto } from './dto/marcar-sin-mantenimiento.dto';
 
 // Perú (America/Lima) es UTC-5 todo el año -- mismo criterio que en
 // estadias.service.ts para no comparar contra medianoche UTC por error.
@@ -93,12 +94,80 @@ export class TareasHkService {
     return data;
   }
 
+  /**
+   * Recepción confirma, para una habitación ocupada, que hoy no necesita
+   * mantenimiento -- ver la sección "Mantenimientos y Limpiezas" de
+   * Habitaciones.tsx, que lista todas las ocupadas (tengan tarea o no)
+   * para que alguien las revise una por una. Deja un registro 'terminado'
+   * sin pasar por iniciar()/terminar(): no toca el estado de la
+   * habitación (sigue 'ocupada') ni agrega nada a las notas del huésped,
+   * a diferencia de un mantenimiento real ya hecho. Se identifica en el
+   * frontend por la combinación tipo='mantenimiento' + estado='terminado'
+   * + con_huesped_dentro=false, algo que el flujo normal (crear + iniciar
+   * + terminar) no puede producir mientras la habitación sigue 'ocupada'
+   * (iniciar() saca la habitación de 'ocupada' apenas con_huesped_dentro
+   * es false). Como queda fechado a hoy (created_at/finalizado_en), mañana
+   * la habitación vuelve a pedir la validación de nuevo -- no hay
+   * columna ni estado nuevo, es la misma tabla de siempre.
+   */
+  async marcarSinMantenimiento(
+    client: SupabaseClient,
+    hotelId: string,
+    dto: MarcarSinMantenimientoDto,
+    personalId: string,
+  ) {
+    const { data: hab, error: habError } = await client
+      .from('habitaciones')
+      .select('id, estado')
+      .eq('id', dto.habitacionId)
+      .eq('hotel_id', hotelId)
+      .maybeSingle();
+    if (habError) throw habError;
+    if (!hab) throw new NotFoundException('La habitación no existe en este hotel');
+    if (hab.estado !== 'ocupada') {
+      throw new BadRequestException(
+        `Solo se puede marcar "no necesita mantenimiento" en una habitación ocupada (está en '${hab.estado}')`,
+      );
+    }
+
+    const { data: tareaActiva, error: tareaError } = await client
+      .from('tareas_hk')
+      .select('id')
+      .eq('hotel_id', hotelId)
+      .eq('habitacion_id', dto.habitacionId)
+      .in('estado', ['planificado', 'en_proceso'])
+      .limit(1)
+      .maybeSingle();
+    if (tareaError) throw tareaError;
+    if (tareaActiva) {
+      throw new BadRequestException('Ya hay una tarea de mantenimiento activa para esta habitación');
+    }
+
+    const ahora = new Date().toISOString();
+    const { data, error } = await client
+      .from('tareas_hk')
+      .insert({
+        hotel_id: hotelId,
+        habitacion_id: dto.habitacionId,
+        tipo: 'mantenimiento',
+        con_huesped_dentro: false,
+        estado: 'terminado',
+        definido_por: personalId,
+        finalizado_en: ahora,
+        notas: 'No necesita mantenimiento (marcado por recepción)',
+      })
+      .select('*, habitaciones(hab_numero, piso, tipos_habitacion(nombre))')
+      .single();
+    if (error) throw error;
+    return data;
+  }
+
   async listar(client: SupabaseClient, hotelId: string, filtros: ListarTareasHkQueryDto) {
     await this.rolloverPlanificadasVencidas(client, hotelId);
 
     let query = client
       .from('tareas_hk')
-      .select('*, habitaciones(hab_numero, piso)')
+      .select('*, habitaciones(hab_numero, piso, tipos_habitacion(nombre))')
       .eq('hotel_id', hotelId)
       .order('prioridad', { ascending: true })
       .order('created_at', { ascending: true });

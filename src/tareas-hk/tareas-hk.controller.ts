@@ -20,6 +20,7 @@ import { CrearTareaHkDto } from './dto/crear-tarea-hk.dto';
 import { AsignarTareaHkDto } from './dto/asignar-tarea-hk.dto';
 import { ActualizarNotasTareaHkDto } from './dto/actualizar-notas-tarea-hk.dto';
 import { ListarTareasHkQueryDto } from './dto/listar-tareas-hk-query.dto';
+import { MarcarSinMantenimientoDto } from './dto/marcar-sin-mantenimiento.dto';
 
 @Controller('hoteles/:hotelId/tareas-hk')
 @UseGuards(AuthGuard, RolesGuard)
@@ -38,6 +39,17 @@ export class TareasHkController {
   ) {
     const client = this.supabase.getClientForRequest(user.accessToken);
     return this.tareasHkService.crear(client, hotelId, dto, user.personalId);
+  }
+
+  @Post('sin-mantenimiento')
+  @Roles('admin', 'recepcion', 'hk')
+  async marcarSinMantenimiento(
+    @Param('hotelId') hotelId: string,
+    @Body() dto: MarcarSinMantenimientoDto,
+    @CurrentUser() user: RequestUser,
+  ) {
+    const client = this.supabase.getClientForRequest(user.accessToken);
+    return this.tareasHkService.marcarSinMantenimiento(client, hotelId, dto, user.personalId);
   }
 
   @Get()
