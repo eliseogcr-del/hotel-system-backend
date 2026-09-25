@@ -111,6 +111,39 @@ interface ProximaLlegada {
   origen: string;
 }
 
+// Fila cruda que devuelve GET /tareas-hk (ver TareasHkService.listar()).
+interface TareaHkFila {
+  id: string;
+  habitacion_id: string;
+  tipo: 'limpieza' | 'mantenimiento';
+  estado: 'planificado' | 'en_proceso' | 'terminado';
+  con_huesped_dentro: boolean;
+  habitaciones: { hab_numero: number; piso: number; tipos_habitacion: { nombre: string } | null } | null;
+}
+
+// 'sin_necesidad': marcador de TareasHkService.marcarSinMantenimiento() --
+// se identifica por tipo='mantenimiento' + estado='terminado' +
+// con_huesped_dentro=false, una combinación que el flujo normal (crear +
+// iniciar + terminar) no puede producir mientras la habitación sigue
+// 'ocupada' (ver el comentario en ese método del backend).
+type CategoriaFilaMantenimiento = 'ocupada_sin_tarea' | 'sin_necesidad' | 'mantenimiento_con_huesped' | 'limpieza_o_mantenimiento';
+
+interface FilaMantenimiento {
+  habitacionId: string;
+  habNumero: number;
+  tipoHabitacion: string | null;
+  tarea: TareaHkFila | null;
+  categoria: CategoriaFilaMantenimiento;
+}
+
+function categoriaDeTarea(tarea: TareaHkFila): CategoriaFilaMantenimiento {
+  if (tarea.tipo === 'mantenimiento' && tarea.estado === 'terminado' && !tarea.con_huesped_dentro) {
+    return 'sin_necesidad';
+  }
+  if (tarea.tipo === 'mantenimiento' && tarea.con_huesped_dentro) return 'mantenimiento_con_huesped';
+  return 'limpieza_o_mantenimiento';
+}
+
 const ORIGEN_LABEL: Record<string, string> = {
   telefono: 'Teléfono',
   whatsapp: 'WhatsApp',
@@ -125,6 +158,10 @@ const ORIGEN_LABEL: Record<string, string> = {
 function fechaLimaYMD(iso: string): string {
   const d = new Date(new Date(iso).getTime() - 5 * 60 * 60 * 1000);
   return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}`;
+}
+
+function hoyLimaYMD(): string {
+  return fechaLimaYMD(new Date().toISOString());
 }
 
 // HH:MM en hora Lima -- misma conversión que fechaLimaYMD, para mostrar la
@@ -702,6 +739,12 @@ export function Habitaciones() {
 
       <ProximasLlegadas llegadas={proximasLlegadas} />
 
+      <SeccionMantenimientoLimpieza
+        hotelId={hotelActual.hotelId}
+        habitaciones={habitaciones}
+        onCambio={cargarSiAutomatico}
+      />
+
       {checkinHab && (
         <CheckinRapidoModal
           hotelId={hotelActual.hotelId}
@@ -1009,6 +1052,301 @@ function ProximasLlegadas({ llegadas }: { llegadas: ProximaLlegada[] }) {
           </div>
         );
       })}
+    </div>
+  );
+}
+
+// Habitaciones ocupadas (tengan tarea o no, para que recepción revise una
+// por una) + limpieza/mantenimiento -- toda la cola de HK en un solo lugar,
+// con checks manuales que hacen exactamente lo mismo que haría HK desde su
+// propio módulo (mismos endpoints de tareas-hk). El filtro de fecha usa el
+// mismo 'fecha' de TareasHkService.listar(), que ya arrastra al día actual
+// las tareas 'planificado' que quedaron pendientes de días anteriores (ver
+// rolloverPlanificadasVencidas() en el backend) -- así nunca se pierde una
+// pendiente aunque no se haya cerrado el día que se creó.
+function SeccionMantenimientoLimpieza({
+  hotelId,
+  habitaciones,
+  onCambio,
+}: {
+  hotelId: string;
+  habitaciones: Habitacion[];
+  onCambio: () => void;
+}) {
+  const [tareas, setTareas] = useState<TareaHkFila[]>([]);
+  const [fechaFiltro, setFechaFiltro] = useState(hoyLimaYMD());
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [accionando, setAccionando] = useState<string | null>(null);
+
+  function cargarTareas() {
+    setLoading(true);
+    return api
+      .get<TareaHkFila[]>(`/hoteles/${hotelId}/tareas-hk?fecha=${fechaFiltro}`)
+      .then(setTareas)
+      .catch((err) => setError(err instanceof ApiError ? err.message : 'No se pudieron cargar las tareas'))
+      .finally(() => setLoading(false));
+  }
+
+  useEffect(() => {
+    cargarTareas();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hotelId, fechaFiltro]);
+
+  // Planifica un mantenimiento con huésped dentro (CLAUDE.md 3.2: se le
+  // pregunta al huésped si autoriza el ingreso) -- la única forma de
+  // "planificar" desde una fila 'ocupada_sin_tarea', ya que limpieza y
+  // mantenimiento sin huésped siempre nacen con su propia tarea (al
+  // checkout o cuando HK la crea).
+  async function crearTareaConHuesped(habitacionId: string) {
+    setAccionando(habitacionId);
+    setError(null);
+    try {
+      await api.post(`/hoteles/${hotelId}/tareas-hk`, {
+        habitacionId,
+        tipo: 'mantenimiento',
+        conHuespedDentro: true,
+      });
+      await cargarTareas();
+      onCambio();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'No se pudo planificar el mantenimiento');
+    } finally {
+      setAccionando(null);
+    }
+  }
+
+  async function iniciarTarea(habitacionId: string, tareaId: string) {
+    setAccionando(habitacionId);
+    setError(null);
+    try {
+      await api.post(`/hoteles/${hotelId}/tareas-hk/${tareaId}/iniciar`);
+      await cargarTareas();
+      onCambio();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'No se pudo iniciar la tarea');
+    } finally {
+      setAccionando(null);
+    }
+  }
+
+  async function terminarTarea(habitacionId: string, tareaId: string) {
+    setAccionando(habitacionId);
+    setError(null);
+    try {
+      await api.post(`/hoteles/${hotelId}/tareas-hk/${tareaId}/terminar`);
+      await cargarTareas();
+      onCambio();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'No se pudo terminar la tarea');
+    } finally {
+      setAccionando(null);
+    }
+  }
+
+  async function marcarSinNecesidad(habitacionId: string) {
+    setAccionando(habitacionId);
+    setError(null);
+    try {
+      await api.post(`/hoteles/${hotelId}/tareas-hk/sin-mantenimiento`, { habitacionId });
+      await cargarTareas();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'No se pudo guardar');
+    } finally {
+      setAccionando(null);
+    }
+  }
+
+  async function marcarDisponible(habitacionId: string) {
+    setAccionando(habitacionId);
+    setError(null);
+    try {
+      await api.patch(`/hoteles/${hotelId}/habitaciones/${habitacionId}/marcar-disponible`);
+      await cargarTareas();
+      onCambio();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'No se pudo marcar disponible');
+    } finally {
+      setAccionando(null);
+    }
+  }
+
+  const esHoy = fechaFiltro === hoyLimaYMD();
+  const filas: FilaMantenimiento[] = [];
+  const idsConTarea = new Set<string>();
+  for (const t of tareas) {
+    idsConTarea.add(t.habitacion_id);
+    filas.push({
+      habitacionId: t.habitacion_id,
+      habNumero: t.habitaciones?.hab_numero ?? 0,
+      tipoHabitacion: t.habitaciones?.tipos_habitacion?.nombre ?? null,
+      tarea: t,
+      categoria: categoriaDeTarea(t),
+    });
+  }
+  // Solo se proyectan habitaciones ocupadas sin tarea para HOY -- para una
+  // fecha pasada esto sería el estado ACTUAL de la habitación, no el que
+  // tenía ese día, así que no tendría sentido.
+  if (esHoy) {
+    for (const h of habitaciones) {
+      if (h.estado === 'ocupada' && !idsConTarea.has(h.id)) {
+        filas.push({
+          habitacionId: h.id,
+          habNumero: h.hab_numero,
+          tipoHabitacion: h.tipos_habitacion?.nombre ?? null,
+          tarea: null,
+          categoria: 'ocupada_sin_tarea',
+        });
+      }
+    }
+  }
+  filas.sort((a, b) => a.habNumero - b.habNumero);
+
+  function estadoActualDe(habitacionId: string): Estado | undefined {
+    return habitaciones.find((h) => h.id === habitacionId)?.estado;
+  }
+
+  return (
+    <div style={{ marginTop: 28 }}>
+      <h2 style={{ fontSize: 16, marginBottom: 10 }}>Mantenimientos y Limpiezas</h2>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'flex-end', marginBottom: 12 }}>
+        <div>
+          <label style={{ fontSize: 11, color: 'var(--text-secondary)', display: 'block', marginBottom: 3 }}>
+            Fecha
+          </label>
+          <input
+            type="date"
+            value={fechaFiltro}
+            onChange={(e) => setFechaFiltro(e.target.value)}
+            style={{ padding: '8px 10px', border: '1px solid var(--border)', borderRadius: 'var(--radius)', fontSize: 13 }}
+          />
+        </div>
+        {!esHoy && (
+          <button
+            type="button"
+            onClick={() => setFechaFiltro(hoyLimaYMD())}
+            style={{
+              padding: '8px 10px',
+              background: 'transparent',
+              border: '1px solid var(--border)',
+              borderRadius: 'var(--radius)',
+              fontSize: 13,
+              cursor: 'pointer',
+            }}
+          >
+            Hoy
+          </button>
+        )}
+      </div>
+
+      {error && <p style={{ color: 'var(--danger)', fontSize: 13, marginBottom: 8 }}>{error}</p>}
+
+      {loading ? (
+        <p style={{ color: 'var(--text-muted)' }}>Cargando...</p>
+      ) : filas.length === 0 ? (
+        <p style={{ color: 'var(--text-muted)' }}>No hay nada que mostrar para esta fecha.</p>
+      ) : (
+        <div style={{ overflow: 'auto', border: '1px solid var(--border)', borderRadius: 12 }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12.5, minWidth: 640 }}>
+            <thead>
+              <tr style={{ textAlign: 'left', color: 'var(--text-secondary)', fontSize: 11 }}>
+                <th style={thStyle}>Habitación</th>
+                <th style={{ ...thStyle, textAlign: 'center' }}>Planificada</th>
+                <th style={{ ...thStyle, textAlign: 'center' }}>En proceso</th>
+                <th style={{ ...thStyle, textAlign: 'center' }}>Terminada</th>
+                <th style={{ ...thStyle, textAlign: 'center' }}>No necesita mantenimiento</th>
+                <th style={{ ...thStyle, textAlign: 'center', borderRight: 'none' }}>Marcar disponible</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filas.map((fila, i) => {
+                const estadoActual = estadoActualDe(fila.habitacionId);
+                const puedeMarcarDisponible = esHoy && (estadoActual === 'limpieza' || estadoActual === 'mantenimiento');
+                const bloqueada = accionando === fila.habitacionId;
+                return (
+                  <tr
+                    key={`${fila.habitacionId}-${fila.tarea?.id ?? 'sin-tarea'}`}
+                    style={{
+                      borderTop: '1px solid var(--border-strong)',
+                      background: i % 2 === 1 ? 'var(--surface-1)' : 'transparent',
+                    }}
+                  >
+                    <td style={{ ...tdStyle, fontWeight: 500, color: 'var(--text-primary)' }}>
+                      {fila.habNumero}
+                      {fila.tipoHabitacion ? ` · ${fila.tipoHabitacion}` : ''}
+                    </td>
+                    <td style={{ ...tdStyle, textAlign: 'center' }}>
+                      {fila.categoria === 'sin_necesidad' ? (
+                        '—'
+                      ) : (
+                        <input
+                          type="checkbox"
+                          checked={!!fila.tarea}
+                          disabled={!!fila.tarea || bloqueada}
+                          onChange={() => crearTareaConHuesped(fila.habitacionId)}
+                          title={fila.tarea ? 'Ya planificada' : 'Planificar mantenimiento (con huésped dentro)'}
+                        />
+                      )}
+                    </td>
+                    <td style={{ ...tdStyle, textAlign: 'center' }}>
+                      {fila.categoria === 'sin_necesidad' ? (
+                        '—'
+                      ) : (
+                        <input
+                          type="checkbox"
+                          checked={fila.tarea?.estado === 'en_proceso' || fila.tarea?.estado === 'terminado'}
+                          disabled={fila.tarea?.estado !== 'planificado' || bloqueada}
+                          onChange={() => fila.tarea && iniciarTarea(fila.habitacionId, fila.tarea.id)}
+                        />
+                      )}
+                    </td>
+                    <td style={{ ...tdStyle, textAlign: 'center' }}>
+                      {fila.categoria === 'sin_necesidad' ? (
+                        '—'
+                      ) : (
+                        <input
+                          type="checkbox"
+                          checked={fila.tarea?.estado === 'terminado'}
+                          disabled={fila.tarea?.estado !== 'en_proceso' || bloqueada}
+                          onChange={() => fila.tarea && terminarTarea(fila.habitacionId, fila.tarea.id)}
+                        />
+                      )}
+                    </td>
+                    <td style={{ ...tdStyle, textAlign: 'center' }}>
+                      {fila.categoria === 'sin_necesidad' ? (
+                        <input type="checkbox" checked disabled title="Marcado por recepción" />
+                      ) : fila.categoria === 'ocupada_sin_tarea' ? (
+                        <input
+                          type="checkbox"
+                          checked={false}
+                          disabled={bloqueada}
+                          onChange={() => marcarSinNecesidad(fila.habitacionId)}
+                          title="Confirmar que hoy no necesita mantenimiento"
+                        />
+                      ) : (
+                        '—'
+                      )}
+                    </td>
+                    <td style={{ ...tdStyle, textAlign: 'center', borderRight: 'none' }}>
+                      {puedeMarcarDisponible ? (
+                        <input
+                          type="checkbox"
+                          checked={false}
+                          disabled={bloqueada}
+                          onChange={() => marcarDisponible(fila.habitacionId)}
+                          title="Usar solo si HK ya terminó pero se le olvidó cerrar la tarea"
+                        />
+                      ) : (
+                        '—'
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   );
 }
