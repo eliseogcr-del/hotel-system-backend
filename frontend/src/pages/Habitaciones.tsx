@@ -1106,10 +1106,16 @@ function SeccionMantenimientoLimpieza({
       .finally(() => setLoading(false));
   }
 
+  // También se vuelve a cargar cuando cambia `habitaciones` (nueva
+  // referencia en cada `cargar()` del padre): así "Refrescar" y el
+  // auto-refresh después de una acción (check-in, marcar disponible, etc.)
+  // también actualizan esta sección -- si no, quedaba mostrando datos
+  // viejos (ej. una habitación ya limpia seguía apareciendo como
+  // pendiente) hasta que algo dentro de la sección misma la recargara.
   useEffect(() => {
     cargarTareas();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hotelId, fechaFiltro]);
+  }, [hotelId, fechaFiltro, habitaciones]);
 
   // Planifica un mantenimiento con huésped dentro (CLAUDE.md 3.2: se le
   // pregunta al huésped si autoriza el ingreso) -- la única forma de
