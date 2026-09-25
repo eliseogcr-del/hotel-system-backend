@@ -1,4 +1,4 @@
-import { useEffect, useState, type CSSProperties, type FormEvent } from 'react';
+import { useEffect, useState, type CSSProperties, type FormEvent, type KeyboardEvent } from 'react';
 import { useParams } from 'react-router-dom';
 import { API_URL } from '../lib/api';
 
@@ -319,6 +319,30 @@ export function CotizarWhatsapp() {
     }
   }
 
+  // Enter en cualquier campo del formulario mueve el foco al siguiente
+  // campo, igual que Tab, en vez de mandar el formulario a medio llenar
+  // (comportamiento por defecto del navegador al presionar Enter dentro de
+  // un <input> de un <form>). Se recorren los campos enfocables en el
+  // orden real del DOM, así que respeta lo que esté visible en ese
+  // momento (ej. RUC/Razón social solo aparecen si "facturable" está
+  // marcado). Los checkboxes y el botón de enviar se dejan con su
+  // comportamiento normal.
+  function manejarEnterComoTab(e: KeyboardEvent<HTMLFormElement>) {
+    if (e.key !== 'Enter') return;
+    const objetivo = e.target as HTMLElement;
+    if (objetivo instanceof HTMLInputElement && objetivo.type === 'checkbox') return;
+    if (objetivo.tagName !== 'INPUT' && objetivo.tagName !== 'SELECT') return;
+
+    const enfocables = Array.from(
+      e.currentTarget.querySelectorAll<HTMLElement>('input, select, textarea, button[type="submit"]'),
+    ).filter((el) => !el.hasAttribute('disabled'));
+    const indice = enfocables.indexOf(objetivo);
+    if (indice === -1) return;
+
+    e.preventDefault();
+    enfocables[indice + 1]?.focus();
+  }
+
   if (!hotelId) return null;
 
   if (infoError) {
@@ -398,6 +422,7 @@ export function CotizarWhatsapp() {
       <h1 style={tituloStyle}>Cotiza tu estadía</h1>
       <form
         onSubmit={personasDentroDelUmbral ? handleSubmitReservar : handleSubmitCotizar}
+        onKeyDown={manejarEnterComoTab}
         style={{ display: 'flex', flexDirection: 'column', gap: 12 }}
       >
         <div style={filaStyle}>
