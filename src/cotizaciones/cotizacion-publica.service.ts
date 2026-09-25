@@ -147,6 +147,15 @@ export class CotizacionPublicaService {
    * aplica al camino de grupos chicos -- grupos por encima del umbral
    * siguen yendo por cotizarGrupo() con revisión humana, ver
    * crearReservaDesdeWhatsapp().
+   *
+   * Se separan en dos grupos: `habitaciones` (acordes al tamaño del grupo)
+   * y `otrasHabitaciones` (bastante más grandes de lo necesario, ej. una
+   * séxtuple para quien viaja solo) -- no tiene sentido ofrecer estas
+   * últimas de entrada, pero se muestran aparte bajo "Otras opciones" por
+   * si el cliente igual las prefiere (más espacio, por ejemplo). El corte
+   * (aforo_max <= personas + 1) deja pasar una habitación un poco más
+   * grande en el grupo principal -- útil para armar un grupo combinando
+   * varias habitaciones sin que cada una tenga que calzar justo.
    */
   async buscarHabitacionesDisponibles(hotelId: string, dto: HabitacionesDisponiblesWhatsappDto) {
     const client = this.supabase.getServiceClient();
@@ -154,20 +163,26 @@ export class CotizacionPublicaService {
     const { dias, esLate } = this.resolverFechas(dto, hotel);
 
     const habitaciones = await this.habitacionesDisponiblesReales(client, hotelId, dto, hotel);
+    const mapear = (h: any) => {
+      const precioNoche = this.precioNocheEfectivo(h.tipos_habitacion, dto.personas);
+      return {
+        habitacionId: h.id,
+        numero: h.hab_numero,
+        tipo: h.tipos_habitacion?.nombre ?? '—',
+        aforoMax: h.tipos_habitacion?.aforo_max ?? 0,
+        precioNoche,
+        importe: Math.round(precioNoche * dias * 100) / 100,
+      };
+    };
+
+    const acordes = habitaciones.filter((h) => (h.tipos_habitacion?.aforo_max ?? 0) <= dto.personas + 1);
+    const otras = habitaciones.filter((h) => (h.tipos_habitacion?.aforo_max ?? 0) > dto.personas + 1);
+
     return {
       dias,
       esLate,
-      habitaciones: habitaciones.map((h) => {
-        const precioNoche = this.precioNocheEfectivo(h.tipos_habitacion, dto.personas);
-        return {
-          habitacionId: h.id,
-          numero: h.hab_numero,
-          tipo: h.tipos_habitacion?.nombre ?? '—',
-          aforoMax: h.tipos_habitacion?.aforo_max ?? 0,
-          precioNoche,
-          importe: Math.round(precioNoche * dias * 100) / 100,
-        };
-      }),
+      habitaciones: acordes.map(mapear),
+      otrasHabitaciones: otras.map(mapear),
     };
   }
 
@@ -198,21 +213,8 @@ export class CotizacionPublicaService {
       .neq('estado', 'bloqueada');
     if (error) throw error;
 
-    // No tiene sentido ofrecerle a un grupo chico una habitación pensada
-    // para bastantes más personas (ej. una séxtuple a alguien que viaja
-    // solo, ver reporte real del cliente) -- se descartan las que sobran
-    // de aforo por mucho margen. El +1 (no aforo_max === personas exacto)
-    // es a propósito: sigue dejando pasar una habitación un poco más
-    // grande, útil para armar un grupo combinando varias habitaciones sin
-    // que cada una tenga que calzar justo. No se filtra por abajo (aforo
-    // menor a `personas`): esa habitación sigue siendo válida como parte
-    // de una combinación de varias para cubrir el grupo completo.
-    const aptas = ((candidatas ?? []) as any[]).filter(
-      (h) => (h.tipos_habitacion?.aforo_max ?? 0) <= dto.personas + 1,
-    );
-
     const disponibles: any[] = [];
-    for (const candidata of aptas) {
+    for (const candidata of (candidatas ?? []) as any[]) {
       const resultado = await this.disponibilidad.validar(client, {
         hotelId,
         habitacionId: candidata.id,
