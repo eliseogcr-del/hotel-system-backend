@@ -178,7 +178,14 @@ export class CotizacionPublicaService {
   private async habitacionesDisponiblesReales(
     client: SupabaseClient,
     hotelId: string,
-    dto: { fechaIngreso: string; horaIngreso: string; noches: number; fechaSalida?: string; horaSalida?: string },
+    dto: {
+      fechaIngreso: string;
+      horaIngreso: string;
+      noches: number;
+      fechaSalida?: string;
+      horaSalida?: string;
+      personas: number;
+    },
     hotel: { hora_checkout: string },
   ) {
     const { checkinISO, checkoutISO } = this.resolverFechas(dto, hotel);
@@ -191,8 +198,21 @@ export class CotizacionPublicaService {
       .neq('estado', 'bloqueada');
     if (error) throw error;
 
+    // No tiene sentido ofrecerle a un grupo chico una habitación pensada
+    // para bastantes más personas (ej. una séxtuple a alguien que viaja
+    // solo, ver reporte real del cliente) -- se descartan las que sobran
+    // de aforo por mucho margen. El +1 (no aforo_max === personas exacto)
+    // es a propósito: sigue dejando pasar una habitación un poco más
+    // grande, útil para armar un grupo combinando varias habitaciones sin
+    // que cada una tenga que calzar justo. No se filtra por abajo (aforo
+    // menor a `personas`): esa habitación sigue siendo válida como parte
+    // de una combinación de varias para cubrir el grupo completo.
+    const aptas = ((candidatas ?? []) as any[]).filter(
+      (h) => (h.tipos_habitacion?.aforo_max ?? 0) <= dto.personas + 1,
+    );
+
     const disponibles: any[] = [];
-    for (const candidata of (candidatas ?? []) as any[]) {
+    for (const candidata of aptas) {
       const resultado = await this.disponibilidad.validar(client, {
         hotelId,
         habitacionId: candidata.id,
