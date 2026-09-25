@@ -1088,6 +1088,11 @@ function SeccionMantenimientoLimpieza({
 }) {
   const [tareas, setTareas] = useState<TareaHkFila[]>([]);
   const [fechaFiltro, setFechaFiltro] = useState(hoyLimaYMD());
+  // Por defecto no se ven las ya terminadas (la habitación quedó limpia y
+  // disponible, o se resolvió el mantenimiento -- ya no hay nada por
+  // hacer). Este filtro las vuelve a mostrar, para revisar cuál fue el
+  // plan completo del día.
+  const [mostrarTerminadas, setMostrarTerminadas] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [accionando, setAccionando] = useState<string | null>(null);
@@ -1185,11 +1190,11 @@ function SeccionMantenimientoLimpieza({
   }
 
   const esHoy = fechaFiltro === hoyLimaYMD();
-  const filas: FilaMantenimiento[] = [];
+  const filasBrutas: FilaMantenimiento[] = [];
   const idsConTarea = new Set<string>();
   for (const t of tareas) {
     idsConTarea.add(t.habitacion_id);
-    filas.push({
+    filasBrutas.push({
       habitacionId: t.habitacion_id,
       habNumero: t.habitaciones?.hab_numero ?? 0,
       tipoHabitacion: t.habitaciones?.tipos_habitacion?.nombre ?? null,
@@ -1199,11 +1204,13 @@ function SeccionMantenimientoLimpieza({
   }
   // Solo se proyectan habitaciones ocupadas sin tarea para HOY -- para una
   // fecha pasada esto sería el estado ACTUAL de la habitación, no el que
-  // tenía ese día, así que no tendría sentido.
+  // tenía ese día, así que no tendría sentido. idsConTarea se arma ANTES
+  // de filtrar las terminadas de más abajo, para que una habitación recién
+  // resuelta hoy no reaparezca como "ocupada sin tarea".
   if (esHoy) {
     for (const h of habitaciones) {
       if (h.estado === 'ocupada' && !idsConTarea.has(h.id)) {
-        filas.push({
+        filasBrutas.push({
           habitacionId: h.id,
           habNumero: h.hab_numero,
           tipoHabitacion: h.tipos_habitacion?.nombre ?? null,
@@ -1213,6 +1220,13 @@ function SeccionMantenimientoLimpieza({
       }
     }
   }
+  // Para HOY, una tarea ya terminada no tiene nada más por hacer -- por
+  // defecto se saca de la vista apenas se completa (ej. hab. 403: limpieza
+  // terminada, ya está disponible, no debe seguir apareciendo acá) salvo
+  // que se active "Ver plan del día", para revisar todo lo que se hizo.
+  // Para una fecha pasada siempre se ve todo: es un filtro histórico.
+  const filas =
+    esHoy && !mostrarTerminadas ? filasBrutas.filter((f) => f.tarea?.estado !== 'terminado') : filasBrutas;
   filas.sort((a, b) => a.habNumero - b.habNumero);
 
   function estadoActualDe(habitacionId: string): Estado | undefined {
@@ -1249,6 +1263,16 @@ function SeccionMantenimientoLimpieza({
           >
             Hoy
           </button>
+        )}
+        {esHoy && (
+          <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, paddingBottom: 8 }}>
+            <input
+              type="checkbox"
+              checked={mostrarTerminadas}
+              onChange={(e) => setMostrarTerminadas(e.target.checked)}
+            />
+            Ver plan del día (incluye las ya limpias/resueltas)
+          </label>
         )}
       </div>
 
