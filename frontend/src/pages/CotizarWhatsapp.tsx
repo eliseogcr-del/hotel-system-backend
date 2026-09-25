@@ -106,6 +106,8 @@ export function CotizarWhatsapp() {
   const [resultado, setResultado] = useState<RespuestaCotizacion | RespuestaReserva | null>(null);
 
   const [habitacionesDisponibles, setHabitacionesDisponibles] = useState<HabitacionDisponible[] | null>(null);
+  const [otrasHabitacionesDisponibles, setOtrasHabitacionesDisponibles] = useState<HabitacionDisponible[]>([]);
+  const [mostrarOtrasHabitaciones, setMostrarOtrasHabitaciones] = useState(false);
   const [buscandoHabitaciones, setBuscandoHabitaciones] = useState(false);
   const [busquedaError, setBusquedaError] = useState<string | null>(null);
   const [seleccionadas, setSeleccionadas] = useState<Set<string>>(new Set());
@@ -131,7 +133,7 @@ export function CotizarWhatsapp() {
   // de cotización con revisión humana (ver handleSubmitCotizar más abajo).
   const personasDentroDelUmbral = !!info && personas > 0 && personas <= info.umbralGrupoGrande;
 
-  const capacidadSeleccionada = (habitacionesDisponibles ?? [])
+  const capacidadSeleccionada = [...(habitacionesDisponibles ?? []), ...otrasHabitacionesDisponibles]
     .filter((h) => seleccionadas.has(h.habitacionId))
     .reduce((acc, h) => acc + h.aforoMax, 0);
 
@@ -152,6 +154,8 @@ export function CotizarWhatsapp() {
   useEffect(() => {
     if (!hotelId || !personasDentroDelUmbral) {
       setHabitacionesDisponibles(null);
+      setOtrasHabitacionesDisponibles([]);
+      setMostrarOtrasHabitaciones(false);
       setSeleccionadas(new Set());
       return;
     }
@@ -176,14 +180,17 @@ export function CotizarWhatsapp() {
         .then(async (res) => {
           const body = await res.json().catch(() => ({}));
           if (!res.ok) throw new Error(body.message ?? 'No se pudo buscar habitaciones disponibles');
-          return body as { habitaciones: HabitacionDisponible[] };
+          return body as { habitaciones: HabitacionDisponible[]; otrasHabitaciones: HabitacionDisponible[] };
         })
         .then((data) => {
           setHabitacionesDisponibles(data.habitaciones);
+          setOtrasHabitacionesDisponibles(data.otrasHabitaciones ?? []);
+          setMostrarOtrasHabitaciones(false);
           setSeleccionadas(new Set());
         })
         .catch((err) => {
           setHabitacionesDisponibles(null);
+          setOtrasHabitacionesDisponibles([]);
           setBusquedaError(err instanceof Error ? err.message : 'No se pudo buscar habitaciones disponibles');
         })
         .finally(() => setBuscandoHabitaciones(false));
@@ -534,54 +541,51 @@ export function CotizarWhatsapp() {
               <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>Buscando disponibilidad...</p>
             )}
             {busquedaError && <p style={{ fontSize: 13, color: 'var(--danger)' }}>{busquedaError}</p>}
-            {!buscandoHabitaciones && !busquedaError && habitacionesDisponibles?.length === 0 && (
-              <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>
-                No hay habitaciones disponibles para esas fechas y cantidad de personas.
-              </p>
-            )}
+            {!buscandoHabitaciones &&
+              !busquedaError &&
+              habitacionesDisponibles?.length === 0 &&
+              otrasHabitacionesDisponibles.length === 0 && (
+                <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>
+                  No hay habitaciones disponibles para esas fechas y cantidad de personas.
+                </p>
+              )}
             {!buscandoHabitaciones && habitacionesDisponibles && habitacionesDisponibles.length > 0 && (
-              <>
-                <div style={{ border: '1px solid var(--border)', borderRadius: 8, overflow: 'hidden' }}>
-                  {habitacionesDisponibles.map((h) => {
-                    const marcada = seleccionadas.has(h.habitacionId);
-                    const deshabilitada = !marcada && capacidadSeleccionada >= personas;
-                    return (
-                      <label
-                        key={h.habitacionId}
-                        style={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: 10,
-                          padding: '10px 12px',
-                          borderBottom: '1px solid var(--border)',
-                          opacity: deshabilitada ? 0.5 : 1,
-                          cursor: deshabilitada ? 'not-allowed' : 'pointer',
-                        }}
-                      >
-                        <input
-                          type="checkbox"
-                          checked={marcada}
-                          disabled={deshabilitada}
-                          onChange={() => toggleSeleccion(h.habitacionId)}
-                        />
-                        <div style={{ flex: 1 }}>
-                          <div style={{ fontWeight: 600, fontSize: 13 }}>
-                            Hab. {h.numero} · {h.tipo}
-                          </div>
-                          <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Máx. {h.aforoMax} personas</div>
-                        </div>
-                        <div style={{ fontWeight: 700, fontSize: 13, whiteSpace: 'nowrap' }}>
-                          S/. {h.importe.toFixed(2)}
-                        </div>
-                      </label>
-                    );
-                  })}
-                </div>
+              <ListaHabitaciones
+                habitaciones={habitacionesDisponibles}
+                seleccionadas={seleccionadas}
+                capacidadSeleccionada={capacidadSeleccionada}
+                personas={personas}
+                onToggle={toggleSeleccion}
+              />
+            )}
+            {!buscandoHabitaciones && otrasHabitacionesDisponibles.length > 0 && (
+              <div>
+                <button
+                  type="button"
+                  onClick={() => setMostrarOtrasHabitaciones((v) => !v)}
+                  style={otrasOpcionesBtnStyle}
+                >
+                  {mostrarOtrasHabitaciones ? '▲' : '▼'} Otras opciones de habitaciones (más de {personas + 1} personas)
+                </button>
+                {mostrarOtrasHabitaciones && (
+                  <div style={{ marginTop: 8 }}>
+                    <ListaHabitaciones
+                      habitaciones={otrasHabitacionesDisponibles}
+                      seleccionadas={seleccionadas}
+                      capacidadSeleccionada={capacidadSeleccionada}
+                      personas={personas}
+                      onToggle={toggleSeleccion}
+                    />
+                  </div>
+                )}
+              </div>
+            )}
+            {!buscandoHabitaciones &&
+              ((habitacionesDisponibles?.length ?? 0) > 0 || otrasHabitacionesDisponibles.length > 0) && (
                 <p style={{ fontSize: 12, color: 'var(--text-muted)' }}>
                   Seleccionado: {capacidadSeleccionada} / {personas} personas
                 </p>
-              </>
-            )}
+              )}
           </div>
         )}
 
@@ -682,6 +686,56 @@ function Campo({ label, children }: { label: string; children: React.ReactNode }
   );
 }
 
+// Lista de habitaciones con checkbox, reusada tanto para la lista principal
+// (acordes al tamaño del grupo) como para "Otras opciones de habitaciones"
+// (bastante más grandes de lo necesario) -- mismo look, misma lógica de
+// selección y de cuándo deshabilitar una fila.
+function ListaHabitaciones({
+  habitaciones,
+  seleccionadas,
+  capacidadSeleccionada,
+  personas,
+  onToggle,
+}: {
+  habitaciones: HabitacionDisponible[];
+  seleccionadas: Set<string>;
+  capacidadSeleccionada: number;
+  personas: number;
+  onToggle: (habitacionId: string) => void;
+}) {
+  return (
+    <div style={{ border: '1px solid var(--border)', borderRadius: 8, overflow: 'hidden' }}>
+      {habitaciones.map((h) => {
+        const marcada = seleccionadas.has(h.habitacionId);
+        const deshabilitada = !marcada && capacidadSeleccionada >= personas;
+        return (
+          <label
+            key={h.habitacionId}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 10,
+              padding: '10px 12px',
+              borderBottom: '1px solid var(--border)',
+              opacity: deshabilitada ? 0.5 : 1,
+              cursor: deshabilitada ? 'not-allowed' : 'pointer',
+            }}
+          >
+            <input type="checkbox" checked={marcada} disabled={deshabilitada} onChange={() => onToggle(h.habitacionId)} />
+            <div style={{ flex: 1 }}>
+              <div style={{ fontWeight: 600, fontSize: 13 }}>
+                Hab. {h.numero} · {h.tipo}
+              </div>
+              <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Máx. {h.aforoMax} personas</div>
+            </div>
+            <div style={{ fontWeight: 700, fontSize: 13, whiteSpace: 'nowrap' }}>S/. {h.importe.toFixed(2)}</div>
+          </label>
+        );
+      })}
+    </div>
+  );
+}
+
 const tituloStyle: CSSProperties = { fontSize: 19, marginBottom: 16 };
 
 const filaStyle: CSSProperties = { display: 'flex', gap: 12, flexWrap: 'wrap' };
@@ -700,6 +754,16 @@ const checkboxLabelStyle: CSSProperties = {
   alignItems: 'center',
   gap: 8,
   fontSize: 13,
+};
+
+const otrasOpcionesBtnStyle: CSSProperties = {
+  background: 'none',
+  border: 'none',
+  padding: 0,
+  color: 'var(--brand)',
+  fontSize: 12.5,
+  fontWeight: 500,
+  cursor: 'pointer',
 };
 
 const botonStyle: CSSProperties = {
