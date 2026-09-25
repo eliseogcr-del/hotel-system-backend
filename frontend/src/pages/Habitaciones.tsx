@@ -865,8 +865,13 @@ function VistaTarjetas({
                   {h.huesped ?? h.reservaHoy?.huesped}
                 </span>
               )}
+              {h.huesped && h.checkinReal && (
+                <span style={{ fontSize: 11, fontWeight: 700, color: ESTADO_COLOR_INTENSO[color].text }}>
+                  Chk in: {formatoFechaHora(h.checkinReal)}
+                </span>
+              )}
               {h.huesped && h.checkoutPrevisto && (
-                <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-secondary)' }}>
+                <span style={{ fontSize: 11, fontWeight: 700, color: ESTADO_COLOR_INTENSO[color].text }}>
                   Chk out: {formatoFechaHora(h.checkoutPrevisto)}
                 </span>
               )}
