@@ -1,4 +1,4 @@
-import { useEffect, useState, type CSSProperties, type FormEvent } from 'react';
+import { useEffect, useRef, useState, type CSSProperties, type FormEvent } from 'react';
 import { useParams } from 'react-router-dom';
 import { API_URL } from '../lib/api';
 
@@ -110,6 +110,10 @@ export function CotizarWhatsapp() {
   const [busquedaError, setBusquedaError] = useState<string | null>(null);
   const [seleccionadas, setSeleccionadas] = useState<Set<string>>(new Set());
 
+  const [buscandoHuesped, setBuscandoHuesped] = useState(false);
+  const nombresRef = useRef<HTMLInputElement>(null);
+  const fechaIngresoRef = useRef<HTMLInputElement>(null);
+
   useEffect(() => {
     if (!hotelId) return;
     fetch(`${API_URL}/publico/hoteles/${hotelId}/cotizaciones-whatsapp/info`)
@@ -142,6 +146,35 @@ export function CotizarWhatsapp() {
       else next.add(habitacionId);
       return next;
     });
+  }
+
+  // Al salir del campo de documento (Tab o Enter, ver el onKeyDown del
+  // input): si el huésped ya se hospedó antes en este hotel, se
+  // autocompletan nombres/apellidos y se salta directo a la fecha de
+  // llegada; si no, el foco pasa a Nombres para que los escriba. Si la
+  // búsqueda falla por lo que sea, no se interrumpe al cliente -- sigue
+  // escribiendo sus datos a mano como si nunca se hubiera intentado.
+  async function buscarHuespedPorDocumento() {
+    if (!hotelId || !nroDoc.trim()) return;
+    setBuscandoHuesped(true);
+    try {
+      const params = new URLSearchParams({ tipoDoc, nroDoc: nroDoc.trim() });
+      const res = await fetch(
+        `${API_URL}/publico/hoteles/${hotelId}/cotizaciones-whatsapp/huesped?${params.toString()}`,
+      );
+      const body = await res.json().catch(() => ({}));
+      if (res.ok && body.encontrado) {
+        setNombres(body.nombres);
+        setApellidos(body.apellidos);
+        fechaIngresoRef.current?.focus();
+      } else {
+        nombresRef.current?.focus();
+      }
+    } catch {
+      // Silencioso a propósito, ver comentario de la función.
+    } finally {
+      setBuscandoHuesped(false);
+    }
   }
 
   // En cuanto el cliente completa fecha de entrada, fecha/hora de salida (o
@@ -411,13 +444,34 @@ export function CotizarWhatsapp() {
             </select>
           </Campo>
           <Campo label="Número de documento">
-            <input value={nroDoc} onChange={(e) => setNroDoc(e.target.value)} style={inputStyle} required />
+            <input
+              value={nroDoc}
+              onChange={(e) => setNroDoc(e.target.value)}
+              onBlur={buscarHuespedPorDocumento}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  // Dispara el mismo onBlur de arriba en vez de buscar de
+                  // nuevo acá, para no duplicar la consulta.
+                  e.currentTarget.blur();
+                }
+              }}
+              style={inputStyle}
+              required
+            />
           </Campo>
         </div>
+        {buscandoHuesped && <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: 0 }}>Buscando...</p>}
 
         <div style={filaStyle}>
           <Campo label="Nombres">
-            <input value={nombres} onChange={(e) => setNombres(e.target.value)} style={inputStyle} required />
+            <input
+              ref={nombresRef}
+              value={nombres}
+              onChange={(e) => setNombres(e.target.value)}
+              style={inputStyle}
+              required
+            />
           </Campo>
           <Campo label="Apellidos">
             <input value={apellidos} onChange={(e) => setApellidos(e.target.value)} style={inputStyle} required />
@@ -431,6 +485,7 @@ export function CotizarWhatsapp() {
         <div style={filaStyle}>
           <Campo label="Fecha de llegada">
             <input
+              ref={fechaIngresoRef}
               type="date"
               value={fechaIngreso}
               onChange={(e) => cambiarFechaIngreso(e.target.value)}

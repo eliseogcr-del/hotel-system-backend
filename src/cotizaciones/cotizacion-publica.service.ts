@@ -116,6 +116,24 @@ export class CotizacionPublicaService {
   // configurada del hotel como valor por defecto, y avise de una vez si el
   // agente no está activo (sin esperar a que el cliente llene todo el
   // formulario para recién enterarse).
+  /**
+   * El formulario público lo llama al salir del campo de documento (Tab o
+   * Enter): si el huésped ya se hospedó antes en este hotel, se le
+   * autocompletan nombres/apellidos y salta directo a la fecha de llegada
+   * en vez de pedírselos de nuevo. Solo devuelve nombres/apellidos -- nada
+   * de teléfono/correo/RUC -- para no convertir un endpoint público en un
+   * oráculo de "¿de quién es este documento?" más allá de lo mínimo que
+   * necesita el autocompletado.
+   */
+  async buscarHuespedPublico(hotelId: string, tipoDoc: string, nroDoc: string) {
+    const client = this.supabase.getServiceClient();
+    await this.cargarHotelConBotActivo(client, hotelId);
+
+    const huesped = await this.huespedesService.buscarPorDocumento(client, hotelId, tipoDoc, nroDoc);
+    if (!huesped) return { encontrado: false as const };
+    return { encontrado: true as const, nombres: huesped.nombres, apellidos: huesped.apellidos };
+  }
+
   async obtenerInfoPublica(hotelId: string) {
     const client = this.supabase.getServiceClient();
     const { data, error } = await client

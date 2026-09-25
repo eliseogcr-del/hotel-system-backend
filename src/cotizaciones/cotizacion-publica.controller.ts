@@ -1,8 +1,9 @@
-import { Body, Controller, Get, Param, Post } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, Query } from '@nestjs/common';
 import { CotizacionPublicaService } from './cotizacion-publica.service';
 import { CrearCotizacionWhatsappDto } from './dto/crear-cotizacion-whatsapp.dto';
 import { HabitacionesDisponiblesWhatsappDto } from './dto/habitaciones-disponibles-whatsapp.dto';
 import { CrearReservaWhatsappDto } from './dto/crear-reserva-whatsapp.dto';
+import { BuscarHuespedPublicoDto } from './dto/buscar-huesped-publico.dto';
 
 /**
  * Sin AuthGuard/RolesGuard a propósito: lo abre un cliente desde el link que
@@ -23,6 +24,14 @@ export class CotizacionPublicaController {
   @Get('info')
   async info(@Param('hotelId') hotelId: string) {
     return this.service.obtenerInfoPublica(hotelId);
+  }
+
+  // El formulario lo llama al salir del campo de documento (Tab o Enter),
+  // para saludar a un huésped que ya se hospedó antes y saltar directo a
+  // la fecha de llegada sin pedirle de nuevo nombres/apellidos.
+  @Get('huesped')
+  async buscarHuesped(@Param('hotelId') hotelId: string, @Query() dto: BuscarHuespedPublicoDto) {
+    return this.service.buscarHuespedPublico(hotelId, dto.tipoDoc, dto.nroDoc);
   }
 
   @Post()
