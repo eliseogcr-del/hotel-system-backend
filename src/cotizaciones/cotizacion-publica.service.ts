@@ -119,11 +119,12 @@ export class CotizacionPublicaService {
   /**
    * El formulario público lo llama al salir del campo de documento (Tab o
    * Enter): si el huésped ya se hospedó antes en este hotel, se le
-   * autocompletan nombres/apellidos y salta directo a la fecha de llegada
-   * en vez de pedírselos de nuevo. Solo devuelve nombres/apellidos -- nada
-   * de teléfono/correo/RUC -- para no convertir un endpoint público en un
-   * oráculo de "¿de quién es este documento?" más allá de lo mínimo que
-   * necesita el autocompletado.
+   * autocompletan nombres/apellidos/teléfono y el formulario salta al
+   * primer campo que todavía no tenga dato (teléfono, o fecha de llegada
+   * si ya tiene los tres) en vez de pedírselos de nuevo. Solo devuelve
+   * estos tres campos -- nada de correo/RUC -- para no convertir un
+   * endpoint sin login en un oráculo de "¿de quién es este documento?"
+   * más allá de lo que el propio formulario ya le pide al cliente.
    */
   async buscarHuespedPublico(hotelId: string, tipoDoc: string, nroDoc: string) {
     const client = this.supabase.getServiceClient();
@@ -131,7 +132,12 @@ export class CotizacionPublicaService {
 
     const huesped = await this.huespedesService.buscarPorDocumento(client, hotelId, tipoDoc, nroDoc);
     if (!huesped) return { encontrado: false as const };
-    return { encontrado: true as const, nombres: huesped.nombres, apellidos: huesped.apellidos };
+    return {
+      encontrado: true as const,
+      nombres: huesped.nombres,
+      apellidos: huesped.apellidos,
+      telefono: huesped.telefono,
+    };
   }
 
   async obtenerInfoPublica(hotelId: string) {

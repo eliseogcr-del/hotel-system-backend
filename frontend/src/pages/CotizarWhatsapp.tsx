@@ -112,6 +112,7 @@ export function CotizarWhatsapp() {
 
   const [buscandoHuesped, setBuscandoHuesped] = useState(false);
   const nombresRef = useRef<HTMLInputElement>(null);
+  const telefonoRef = useRef<HTMLInputElement>(null);
   const fechaIngresoRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -150,10 +151,12 @@ export function CotizarWhatsapp() {
 
   // Al salir del campo de documento (Tab o Enter, ver el onKeyDown del
   // input): si el huésped ya se hospedó antes en este hotel, se
-  // autocompletan nombres/apellidos y se salta directo a la fecha de
-  // llegada; si no, el foco pasa a Nombres para que los escriba. Si la
-  // búsqueda falla por lo que sea, no se interrumpe al cliente -- sigue
-  // escribiendo sus datos a mano como si nunca se hubiera intentado.
+  // autocompletan nombres/apellidos/teléfono y el foco salta al primer
+  // campo que todavía haga falta llenar -- teléfono, si no lo tenía
+  // guardado, o fecha de llegada si ya tiene los tres datos. Si no se
+  // encuentra el documento, el foco pasa a Nombres para que los escriba.
+  // Si la búsqueda falla por lo que sea, no se interrumpe al cliente --
+  // sigue escribiendo sus datos a mano como si nunca se hubiera intentado.
   async function buscarHuespedPorDocumento() {
     if (!hotelId || !nroDoc.trim()) return;
     setBuscandoHuesped(true);
@@ -166,7 +169,12 @@ export function CotizarWhatsapp() {
       if (res.ok && body.encontrado) {
         setNombres(body.nombres);
         setApellidos(body.apellidos);
-        fechaIngresoRef.current?.focus();
+        if (body.telefono) {
+          setTelefono(body.telefono);
+          fechaIngresoRef.current?.focus();
+        } else {
+          telefonoRef.current?.focus();
+        }
       } else {
         nombresRef.current?.focus();
       }
@@ -479,7 +487,13 @@ export function CotizarWhatsapp() {
         </div>
 
         <Campo label="Teléfono">
-          <input value={telefono} onChange={(e) => setTelefono(e.target.value)} style={inputStyle} required />
+          <input
+            ref={telefonoRef}
+            value={telefono}
+            onChange={(e) => setTelefono(e.target.value)}
+            style={inputStyle}
+            required
+          />
         </Campo>
 
         <div style={filaStyle}>
