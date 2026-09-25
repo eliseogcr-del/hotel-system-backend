@@ -144,6 +144,19 @@ function categoriaDeTarea(tarea: TareaHkFila): CategoriaFilaMantenimiento {
   return 'limpieza_o_mantenimiento';
 }
 
+// El mismo color que usa esa habitación en el resto del panel
+// (ESTADO_COLOR_INTENSO) -- 'ocupada_sin_tarea', 'mantenimiento_con_huesped'
+// y 'sin_necesidad' son todas una habitación que sigue 'ocupada' (rojo,
+// CLAUDE.md 3.2); 'limpieza_o_mantenimiento' toma el color según el tipo
+// real de la tarea (limpieza = amarillo, mantenimiento sin huésped =
+// naranja).
+function colorDeFila(fila: FilaMantenimiento): { bg: string; border: string; text: string } {
+  if (fila.categoria === 'limpieza_o_mantenimiento') {
+    return ESTADO_COLOR_INTENSO[fila.tarea?.tipo === 'limpieza' ? 'limpieza' : 'mantenimiento'];
+  }
+  return ESTADO_COLOR_INTENSO.ocupada;
+}
+
 const ORIGEN_LABEL: Record<string, string> = {
   telefono: 'Teléfono',
   whatsapp: 'WhatsApp',
@@ -1259,19 +1272,20 @@ function SeccionMantenimientoLimpieza({
               </tr>
             </thead>
             <tbody>
-              {filas.map((fila, i) => {
+              {filas.map((fila) => {
                 const estadoActual = estadoActualDe(fila.habitacionId);
                 const puedeMarcarDisponible = esHoy && (estadoActual === 'limpieza' || estadoActual === 'mantenimiento');
                 const bloqueada = accionando === fila.habitacionId;
+                const color = colorDeFila(fila);
                 return (
                   <tr
                     key={`${fila.habitacionId}-${fila.tarea?.id ?? 'sin-tarea'}`}
                     style={{
                       borderTop: '1px solid var(--border-strong)',
-                      background: i % 2 === 1 ? 'var(--surface-1)' : 'transparent',
+                      background: color.bg,
                     }}
                   >
-                    <td style={{ ...tdStyle, fontWeight: 500, color: 'var(--text-primary)' }}>
+                    <td style={{ ...tdStyle, fontWeight: 700, color: color.text, borderRight: `1px solid ${color.border}` }}>
                       {fila.habNumero}
                       {fila.tipoHabitacion ? ` · ${fila.tipoHabitacion}` : ''}
                     </td>
