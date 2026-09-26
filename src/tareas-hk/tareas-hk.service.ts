@@ -76,6 +76,30 @@ export class TareasHkService {
       );
     }
 
+    // Evita el duplicado real que se dio en producción con la habitación
+    // 203: un doble clic (o dos personas a la vez) en el checkbox
+    // "Planificada" de Mantenimientos y Limpiezas creaba dos tareas de
+    // mantenimiento activas para la misma habitación -- la tabla la
+    // mostraba dos veces y terminar una sola dejaba la otra colgada. Mismo
+    // criterio que ya usa marcarSinMantenimiento(). Se acota por tipo: sí
+    // se permite tener a la vez una de limpieza y otra de mantenimiento
+    // para la misma habitación (caso legítimo desde Tareas HK).
+    const { data: tareaActiva, error: activaError } = await client
+      .from('tareas_hk')
+      .select('id')
+      .eq('hotel_id', hotelId)
+      .eq('habitacion_id', dto.habitacionId)
+      .eq('tipo', dto.tipo)
+      .in('estado', ['planificado', 'en_proceso'])
+      .limit(1)
+      .maybeSingle();
+    if (activaError) throw activaError;
+    if (tareaActiva) {
+      throw new BadRequestException(
+        `Ya hay una tarea de '${dto.tipo}' activa para esta habitación -- termínala o cancélala antes de crear otra.`,
+      );
+    }
+
     const { data, error } = await client
       .from('tareas_hk')
       .insert({
