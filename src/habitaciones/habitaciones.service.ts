@@ -368,10 +368,17 @@ export class HabitacionesService {
   /**
    * "Marcar disponible" manual desde el panel de Habitaciones: para cuando
    * HK ya terminó de limpiar/reparar en la vida real pero se le olvidó
-   * cerrar la tarea desde su formulario. Solo aplica a 'limpieza' o
-   * 'mantenimiento' -- nunca a 'ocupada' (habría un huésped adentro) ni a
-   * mantenimiento con huésped dentro (ese caso nunca sale de 'ocupada',
-   * se corrige desmarcando el checkbox, no desde aquí).
+   * cerrar la tarea desde su formulario. Aplica a 'limpieza' o
+   * 'mantenimiento' -- y también a 'ocupada' cuando, en los hechos, no hay
+   * ninguna estadía real en curso (ver el bloque de abajo): caso real
+   * detectado en producción (habitaciones 202 y 203) donde una tarea vieja
+   * de "mantenimiento con huésped dentro" quedaba colgada de un huésped que
+   * ya se había ido, y al cerrarla, TareasHkService.terminar() volvía a
+   * dejar la habitación 'ocupada' sin nadie adentro -- sin ninguna estadía
+   * que cerrar, el botón normal de "Hacer checkout" no tenía dónde
+   * aparecer, así que la habitación quedaba sin ninguna acción posible.
+   * Si SÍ hay una estadía real en curso, se rechaza: ese caso se cierra con
+   * un checkout normal, nunca con este atajo.
    */
   async marcarDisponible(client: SupabaseClient, hotelId: string, habitacionId: string) {
     const { data: hab, error: habError } = await client
@@ -382,6 +389,42 @@ export class HabitacionesService {
       .maybeSingle();
     if (habError) throw habError;
     if (!hab) throw new NotFoundException('La habitación no existe en este hotel');
+
+    if (hab.estado === 'ocupada') {
+      const { data: estadiaActiva, error: estadiaError } = await client
+        .from('reserva_habitacion')
+        .select('id, estadias!inner(estado_actual)')
+        .eq('habitacion_id', habitacionId)
+        .eq('estadias.estado_actual', 'en_curso')
+        .limit(1)
+        .maybeSingle();
+      if (estadiaError) throw estadiaError;
+      if (estadiaActiva) {
+        throw new BadRequestException(
+          'Esta habitación tiene una estadía en curso -- usa "Hacer checkout" desde el detalle de la estadía.',
+        );
+      }
+
+      // Cierra cualquier tarea de mantenimiento con huésped dentro que haya
+      // quedado colgada de un huésped anterior, para no dejar otra más
+      // arrastrándose hacia el próximo huésped real.
+      const { error: cerrarError } = await client
+        .from('tareas_hk')
+        .update({ estado: 'terminado', finalizado_en: new Date().toISOString(), notas: null })
+        .eq('habitacion_id', habitacionId)
+        .eq('con_huesped_dentro', true)
+        .in('estado', ['planificado', 'en_proceso']);
+      if (cerrarError) throw cerrarError;
+
+      const { error: liberarError } = await client
+        .from('habitaciones')
+        .update({ estado: 'disponible', mantenimiento_planificado: false })
+        .eq('id', habitacionId);
+      if (liberarError) throw liberarError;
+
+      return { estado: 'disponible' };
+    }
+
     if (hab.estado !== 'limpieza' && hab.estado !== 'mantenimiento') {
       throw new BadRequestException(
         `Solo se puede marcar disponible una habitación en 'limpieza' o 'mantenimiento' (está en '${hab.estado}')`,

@@ -609,6 +609,15 @@ export function Habitaciones() {
                       Marcar disponible
                     </button>
                   )}
+                  {h.estado === 'ocupada' && !h.estadiaId && (
+                    <button
+                      onClick={() => marcarDisponible(h)}
+                      style={linkBtnStyle}
+                      title='Habitación "ocupada" sin ninguna estadía real en curso (ej. una tarea de mantenimiento con huésped dentro que quedó colgada de un huésped anterior) -- no hay checkout que hacer, esto la libera'
+                    >
+                      Marcar disponible
+                    </button>
+                  )}
                 </td>
                 <td style={{ ...tdStyle, fontWeight: 500, color: 'var(--text-primary)' }}>{h.hab_numero}</td>
                 <td style={tdStyle}>{h.tipos_habitacion?.nombre ?? '—'}</td>
