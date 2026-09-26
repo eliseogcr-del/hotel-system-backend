@@ -1188,6 +1188,23 @@ function SeccionMantenimientoLimpieza({
     }
   }
 
+  // Desmarca "no necesita mantenimiento" por si recepción se equivocó de
+  // casillero -- borra el registro (ver TareasHkService.eliminar(), que
+  // permite borrar este marcador puntual aunque quede 'terminado') y la
+  // habitación vuelve a pedir la validación del día.
+  async function deshacerSinNecesidad(habitacionId: string, tareaId: string) {
+    setAccionando(habitacionId);
+    setError(null);
+    try {
+      await api.delete(`/hoteles/${hotelId}/tareas-hk/${tareaId}`);
+      await cargarTareas();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'No se pudo desmarcar');
+    } finally {
+      setAccionando(null);
+    }
+  }
+
   async function marcarDisponible(habitacionId: string) {
     setAccionando(habitacionId);
     setError(null);
@@ -1384,7 +1401,14 @@ function SeccionMantenimientoLimpieza({
                     </td>
                     <td style={{ ...tdStyle, textAlign: 'center', padding: '10px' }}>
                       {fila.categoria === 'sin_necesidad' ? (
-                        <input type="checkbox" checked disabled title="Marcado por recepción" style={checkboxGrandeStyle} />
+                        <input
+                          type="checkbox"
+                          checked
+                          disabled={!esHoy || bloqueada}
+                          onChange={() => fila.tarea && deshacerSinNecesidad(fila.habitacionId, fila.tarea.id)}
+                          title={esHoy ? 'Marcado por recepción -- click para desmarcar si fue un error' : 'Marcado por recepción'}
+                          style={checkboxGrandeStyle}
+                        />
                       ) : fila.categoria === 'ocupada_sin_tarea' ? (
                         <input
                           type="checkbox"

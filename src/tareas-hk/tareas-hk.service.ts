@@ -346,10 +346,19 @@ export class TareasHkService {
    * Cancela una tarea que todavía no empezó. Si ya está en_proceso o
    * terminado no se puede borrar (el HK ya la tomó o ya la hizo); hay que
    * dejar el registro histórico.
+   *
+   * Excepción: el marcador de "no necesita mantenimiento" (ver
+   * marcarSinMantenimiento()) también se puede borrar aunque quede
+   * 'terminado' -- a diferencia de una tarea real, nunca tocó el estado de
+   * la habitación ni las notas del huésped, así que borrarlo no deja nada a
+   * medias. Es el "desmarcar" para cuando recepción se equivocó de
+   * casillero (ver Habitaciones.tsx, sección Mantenimientos y Limpiezas).
    */
   async eliminar(client: SupabaseClient, hotelId: string, tareaId: string) {
     const tarea = await this.cargarTareaHotel(client, hotelId, tareaId);
-    if (tarea.estado !== 'planificado') {
+    const esMarcadorSinNecesidad =
+      tarea.tipo === 'mantenimiento' && tarea.estado === 'terminado' && !tarea.con_huesped_dentro;
+    if (tarea.estado !== 'planificado' && !esMarcadorSinNecesidad) {
       throw new BadRequestException(
         `No se puede cancelar: la tarea ya está en estado '${tarea.estado}'`,
       );
