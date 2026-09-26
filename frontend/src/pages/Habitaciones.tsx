@@ -1582,6 +1582,13 @@ function NotasCelda({
   useEffect(() => setValor(notas), [notas]);
 
   if (!editando) {
+    // El botón ocupa todo el ancho de la celda -- si no, en una tabla sin
+    // anchos de columna fijos el navegador le puede dar a la columna más
+    // espacio del que ocupa el texto (ver Planificación de Desayunos, donde
+    // la columna Notas queda bastante más ancha que "3 PAX"), y esa zona
+    // vacía no respondía al clic, dando la impresión de que no se podía
+    // editar. El truncado con "..." queda en el <span> de adentro, que sí
+    // mantiene el ancho máximo angosto en la vista de tabla.
     return (
       <button
         onClick={() => setEditando(true)}
@@ -1590,20 +1597,26 @@ function NotasCelda({
           border: 'none',
           padding: 0,
           textAlign: 'left',
-          fontSize: tarjeta ? 11 : 12.5,
-          fontWeight: notas ? 700 : undefined,
-          color: notas ? 'var(--nota-texto)' : 'var(--text-muted)',
           cursor: 'pointer',
-          width: tarjeta ? '100%' : undefined,
-          maxWidth: tarjeta ? undefined : 180,
-          whiteSpace: 'nowrap',
-          overflow: 'hidden',
-          textOverflow: 'ellipsis',
+          width: '100%',
           display: 'block',
         }}
         title={notas || 'Agregar nota'}
       >
-        {notas || '+ nota'}
+        <span
+          style={{
+            display: 'block',
+            fontSize: tarjeta ? 11 : 12.5,
+            fontWeight: notas ? 700 : undefined,
+            color: notas ? 'var(--nota-texto)' : 'var(--text-muted)',
+            maxWidth: tarjeta ? undefined : 180,
+            whiteSpace: 'nowrap',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+          }}
+        >
+          {notas || '+ nota'}
+        </span>
       </button>
     );
   }
@@ -1625,7 +1638,8 @@ function NotasCelda({
         }
       }}
       style={{
-        width: tarjeta ? '100%' : 160,
+        width: '100%',
+        minWidth: tarjeta ? undefined : 160,
         boxSizing: 'border-box',
         padding: '3px 6px',
         border: '1px solid var(--border-strong)',
