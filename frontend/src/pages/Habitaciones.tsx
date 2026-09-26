@@ -1512,38 +1512,41 @@ function SeccionPlanificacionDesayunos({
       {ocupadas.length === 0 ? (
         <p style={{ color: 'var(--text-muted)' }}>No hay habitaciones ocupadas que coincidan con el filtro.</p>
       ) : (
-        <div style={{ overflow: 'auto', border: '1px solid var(--border)', borderRadius: 12 }}>
+        <div style={{ overflow: 'auto', border: '1px solid var(--border-strong)', borderRadius: 8 }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12.5, minWidth: 560 }}>
             <thead>
-              <tr style={{ textAlign: 'left', color: 'var(--text-secondary)', fontSize: 11 }}>
-                <th style={thStyle}>Habitación</th>
-                <th style={thStyle}>Origen</th>
-                <th style={{ ...thStyle, textAlign: 'center' }}>¿Incluye desayuno?</th>
-                <th style={{ ...thStyle, borderRight: 'none' }}>Notas</th>
+              <tr style={{ textAlign: 'left' }}>
+                <th style={thDesayunoStyle}>Habitación</th>
+                <th style={thDesayunoStyle}>Origen</th>
+                <th style={{ ...thDesayunoStyle, textAlign: 'center' }}>¿Incluye desayuno?</th>
+                <th style={{ ...thDesayunoStyle, borderRight: 'none' }}>Notas</th>
               </tr>
             </thead>
             <tbody>
-              {ocupadas.map((h) => (
-                <tr key={h.id} style={{ borderTop: '1px solid var(--border-strong)' }}>
-                  <td style={{ ...tdStyle, fontWeight: 500, color: 'var(--text-primary)' }}>
-                    {h.hab_numero}
-                    {h.tipos_habitacion ? ` · ${h.tipos_habitacion.nombre}` : ''}
-                  </td>
-                  <td style={tdStyle}>{labelPorOrigen(h)}</td>
-                  <td style={{ ...tdStyle, textAlign: 'center', padding: '10px' }}>
-                    <input
-                      type="checkbox"
-                      checked={h.incluyeDesayuno}
-                      onChange={(e) => onGuardarDesayuno(h, e.target.checked)}
-                      title="Marcar/desmarcar si esta estadía incluye desayuno"
-                      style={checkboxGrandeStyle}
-                    />
-                  </td>
-                  <td style={{ ...tdStyle, borderRight: 'none' }}>
-                    <NotasCelda notas={h.notas ?? ''} onGuardar={(n) => onGuardarNotas(h, n)} />
-                  </td>
-                </tr>
-              ))}
+              {ocupadas.map((h, i) => {
+                const fondoFila = i % 2 === 0 ? 'var(--surface-1)' : 'var(--surface-0)';
+                return (
+                  <tr key={h.id} style={{ background: fondoFila }}>
+                    <td style={{ ...tdDesayunoStyle, fontWeight: 600, color: 'var(--text-primary)' }}>
+                      {h.hab_numero}
+                      {h.tipos_habitacion ? ` · ${h.tipos_habitacion.nombre}` : ''}
+                    </td>
+                    <td style={tdDesayunoStyle}>{labelPorOrigen(h)}</td>
+                    <td style={{ ...tdDesayunoStyle, textAlign: 'center', padding: '10px' }}>
+                      <input
+                        type="checkbox"
+                        checked={h.incluyeDesayuno}
+                        onChange={(e) => onGuardarDesayuno(h, e.target.checked)}
+                        title="Marcar/desmarcar si esta estadía incluye desayuno"
+                        style={checkboxGrandeStyle}
+                      />
+                    </td>
+                    <td style={{ ...tdDesayunoStyle, borderRight: 'none' }}>
+                      <NotasCelda notas={h.notas ?? ''} onGuardar={(n) => onGuardarNotas(h, n)} />
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
@@ -1551,6 +1554,32 @@ function SeccionPlanificacionDesayunos({
     </div>
   );
 }
+
+// Grilla completa (líneas verticales y horizontales) + encabezado en
+// negrita + cebra entre filas -- pedido explícitamente para esta tabla,
+// a diferencia del resto del panel que usa thStyle/tdStyle (más discretos,
+// sin cebra).
+const thDesayunoStyle: CSSProperties = {
+  padding: '9px 10px',
+  whiteSpace: 'nowrap',
+  position: 'sticky',
+  top: 0,
+  zIndex: 1,
+  background: 'var(--surface-2)',
+  color: 'var(--text-primary)',
+  fontWeight: 700,
+  fontSize: 12,
+  borderRight: '1px solid var(--border-strong)',
+  borderBottom: '2px solid var(--border-strong)',
+};
+
+const tdDesayunoStyle: CSSProperties = {
+  padding: '9px 10px',
+  color: 'var(--text-secondary)',
+  whiteSpace: 'nowrap',
+  borderRight: '1px solid var(--border-strong)',
+  borderBottom: '1px solid var(--border-strong)',
+};
 
 const tarjetasGridStyle: CSSProperties = {
   display: 'grid',
