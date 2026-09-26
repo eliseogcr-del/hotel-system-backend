@@ -95,7 +95,7 @@ export class HabitacionesService {
       .from('reserva_habitacion')
       .select(
         `
-        habitacion_id, tarifa_dia, fecha_hora_checkout_prevista, observaciones,
+        habitacion_id, tarifa_dia, fecha_hora_checkout_prevista, observaciones, incluye_desayuno,
         reservas!inner(hotel_id, origen, creado_por_agente, huespedes(nombres, apellidos)),
         estadias!inner(id, checkin_real, estado_actual),
         cocheras(numero, tipo_vehiculo_permitido),
@@ -236,6 +236,7 @@ export class HabitacionesService {
         totalOtrosServicios,
         totalPagado,
         saldo: totalAlquiler + totalOtrosServicios - totalPagado,
+        incluyeDesayuno: linea.incluye_desayuno ?? false,
         notas: linea.observaciones,
         cocheraNumero: linea.cocheras?.numero ?? null,
         vehiculoTipo: linea.vehiculos?.tipo ?? null,
@@ -274,6 +275,7 @@ export class HabitacionesService {
           totalOtrosServicios: null,
           totalPagado: null,
           saldo: null,
+          incluyeDesayuno: false,
           notas: null,
           cocheraNumero: null,
           vehiculoTipo: null,

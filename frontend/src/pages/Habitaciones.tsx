@@ -44,6 +44,7 @@ interface Habitacion {
   totalOtrosServicios: number | null;
   totalPagado: number | null;
   saldo: number | null;
+  incluyeDesayuno: boolean;
   notas: string | null;
   notas_operativas: string | null;
   visible_whatsapp: boolean;
@@ -304,6 +305,19 @@ export function Habitaciones() {
       setHabitaciones((prev) => prev.map((h) => (h.id === hab.id ? { ...h, notas } : h)));
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'No se pudieron guardar las notas');
+    }
+  }
+
+  // Igual que ActualizarEstadiaDto.incluyeDesayuno desde el modal de editar
+  // estadía -- se expone acá para poder marcarlo/desmarcarlo de un vistazo
+  // desde la sección "Planificación de Desayunos" sin entrar al detalle.
+  async function guardarIncluyeDesayuno(hab: Habitacion, incluyeDesayuno: boolean) {
+    if (!hotelActual || !hab.estadiaId) return;
+    try {
+      await api.patch(`/hoteles/${hotelActual.hotelId}/estadias/${hab.estadiaId}`, { incluyeDesayuno });
+      setHabitaciones((prev) => prev.map((h) => (h.id === hab.id ? { ...h, incluyeDesayuno } : h)));
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'No se pudo guardar el desayuno');
     }
   }
 
@@ -756,6 +770,12 @@ export function Habitaciones() {
         hotelId={hotelActual.hotelId}
         habitaciones={habitaciones}
         onCambio={cargarSiAutomatico}
+      />
+
+      <SeccionPlanificacionDesayunos
+        habitaciones={habitaciones}
+        onGuardarNotas={guardarNotas}
+        onGuardarDesayuno={guardarIncluyeDesayuno}
       />
 
       {checkinHab && (
@@ -1439,6 +1459,91 @@ function SeccionMantenimientoLimpieza({
                   </tr>
                 );
               })}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Filtro simple sobre las habitaciones ya cargadas por el panel -- a
+// diferencia de Mantenimientos y Limpiezas (que tiene su propio historial
+// por fecha en tareas_hk), acá no hace falta pedir nada al backend: el
+// desayuno de hoy es un dato de la estadía en curso, así que "Refrescar"
+// (o el auto-refresh del padre) ya trae todo actualizado solo con recargar
+// `habitaciones`.
+type FiltroDesayuno = 'todas' | 'con' | 'sin';
+
+function SeccionPlanificacionDesayunos({
+  habitaciones,
+  onGuardarNotas,
+  onGuardarDesayuno,
+}: {
+  habitaciones: Habitacion[];
+  onGuardarNotas: (hab: Habitacion, notas: string) => void;
+  onGuardarDesayuno: (hab: Habitacion, incluyeDesayuno: boolean) => void;
+}) {
+  const [filtro, setFiltro] = useState<FiltroDesayuno>('todas');
+
+  const ocupadas = habitaciones
+    .filter((h) => h.estado === 'ocupada')
+    .filter((h) => (filtro === 'con' ? h.incluyeDesayuno : filtro === 'sin' ? !h.incluyeDesayuno : true))
+    .sort((a, b) => a.hab_numero - b.hab_numero);
+
+  return (
+    <div style={{ marginTop: 28 }}>
+      <h2 style={{ fontSize: 16, marginBottom: 10 }}>Planificación de Desayunos</h2>
+      <div style={{ marginBottom: 12 }}>
+        <label style={{ fontSize: 11, color: 'var(--text-secondary)', display: 'block', marginBottom: 3 }}>
+          Desayuno
+        </label>
+        <select
+          value={filtro}
+          onChange={(e) => setFiltro(e.target.value as FiltroDesayuno)}
+          style={{ padding: '8px 10px', border: '1px solid var(--border)', borderRadius: 'var(--radius)', fontSize: 13 }}
+        >
+          <option value="todas">Todas las ocupadas</option>
+          <option value="con">Con desayuno</option>
+          <option value="sin">Sin desayuno</option>
+        </select>
+      </div>
+
+      {ocupadas.length === 0 ? (
+        <p style={{ color: 'var(--text-muted)' }}>No hay habitaciones ocupadas que coincidan con el filtro.</p>
+      ) : (
+        <div style={{ overflow: 'auto', border: '1px solid var(--border)', borderRadius: 12 }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12.5, minWidth: 560 }}>
+            <thead>
+              <tr style={{ textAlign: 'left', color: 'var(--text-secondary)', fontSize: 11 }}>
+                <th style={thStyle}>Habitación</th>
+                <th style={thStyle}>Origen</th>
+                <th style={{ ...thStyle, textAlign: 'center' }}>¿Incluye desayuno?</th>
+                <th style={{ ...thStyle, borderRight: 'none' }}>Notas</th>
+              </tr>
+            </thead>
+            <tbody>
+              {ocupadas.map((h) => (
+                <tr key={h.id} style={{ borderTop: '1px solid var(--border-strong)' }}>
+                  <td style={{ ...tdStyle, fontWeight: 500, color: 'var(--text-primary)' }}>
+                    {h.hab_numero}
+                    {h.tipos_habitacion ? ` · ${h.tipos_habitacion.nombre}` : ''}
+                  </td>
+                  <td style={tdStyle}>{labelPorOrigen(h)}</td>
+                  <td style={{ ...tdStyle, textAlign: 'center', padding: '10px' }}>
+                    <input
+                      type="checkbox"
+                      checked={h.incluyeDesayuno}
+                      onChange={(e) => onGuardarDesayuno(h, e.target.checked)}
+                      title="Marcar/desmarcar si esta estadía incluye desayuno"
+                      style={checkboxGrandeStyle}
+                    />
+                  </td>
+                  <td style={{ ...tdStyle, borderRight: 'none' }}>
+                    <NotasCelda notas={h.notas ?? ''} onGuardar={(n) => onGuardarNotas(h, n)} />
+                  </td>
+                </tr>
+              ))}
             </tbody>
           </table>
         </div>
