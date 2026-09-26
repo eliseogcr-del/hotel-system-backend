@@ -1237,9 +1237,16 @@ function SeccionMantenimientoLimpieza({
   // defecto se saca de la vista apenas se completa (ej. hab. 403: limpieza
   // terminada, ya está disponible, no debe seguir apareciendo acá) salvo
   // que se active "Ver plan del día", para revisar todo lo que se hizo.
+  // 'sin_necesidad' es la excepción: la habitación sigue ocupada y hay que
+  // poder verla marcada el resto del día (para no volver a preguntar dos
+  // veces), así que no se oculta aunque cuente como 'terminado' -- al día
+  // siguiente desaparece sola porque el filtro de fecha (?fecha=) ya no
+  // trae ese registro (ver TareasHkService.marcarSinMantenimiento()).
   // Para una fecha pasada siempre se ve todo: es un filtro histórico.
   const filas =
-    esHoy && !mostrarTerminadas ? filasBrutas.filter((f) => f.tarea?.estado !== 'terminado') : filasBrutas;
+    esHoy && !mostrarTerminadas
+      ? filasBrutas.filter((f) => f.categoria === 'sin_necesidad' || f.tarea?.estado !== 'terminado')
+      : filasBrutas;
   filas.sort((a, b) => a.habNumero - b.habNumero);
 
   function estadoActualDe(habitacionId: string): Estado | undefined {
@@ -1501,12 +1508,15 @@ function NotasCelda({
 }
 
 // Los checkboxes por defecto del navegador se ven muy finos/apagados en esta
-// tabla -- se agrandan y se les pone un color de check más intenso para que
-// se note de un vistazo cuál casillero ya está marcado.
+// tabla -- se agrandan (con el check también más grande, vía transform) y se
+// les pone un amarillo intenso al marcarse (en vez del color de marca, que
+// se pierde contra el fondo rojo/naranja de estas filas) para que se note de
+// un vistazo cuál casillero ya está marcado.
 const checkboxGrandeStyle: CSSProperties = {
-  width: 20,
-  height: 20,
-  accentColor: 'var(--brand)',
+  width: 22,
+  height: 22,
+  accentColor: '#eab308',
+  transform: 'scale(1.15)',
   cursor: 'pointer',
 };
 
