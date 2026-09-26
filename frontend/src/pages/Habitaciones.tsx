@@ -1283,6 +1283,7 @@ function SeccionMantenimientoLimpieza({
               type="checkbox"
               checked={mostrarTerminadas}
               onChange={(e) => setMostrarTerminadas(e.target.checked)}
+              style={checkboxGrandeStyle}
             />
             Ver plan del día (incluye las ya limpias/resueltas)
           </label>
@@ -1300,12 +1301,12 @@ function SeccionMantenimientoLimpieza({
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12.5, minWidth: 640 }}>
             <thead>
               <tr style={{ textAlign: 'left', color: 'var(--text-secondary)', fontSize: 11 }}>
-                <th style={thStyle}>Habitación</th>
-                <th style={{ ...thStyle, textAlign: 'center' }}>Planificada</th>
-                <th style={{ ...thStyle, textAlign: 'center' }}>En proceso</th>
-                <th style={{ ...thStyle, textAlign: 'center' }}>Terminada</th>
-                <th style={{ ...thStyle, textAlign: 'center' }}>No necesita mantenimiento</th>
-                <th style={{ ...thStyle, textAlign: 'center', borderRight: 'none' }}>Marcar disponible</th>
+                <th style={{ ...thStyle, fontSize: 12 }}>Habitación</th>
+                <th style={{ ...thStyle, textAlign: 'center', fontSize: 12 }}>Planificada</th>
+                <th style={{ ...thStyle, textAlign: 'center', fontSize: 12 }}>En proceso</th>
+                <th style={{ ...thStyle, textAlign: 'center', fontSize: 12 }}>Terminada</th>
+                <th style={{ ...thStyle, textAlign: 'center', fontSize: 12 }}>No necesita mantenimiento</th>
+                <th style={{ ...thStyle, textAlign: 'center', borderRight: 'none', fontSize: 12 }}>Marcar disponible</th>
               </tr>
             </thead>
             <tbody>
@@ -1322,11 +1323,19 @@ function SeccionMantenimientoLimpieza({
                       background: color.bg,
                     }}
                   >
-                    <td style={{ ...tdStyle, fontWeight: 700, color: color.text, borderRight: `1px solid ${color.border}` }}>
+                    <td
+                      style={{
+                        ...tdStyle,
+                        fontWeight: 700,
+                        fontSize: 13.5,
+                        color: color.text,
+                        borderRight: `1px solid ${color.border}`,
+                      }}
+                    >
                       {fila.habNumero}
                       {fila.tipoHabitacion ? ` · ${fila.tipoHabitacion}` : ''}
                     </td>
-                    <td style={{ ...tdStyle, textAlign: 'center' }}>
+                    <td style={{ ...tdStyle, textAlign: 'center', padding: '10px' }}>
                       {fila.categoria === 'sin_necesidad' ? (
                         '—'
                       ) : (
@@ -1336,10 +1345,11 @@ function SeccionMantenimientoLimpieza({
                           disabled={!!fila.tarea || bloqueada}
                           onChange={() => crearTareaConHuesped(fila.habitacionId)}
                           title={fila.tarea ? 'Ya planificada' : 'Planificar mantenimiento (con huésped dentro)'}
+                          style={checkboxGrandeStyle}
                         />
                       )}
                     </td>
-                    <td style={{ ...tdStyle, textAlign: 'center' }}>
+                    <td style={{ ...tdStyle, textAlign: 'center', padding: '10px' }}>
                       {fila.categoria === 'sin_necesidad' ? (
                         '—'
                       ) : (
@@ -1348,10 +1358,11 @@ function SeccionMantenimientoLimpieza({
                           checked={fila.tarea?.estado === 'en_proceso' || fila.tarea?.estado === 'terminado'}
                           disabled={fila.tarea?.estado !== 'planificado' || bloqueada}
                           onChange={() => fila.tarea && iniciarTarea(fila.habitacionId, fila.tarea.id)}
+                          style={checkboxGrandeStyle}
                         />
                       )}
                     </td>
-                    <td style={{ ...tdStyle, textAlign: 'center' }}>
+                    <td style={{ ...tdStyle, textAlign: 'center', padding: '10px' }}>
                       {fila.categoria === 'sin_necesidad' ? (
                         '—'
                       ) : (
@@ -1360,12 +1371,13 @@ function SeccionMantenimientoLimpieza({
                           checked={fila.tarea?.estado === 'terminado'}
                           disabled={fila.tarea?.estado !== 'en_proceso' || bloqueada}
                           onChange={() => fila.tarea && terminarTarea(fila.habitacionId, fila.tarea.id)}
+                          style={checkboxGrandeStyle}
                         />
                       )}
                     </td>
-                    <td style={{ ...tdStyle, textAlign: 'center' }}>
+                    <td style={{ ...tdStyle, textAlign: 'center', padding: '10px' }}>
                       {fila.categoria === 'sin_necesidad' ? (
-                        <input type="checkbox" checked disabled title="Marcado por recepción" />
+                        <input type="checkbox" checked disabled title="Marcado por recepción" style={checkboxGrandeStyle} />
                       ) : fila.categoria === 'ocupada_sin_tarea' ? (
                         <input
                           type="checkbox"
@@ -1373,12 +1385,13 @@ function SeccionMantenimientoLimpieza({
                           disabled={bloqueada}
                           onChange={() => marcarSinNecesidad(fila.habitacionId)}
                           title="Confirmar que hoy no necesita mantenimiento"
+                          style={checkboxGrandeStyle}
                         />
                       ) : (
                         '—'
                       )}
                     </td>
-                    <td style={{ ...tdStyle, textAlign: 'center', borderRight: 'none' }}>
+                    <td style={{ ...tdStyle, textAlign: 'center', borderRight: 'none', padding: '10px' }}>
                       {puedeMarcarDisponible ? (
                         <input
                           type="checkbox"
@@ -1386,6 +1399,7 @@ function SeccionMantenimientoLimpieza({
                           disabled={bloqueada}
                           onChange={() => marcarDisponible(fila.habitacionId)}
                           title="Usar solo si HK ya terminó pero se le olvidó cerrar la tarea"
+                          style={checkboxGrandeStyle}
                         />
                       ) : (
                         '—'
@@ -1485,6 +1499,16 @@ function NotasCelda({
     />
   );
 }
+
+// Los checkboxes por defecto del navegador se ven muy finos/apagados en esta
+// tabla -- se agrandan y se les pone un color de check más intenso para que
+// se note de un vistazo cuál casillero ya está marcado.
+const checkboxGrandeStyle: CSSProperties = {
+  width: 20,
+  height: 20,
+  accentColor: 'var(--brand)',
+  cursor: 'pointer',
+};
 
 const thStyle: CSSProperties = {
   padding: '8px 10px',
