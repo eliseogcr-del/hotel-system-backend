@@ -163,27 +163,48 @@ export class CotizacionPublicaService {
     const { dias, esLate } = this.resolverFechas(dto, hotel);
 
     const habitaciones = await this.habitacionesDisponiblesReales(client, hotelId, dto, hotel);
-    const mapear = (h: any) => {
-      const precioNoche = this.precioNocheEfectivo(h.tipos_habitacion, dto.personas);
-      return {
-        habitacionId: h.id,
-        numero: h.hab_numero,
-        tipo: h.tipos_habitacion?.nombre ?? '—',
-        aforoMax: h.tipos_habitacion?.aforo_max ?? 0,
-        precioNoche,
-        importe: Math.round(precioNoche * dias * 100) / 100,
-      };
-    };
-
     const acordes = habitaciones.filter((h) => (h.tipos_habitacion?.aforo_max ?? 0) <= dto.personas + 1);
     const otras = habitaciones.filter((h) => (h.tipos_habitacion?.aforo_max ?? 0) > dto.personas + 1);
 
     return {
       dias,
       esLate,
-      habitaciones: acordes.map(mapear),
-      otrasHabitaciones: otras.map(mapear),
+      habitaciones: this.agruparPorTipo(acordes, dias, dto.personas),
+      otrasHabitaciones: this.agruparPorTipo(otras, dias, dto.personas),
     };
+  }
+
+  // Agrupa habitaciones físicas realmente disponibles por tipo, para que el
+  // cliente elija "cuántas de este tipo" en vez de una habitación puntual
+  // (ver CrearReservaWhatsappDto: nunca se le muestra ni se le deja fijar un
+  // número de habitación concreto -- eso es siempre un detalle operativo
+  // interno). `tipoHabitacionId` es la clave real de agrupación porque el
+  // catálogo de tipos es libre por hotel (ver CLAUDE.md 3.1) -- agrupar por
+  // nombre sería frágil.
+  private agruparPorTipo(habitaciones: any[], dias: number, personas: number) {
+    const grupos = new Map<
+      string,
+      { tipoHabitacionId: string; tipo: string; aforoMax: number; precioNoche: number; importe: number; cantidadDisponible: number }
+    >();
+    for (const h of habitaciones) {
+      const tipoId = h.tipos_habitacion?.id;
+      if (!tipoId) continue;
+      const existente = grupos.get(tipoId);
+      if (existente) {
+        existente.cantidadDisponible += 1;
+        continue;
+      }
+      const precioNoche = this.precioNocheEfectivo(h.tipos_habitacion, personas);
+      grupos.set(tipoId, {
+        tipoHabitacionId: tipoId,
+        tipo: h.tipos_habitacion?.nombre ?? '—',
+        aforoMax: h.tipos_habitacion?.aforo_max ?? 0,
+        precioNoche,
+        importe: Math.round(precioNoche * dias * 100) / 100,
+        cantidadDisponible: 1,
+      });
+    }
+    return Array.from(grupos.values()).sort((a, b) => a.aforoMax - b.aforoMax);
   }
 
   // Compartido por buscarHabitacionesDisponibles() (para mostrar la lista) y
@@ -207,7 +228,7 @@ export class CotizacionPublicaService {
 
     const { data: candidatas, error } = await client
       .from('habitaciones')
-      .select('id, hab_numero, tipos_habitacion(nombre, aforo_max, precio_normal, precio_individual)')
+      .select('id, hab_numero, tipos_habitacion(id, nombre, aforo_max, precio_normal, precio_individual)')
       .eq('hotel_id', hotelId)
       .eq('visible_whatsapp', true)
       .neq('estado', 'bloqueada');
@@ -247,12 +268,25 @@ export class CotizacionPublicaService {
     const { checkinISO, checkoutISO, esLate } = this.resolverFechas(dto, hotel);
     const huesped = await this.buscarOCrearHuesped(client, hotelId, dto);
 
+    // El cliente nunca elige una habitación puntual (ver
+    // CrearReservaWhatsappDto) -- acá recién se resuelve `seleccion`
+    // (tipo + cantidad) contra la disponibilidad real leída en este mismo
+    // instante, y el servidor decide qué habitaciones concretas asignar.
+    // Esto es lo que cierra la ventana de carrera entre dos clientes viendo
+    // el formulario al mismo tiempo: ninguno llega a "reservar" un id que ya
+    // pudo habérsele ido a otro, porque nunca viaja un id de habitación.
     const candidatas = await this.habitacionesDisponiblesReales(client, hotelId, dto, hotel);
-    const elegidas = candidatas.filter((h) => dto.habitacionIds.includes(h.id));
-    if (elegidas.length !== dto.habitacionIds.length) {
-      throw new BadRequestException(
-        'Una o más habitaciones seleccionadas ya no están disponibles. Por favor vuelve a intentarlo.',
+    const elegidas: any[] = [];
+    for (const item of dto.seleccion) {
+      const disponiblesDelTipo = candidatas.filter(
+        (h) => h.tipos_habitacion?.id === item.tipoHabitacionId && !elegidas.includes(h),
       );
+      if (disponiblesDelTipo.length < item.cantidad) {
+        throw new BadRequestException(
+          'Una o más habitaciones seleccionadas ya no están disponibles. Por favor vuelve a intentarlo.',
+        );
+      }
+      elegidas.push(...disponiblesDelTipo.slice(0, item.cantidad));
     }
 
     // Habitaciones más grandes primero, mismo criterio de reparto que

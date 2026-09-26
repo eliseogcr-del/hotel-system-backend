@@ -1,19 +1,37 @@
-import { ArrayMinSize, ArrayUnique, IsArray, IsUUID } from 'class-validator';
+import { ArrayMinSize, IsArray, IsInt, IsUUID, Min, ValidateNested } from 'class-validator';
+import { Type } from 'class-transformer';
 import { CrearCotizacionWhatsappDto } from './crear-cotizacion-whatsapp.dto';
+
+// El cliente elige cuántas habitaciones quiere de cada TIPO (ej. 2
+// matrimoniales), nunca cuáles en particular -- así nunca puede quedarse
+// "apuntando" a una habitación puntual que otra persona reserve primero (ver
+// CotizacionPublicaService.crearReservaDesdeWhatsapp: el servidor recién ahí
+// elige, de lo que esté realmente libre en ese momento, qué habitaciones
+// concretas asignar).
+class SeleccionTipoHabitacionDto {
+  @IsUUID()
+  tipoHabitacionId: string;
+
+  @IsInt()
+  @Min(1)
+  cantidad: number;
+}
 
 /**
  * Body del botón "Reservar" del formulario público: el cliente ya vio la
- * lista de habitaciones realmente disponibles (ver
+ * lista de tipos de habitación con cupo disponible (ver
  * HabitacionesDisponiblesWhatsappDto/buscarHabitacionesDisponibles) y marcó
- * cuáles quiere. A propósito NO viaja de vuelta ni precio ni aforo -- eso
- * siempre se recalcula del lado del servidor a partir de habitacionIds (ver
+ * cuántas quiere de cada tipo. A propósito no viaja el id de una habitación
+ * puntual ni precio/aforo -- eso siempre se resuelve/recalcula del lado del
+ * servidor a partir de `seleccion` (ver
  * CotizacionPublicaService.crearReservaDesdeWhatsapp), para que el cliente
- * nunca pueda alterarlos.
+ * nunca pueda alterarlos ni reservar sobre una habitación que ya no esté
+ * libre.
  */
 export class CrearReservaWhatsappDto extends CrearCotizacionWhatsappDto {
   @IsArray()
   @ArrayMinSize(1)
-  @ArrayUnique()
-  @IsUUID('4', { each: true })
-  habitacionIds: string[];
+  @ValidateNested({ each: true })
+  @Type(() => SeleccionTipoHabitacionDto)
+  seleccion: SeleccionTipoHabitacionDto[];
 }

@@ -66,13 +66,18 @@ interface InfoHotel {
   umbralGrupoGrande: number;
 }
 
-interface HabitacionDisponible {
-  habitacionId: string;
-  numero: number;
+// Nunca viaja un número de habitación puntual al cliente -- solo el tipo y
+// cuántas quedan disponibles de ese tipo en este momento (ver
+// CotizacionPublicaService.agruparPorTipo). El servidor recién asigna la
+// habitación concreta al confirmar la reserva, así se evita que dos
+// personas terminen "apuntando" a la misma habitación numerada a la vez.
+interface TipoHabitacionDisponible {
+  tipoHabitacionId: string;
   tipo: string;
   aforoMax: number;
   precioNoche: number;
   importe: number;
+  cantidadDisponible: number;
 }
 
 // Formulario público (sin login) al que el agente de WhatsApp le manda el
@@ -105,12 +110,15 @@ export function CotizarWhatsapp() {
   const [error, setError] = useState<string | null>(null);
   const [resultado, setResultado] = useState<RespuestaCotizacion | RespuestaReserva | null>(null);
 
-  const [habitacionesDisponibles, setHabitacionesDisponibles] = useState<HabitacionDisponible[] | null>(null);
-  const [otrasHabitacionesDisponibles, setOtrasHabitacionesDisponibles] = useState<HabitacionDisponible[]>([]);
+  const [tiposDisponibles, setTiposDisponibles] = useState<TipoHabitacionDisponible[] | null>(null);
+  const [otrosTiposDisponibles, setOtrosTiposDisponibles] = useState<TipoHabitacionDisponible[]>([]);
   const [mostrarOtrasHabitaciones, setMostrarOtrasHabitaciones] = useState(false);
   const [buscandoHabitaciones, setBuscandoHabitaciones] = useState(false);
   const [busquedaError, setBusquedaError] = useState<string | null>(null);
-  const [seleccionadas, setSeleccionadas] = useState<Set<string>>(new Set());
+  // Cuántas habitaciones de cada tipo eligió el cliente (tipoHabitacionId ->
+  // cantidad). Un Record en vez de un Set porque acá sí puede pedir más de
+  // una del mismo tipo (ej. 2 matrimoniales) -- ver stepper en TipoRow.
+  const [cantidadPorTipo, setCantidadPorTipo] = useState<Record<string, number>>({});
 
   useEffect(() => {
     if (!hotelId) return;
@@ -133,16 +141,18 @@ export function CotizarWhatsapp() {
   // de cotización con revisión humana (ver handleSubmitCotizar más abajo).
   const personasDentroDelUmbral = !!info && personas > 0 && personas <= info.umbralGrupoGrande;
 
-  const capacidadSeleccionada = [...(habitacionesDisponibles ?? []), ...otrasHabitacionesDisponibles]
-    .filter((h) => seleccionadas.has(h.habitacionId))
-    .reduce((acc, h) => acc + h.aforoMax, 0);
+  const capacidadSeleccionada = [...(tiposDisponibles ?? []), ...otrosTiposDisponibles].reduce(
+    (acc, t) => acc + (cantidadPorTipo[t.tipoHabitacionId] ?? 0) * t.aforoMax,
+    0,
+  );
 
-  function toggleSeleccion(habitacionId: string) {
-    setSeleccionadas((prev) => {
-      const next = new Set(prev);
-      if (next.has(habitacionId)) next.delete(habitacionId);
-      else next.add(habitacionId);
-      return next;
+  function cambiarCantidad(tipoHabitacionId: string, cantidad: number) {
+    setCantidadPorTipo((prev) => {
+      if (cantidad <= 0) {
+        const { [tipoHabitacionId]: _quitado, ...resto } = prev;
+        return resto;
+      }
+      return { ...prev, [tipoHabitacionId]: cantidad };
     });
   }
 
@@ -153,10 +163,10 @@ export function CotizarWhatsapp() {
   // mandar una consulta por cada tecla mientras escriben la cantidad.
   useEffect(() => {
     if (!hotelId || !personasDentroDelUmbral) {
-      setHabitacionesDisponibles(null);
-      setOtrasHabitacionesDisponibles([]);
+      setTiposDisponibles(null);
+      setOtrosTiposDisponibles([]);
       setMostrarOtrasHabitaciones(false);
-      setSeleccionadas(new Set());
+      setCantidadPorTipo({});
       return;
     }
     if (!fechaIngreso || !horaIngreso) return;
@@ -180,17 +190,17 @@ export function CotizarWhatsapp() {
         .then(async (res) => {
           const body = await res.json().catch(() => ({}));
           if (!res.ok) throw new Error(body.message ?? 'No se pudo buscar habitaciones disponibles');
-          return body as { habitaciones: HabitacionDisponible[]; otrasHabitaciones: HabitacionDisponible[] };
+          return body as { habitaciones: TipoHabitacionDisponible[]; otrasHabitaciones: TipoHabitacionDisponible[] };
         })
         .then((data) => {
-          setHabitacionesDisponibles(data.habitaciones);
-          setOtrasHabitacionesDisponibles(data.otrasHabitaciones ?? []);
+          setTiposDisponibles(data.habitaciones);
+          setOtrosTiposDisponibles(data.otrasHabitaciones ?? []);
           setMostrarOtrasHabitaciones(false);
-          setSeleccionadas(new Set());
+          setCantidadPorTipo({});
         })
         .catch((err) => {
-          setHabitacionesDisponibles(null);
-          setOtrasHabitacionesDisponibles([]);
+          setTiposDisponibles(null);
+          setOtrosTiposDisponibles([]);
           setBusquedaError(err instanceof Error ? err.message : 'No se pudo buscar habitaciones disponibles');
         })
         .finally(() => setBuscandoHabitaciones(false));
@@ -311,7 +321,9 @@ export function CotizarWhatsapp() {
           razonSocial: facturable ? razonSocial : undefined,
           fechaSalida: cambiarSalida ? fechaSalida : undefined,
           horaSalida: cambiarSalida ? horaSalida : undefined,
-          habitacionIds: [...seleccionadas],
+          seleccion: Object.entries(cantidadPorTipo)
+            .filter(([, cantidad]) => cantidad > 0)
+            .map(([tipoHabitacionId, cantidad]) => ({ tipoHabitacionId, cantidad })),
         }),
       });
       const body = await res.json().catch(() => ({}));
@@ -543,22 +555,20 @@ export function CotizarWhatsapp() {
             {busquedaError && <p style={{ fontSize: 13, color: 'var(--danger)' }}>{busquedaError}</p>}
             {!buscandoHabitaciones &&
               !busquedaError &&
-              habitacionesDisponibles?.length === 0 &&
-              otrasHabitacionesDisponibles.length === 0 && (
+              tiposDisponibles?.length === 0 &&
+              otrosTiposDisponibles.length === 0 && (
                 <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>
                   No hay habitaciones disponibles para esas fechas y cantidad de personas.
                 </p>
               )}
-            {!buscandoHabitaciones && habitacionesDisponibles && habitacionesDisponibles.length > 0 && (
-              <ListaHabitaciones
-                habitaciones={habitacionesDisponibles}
-                seleccionadas={seleccionadas}
-                capacidadSeleccionada={capacidadSeleccionada}
-                personas={personas}
-                onToggle={toggleSeleccion}
+            {!buscandoHabitaciones && tiposDisponibles && tiposDisponibles.length > 0 && (
+              <ListaTiposHabitacion
+                tipos={tiposDisponibles}
+                cantidadPorTipo={cantidadPorTipo}
+                onCambiarCantidad={cambiarCantidad}
               />
             )}
-            {!buscandoHabitaciones && otrasHabitacionesDisponibles.length > 0 && (
+            {!buscandoHabitaciones && otrosTiposDisponibles.length > 0 && (
               <div>
                 <button
                   type="button"
@@ -569,19 +579,17 @@ export function CotizarWhatsapp() {
                 </button>
                 {mostrarOtrasHabitaciones && (
                   <div style={{ marginTop: 8 }}>
-                    <ListaHabitaciones
-                      habitaciones={otrasHabitacionesDisponibles}
-                      seleccionadas={seleccionadas}
-                      capacidadSeleccionada={capacidadSeleccionada}
-                      personas={personas}
-                      onToggle={toggleSeleccion}
+                    <ListaTiposHabitacion
+                      tipos={otrosTiposDisponibles}
+                      cantidadPorTipo={cantidadPorTipo}
+                      onCambiarCantidad={cambiarCantidad}
                     />
                   </div>
                 )}
               </div>
             )}
             {!buscandoHabitaciones &&
-              ((habitacionesDisponibles?.length ?? 0) > 0 || otrasHabitacionesDisponibles.length > 0) && (
+              ((tiposDisponibles?.length ?? 0) > 0 || otrosTiposDisponibles.length > 0) && (
                 <p style={{ fontSize: 12, color: 'var(--text-muted)' }}>
                   Seleccionado: {capacidadSeleccionada} / {personas} personas
                 </p>
@@ -686,50 +694,62 @@ function Campo({ label, children }: { label: string; children: React.ReactNode }
   );
 }
 
-// Lista de habitaciones con checkbox, reusada tanto para la lista principal
-// (acordes al tamaño del grupo) como para "Otras opciones de habitaciones"
-// (bastante más grandes de lo necesario) -- mismo look, misma lógica de
-// selección y de cuándo deshabilitar una fila.
-function ListaHabitaciones({
-  habitaciones,
-  seleccionadas,
-  capacidadSeleccionada,
-  personas,
-  onToggle,
+// Lista de tipos de habitación con un stepper +/- por fila, reusada tanto
+// para la lista principal (acordes al tamaño del grupo) como para "Otras
+// opciones de habitaciones" (bastante más grandes de lo necesario) -- nunca
+// muestra un número de habitación puntual, solo el tipo y cuántas quedan
+// (ver TipoHabitacionDisponible/CotizacionPublicaService.agruparPorTipo).
+function ListaTiposHabitacion({
+  tipos,
+  cantidadPorTipo,
+  onCambiarCantidad,
 }: {
-  habitaciones: HabitacionDisponible[];
-  seleccionadas: Set<string>;
-  capacidadSeleccionada: number;
-  personas: number;
-  onToggle: (habitacionId: string) => void;
+  tipos: TipoHabitacionDisponible[];
+  cantidadPorTipo: Record<string, number>;
+  onCambiarCantidad: (tipoHabitacionId: string, cantidad: number) => void;
 }) {
   return (
     <div style={{ border: '1px solid var(--border)', borderRadius: 8, overflow: 'hidden' }}>
-      {habitaciones.map((h) => {
-        const marcada = seleccionadas.has(h.habitacionId);
-        const deshabilitada = !marcada && capacidadSeleccionada >= personas;
+      {tipos.map((t) => {
+        const cantidad = cantidadPorTipo[t.tipoHabitacionId] ?? 0;
         return (
-          <label
-            key={h.habitacionId}
+          <div
+            key={t.tipoHabitacionId}
             style={{
               display: 'flex',
               alignItems: 'center',
               gap: 10,
               padding: '10px 12px',
               borderBottom: '1px solid var(--border)',
-              opacity: deshabilitada ? 0.5 : 1,
-              cursor: deshabilitada ? 'not-allowed' : 'pointer',
             }}
           >
-            <input type="checkbox" checked={marcada} disabled={deshabilitada} onChange={() => onToggle(h.habitacionId)} />
             <div style={{ flex: 1 }}>
-              <div style={{ fontWeight: 600, fontSize: 13 }}>
-                Hab. {h.numero} · {h.tipo}
+              <div style={{ fontWeight: 600, fontSize: 13 }}>{t.tipo}</div>
+              <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+                Máx. {t.aforoMax} personas · {t.cantidadDisponible} disponible{t.cantidadDisponible === 1 ? '' : 's'}
               </div>
-              <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Máx. {h.aforoMax} personas</div>
+              <div style={{ fontSize: 12, fontWeight: 700, marginTop: 2 }}>S/. {t.importe.toFixed(2)} c/u</div>
             </div>
-            <div style={{ fontWeight: 700, fontSize: 13, whiteSpace: 'nowrap' }}>S/. {h.importe.toFixed(2)}</div>
-          </label>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <button
+                type="button"
+                onClick={() => onCambiarCantidad(t.tipoHabitacionId, cantidad - 1)}
+                disabled={cantidad <= 0}
+                style={stepperBtnStyle}
+              >
+                −
+              </button>
+              <span style={{ minWidth: 16, textAlign: 'center', fontSize: 14, fontWeight: 600 }}>{cantidad}</span>
+              <button
+                type="button"
+                onClick={() => onCambiarCantidad(t.tipoHabitacionId, cantidad + 1)}
+                disabled={cantidad >= t.cantidadDisponible}
+                style={stepperBtnStyle}
+              >
+                +
+              </button>
+            </div>
+          </div>
         );
       })}
     </div>
@@ -754,6 +774,17 @@ const checkboxLabelStyle: CSSProperties = {
   alignItems: 'center',
   gap: 8,
   fontSize: 13,
+};
+
+const stepperBtnStyle: CSSProperties = {
+  width: 28,
+  height: 28,
+  borderRadius: '50%',
+  border: '1px solid var(--border)',
+  background: 'var(--surface-1)',
+  fontSize: 16,
+  lineHeight: 1,
+  cursor: 'pointer',
 };
 
 const otrasOpcionesBtnStyle: CSSProperties = {
