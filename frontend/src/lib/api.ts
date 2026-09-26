@@ -21,9 +21,30 @@ async function llamar(path: string, options: RequestInit, token: string | undefi
   });
 }
 
+function esperar(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+// El backend (Render, plan gratuito) se duerme tras un rato sin uso y tarda
+// unos segundos en responder a la primera petición -- antes, esa primera
+// llamada fallaba a nivel de red (fetch ni llega a recibir respuesta, lanza
+// una excepción en vez de devolver un status) y se mostraba como "Error al
+// cargar" sin más, aunque el backend solo necesitaba unos segundos para
+// despertar. Solo reintenta fallos de RED: una respuesta HTTP de error
+// (4xx/5xx) sí llega a `llamar()` con éxito y se maneja más abajo como
+// ApiError, sin pasar por acá.
+async function llamarConReintento(path: string, options: RequestInit, token: string | undefined): Promise<Response> {
+  try {
+    return await llamar(path, options, token);
+  } catch {
+    await esperar(3000);
+    return llamar(path, options, token);
+  }
+}
+
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const { data } = await supabase.auth.getSession();
-  let res = await llamar(path, options, data.session?.access_token);
+  let res = await llamarConReintento(path, options, data.session?.access_token);
 
   // Un 401 acá no siempre significa que la sesión murió de verdad: si la
   // pestaña estuvo inactiva/dormida (laptop suspendida, celular en
