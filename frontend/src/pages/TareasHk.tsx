@@ -53,8 +53,6 @@ interface TareaHk {
   habitaciones: { hab_numero: number; piso: number } | null;
 }
 
-const ESTADOS = ['planificado', 'en_proceso', 'terminado'];
-
 // Perú (America/Lima) es UTC-5 todo el año -- mismo criterio que el resto
 // del sistema (ver Reportes.tsx) para que "hoy" no dependa de la zona
 // horaria del navegador.
@@ -100,8 +98,13 @@ export function TareasHk() {
   const [tareas, setTareas] = useState<TareaHk[]>([]);
   const [habitaciones, setHabitaciones] = useState<Habitacion[]>([]);
   const [cocheras, setCocheras] = useState<Cochera[]>([]);
-  const [filtroEstado, setFiltroEstado] = useState('');
   const [filtroFecha, setFiltroFecha] = useState(fechaHoy());
+  // Por defecto solo se ven las pendientes (planificada/en proceso) -- una
+  // tarea terminada ya no tiene nada por hacer, así que se saca de la vista
+  // apenas se completa, igual que la sección "Mantenimientos y Limpiezas" de
+  // Habitaciones.tsx. Este checkbox las vuelve a mostrar para revisar el
+  // plan completo del día.
+  const [mostrarTerminadas, setMostrarTerminadas] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [mostrarForm, setMostrarForm] = useState(false);
@@ -112,7 +115,6 @@ export function TareasHk() {
     if (!hotelActual) return;
     setLoading(true);
     const params = new URLSearchParams();
-    if (filtroEstado) params.set('estado', filtroEstado);
     if (filtroFecha) params.set('fecha', filtroFecha);
     const query = params.toString() ? `?${params.toString()}` : '';
     api
@@ -122,7 +124,7 @@ export function TareasHk() {
       .finally(() => setLoading(false));
   }
 
-  useEffect(cargar, [hotelActual, filtroEstado, filtroFecha]);
+  useEffect(cargar, [hotelActual, filtroFecha]);
 
   function cargarHabitacionesCocheras() {
     if (!hotelActual) return;
@@ -187,6 +189,8 @@ export function TareasHk() {
   }
 
   if (!hotelActual) return null;
+
+  const tareasVisibles = mostrarTerminadas ? tareas : tareas.filter((t) => t.estado !== 'terminado');
 
   return (
     <div>
@@ -257,23 +261,19 @@ export function TareasHk() {
             style={inputStyle}
           />
         </div>
-        <select
-          value={filtroEstado}
-          onChange={(e) => setFiltroEstado(e.target.value)}
-          style={{ padding: '8px 10px', border: '1px solid var(--border)', borderRadius: 'var(--radius)', fontSize: 13 }}
-        >
-          <option value="">Todos los estados</option>
-          {ESTADOS.map((e) => (
-            <option key={e} value={e}>
-              {ESTADO_LABEL[e]}
-            </option>
-          ))}
-        </select>
         {filtroFecha !== fechaHoy() && (
           <button type="button" onClick={() => setFiltroFecha(fechaHoy())} style={btnSecondary}>
             Hoy
           </button>
         )}
+        <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, paddingBottom: 8 }}>
+          <input
+            type="checkbox"
+            checked={mostrarTerminadas}
+            onChange={(e) => setMostrarTerminadas(e.target.checked)}
+          />
+          Ver terminadas
+        </label>
       </div>
 
       {loading && <p style={{ color: 'var(--text-muted)' }}>Cargando...</p>}
@@ -281,7 +281,7 @@ export function TareasHk() {
 
       {!loading && (
         <div style={tarjetasGridStyle}>
-          {tareas.map((t) => {
+          {tareasVisibles.map((t) => {
             const color = colorDeTarea(t);
             const puedeAvanzar = t.estado !== 'terminado';
             const ocupado = accionando === t.id;
@@ -327,7 +327,11 @@ export function TareasHk() {
               </div>
             );
           })}
-          {tareas.length === 0 && <p style={{ color: 'var(--text-muted)' }}>No hay tareas.</p>}
+          {tareasVisibles.length === 0 && (
+            <p style={{ color: 'var(--text-muted)' }}>
+              {mostrarTerminadas ? 'No hay tareas.' : 'No hay tareas pendientes.'}
+            </p>
+          )}
         </div>
       )}
         </>
