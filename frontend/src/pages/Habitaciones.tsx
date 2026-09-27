@@ -251,17 +251,33 @@ export function Habitaciones() {
     return () => clearInterval(t);
   }, []);
 
+  // Sin cron real en el backend, procesar-salidas-vencidas (ver
+  // EstadiasService.procesarSalidasVencidas(): extiende sola una salida
+  // vencida por más de 5 horas) solo se disparaba cuando alguien cargaba o
+  // refrescaba este panel -- si nadie lo miraba justo pasadas esas 5 horas
+  // (ej. a las 17:00 con checkout estándar a las 12:00), quedaba sin
+  // procesar hasta el próximo refresco por otro motivo. Este timer llama a
+  // cargarSiAutomatico() cada 5 minutos (mismo toggle "Actualizar
+  // automáticamente" que ya respetan las demás recargas) para que se
+  // dispare cerca de la hora real sin depender de que alguien haga clic.
+  useEffect(() => {
+    const t = setInterval(cargarSiAutomatico, 5 * 60 * 1000);
+    return () => clearInterval(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [actualizacionAutomatica, hotelActual]);
+
   async function cargar() {
     if (!hotelActual) return;
     setLoading(true);
     setError(null);
     // Sin cron real en el backend: cada vez que se abre/recarga este panel
     // se le pide al backend que extienda automáticamente las estadías cuya
-    // salida programada ya venció hace más de 1 hora sin checkout ni
-    // ampliación. No se espera (antes bloqueaba la carga del panel entero
-    // un viaje de red completo) -- el caso que corrige es raro (una salida
-    // vencida hace rato sin registrar), y si justo se procesa mientras se
-    // pide /habitaciones, el próximo refresh ya lo muestra al día.
+    // salida programada ya venció hace más de 5 horas sin checkout ni
+    // ampliación (y sea exactamente la hora de checkout estándar del hotel,
+    // ver EstadiasService.procesarSalidasVencidas()). No se espera (antes
+    // bloqueaba la carga del panel entero un viaje de red completo) -- el
+    // caso que corrige es raro, y si justo se procesa mientras se pide
+    // /habitaciones, el próximo refresh ya lo muestra al día.
     api.post(`/hoteles/${hotelActual.hotelId}/estadias/procesar-salidas-vencidas`).catch(() => {});
 
     api
