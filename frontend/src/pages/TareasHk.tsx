@@ -64,11 +64,31 @@ function fechaHoy(): string {
   return new Date(Date.now() - PERU_UTC_OFFSET_MS).toISOString().slice(0, 10);
 }
 
+// Mismo género que ya usa la sección "Mantenimientos y Limpiezas" de
+// Habitaciones.tsx (Planificada/Terminada, concuerda con "la tarea").
 const ESTADO_LABEL: Record<string, string> = {
-  planificado: 'Planificado',
+  planificado: 'Planificada',
   en_proceso: 'En proceso',
-  terminado: 'Terminado',
+  terminado: 'Terminada',
 };
+
+// Color de la tarjeta según tipo + estado: 'planificado' usa un tono pálido
+// del color característico del tipo (para reconocer de un vistazo si es
+// limpieza o mantenimiento incluso antes de arrancar), 'en_proceso' pasa a
+// la versión intensa de ese mismo color (mismo ESTADO_HAB_COLOR que ya usa
+// la vista de Habitaciones de esta página), y 'terminado' pasa a verde
+// (igual que 'disponible' en el resto del sistema) sin importar el tipo --
+// una tarea terminada siempre significa "la habitación ya quedó bien".
+const PALETA_TAREA: Record<'limpieza' | 'mantenimiento', { bg: string; border: string; text: string }> = {
+  limpieza: { bg: '#fbeec2', border: '#f7c94a', text: '#412402' },
+  mantenimiento: { bg: '#fbe0c6', border: '#f2954a', text: '#4a2000' },
+};
+
+function colorDeTarea(t: TareaHk): { bg: string; border: string; text: string } {
+  if (t.estado === 'terminado') return ESTADO_HAB_COLOR.disponible;
+  if (t.estado === 'en_proceso') return ESTADO_HAB_COLOR[t.tipo];
+  return PALETA_TAREA[t.tipo];
+}
 
 const TIPO_LABEL: Record<string, string> = {
   limpieza: 'Limpieza',
@@ -142,6 +162,15 @@ export function TareasHk() {
     } finally {
       setAccionando(null);
     }
+  }
+
+  // Un solo toque en la tarjeta avanza la tarea al siguiente estado --
+  // planificada pasa a en proceso, en proceso pasa a terminada. Una tarea ya
+  // terminada no hace nada al tocarla (no hay a dónde avanzar).
+  function avanzarTarea(t: TareaHk) {
+    if (accionando) return;
+    if (t.estado === 'planificado') iniciar(t.id);
+    else if (t.estado === 'en_proceso') terminar(t.id);
   }
 
   // Se refleja en la columna Notas de Habitaciones mientras la habitación
@@ -251,57 +280,53 @@ export function TareasHk() {
       {error && <p style={{ color: 'var(--danger)' }}>{error}</p>}
 
       {!loading && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-          {tareas.map((t) => (
-            <div
-              key={t.id}
-              style={{
-                display: 'flex',
-                flexDirection: 'column',
-                gap: 8,
-                padding: '10px 14px',
-                background: 'var(--surface-1)',
-                border: '1px solid var(--border)',
-                borderRadius: 'var(--radius)',
-                fontSize: 13,
-              }}
-            >
-              <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', gap: '4px 12px' }}>
-                <span>
-                  Habitación {t.habitaciones?.hab_numero} · {TIPO_LABEL[t.tipo] ?? t.tipo}
-                  {t.con_huesped_dentro && (
-                    <span style={{ color: 'var(--text-muted)' }}> (con huésped dentro)</span>
-                  )}
-                </span>
-                {/* Prioridad oculta por el momento (no se usa todavía) --
-                    ver t.prioridad si hay que reactivarla. */}
-                <span
-                  style={{
-                    fontSize: 11,
-                    padding: '2px 8px',
-                    borderRadius: 999,
-                    border: '1px solid var(--border)',
-                    color: t.estado === 'terminado' ? 'var(--disponible-text)' : 'var(--text-secondary)',
-                  }}
-                >
+        <div style={tarjetasGridStyle}>
+          {tareas.map((t) => {
+            const color = colorDeTarea(t);
+            const puedeAvanzar = t.estado !== 'terminado';
+            const ocupado = accionando === t.id;
+            return (
+              <div
+                key={t.id}
+                onClick={() => puedeAvanzar && avanzarTarea(t)}
+                style={{
+                  ...tarjetaTareaStyle,
+                  background: color.bg,
+                  border: `2px solid ${color.border}`,
+                  cursor: puedeAvanzar ? 'pointer' : 'default',
+                  opacity: ocupado ? 0.6 : 1,
+                }}
+                title={
+                  puedeAvanzar
+                    ? `Toca para pasar a "${t.estado === 'planificado' ? ESTADO_LABEL.en_proceso : ESTADO_LABEL.terminado}"`
+                    : undefined
+                }
+              >
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+                  <span style={{ fontSize: 22, fontWeight: 700, color: 'var(--text-primary)' }}>
+                    {t.habitaciones?.hab_numero}
+                  </span>
+                  <span style={{ fontSize: 11, fontWeight: 700, color: color.text }}>
+                    {TIPO_LABEL[t.tipo] ?? t.tipo}
+                  </span>
+                </div>
+                {t.con_huesped_dentro && (
+                  <span style={{ fontSize: 11, fontWeight: 600, color: color.text }}>Con huésped dentro</span>
+                )}
+                <span style={{ fontSize: 13, fontWeight: 700, color: color.text }}>
                   {ESTADO_LABEL[t.estado] ?? t.estado}
                 </span>
-                <span>
-                  {t.estado === 'planificado' && (
-                    <button onClick={() => iniciar(t.id)} disabled={accionando === t.id} style={btnSecondary}>
-                      Iniciar
-                    </button>
-                  )}
-                  {t.estado === 'en_proceso' && (
-                    <button onClick={() => terminar(t.id)} disabled={accionando === t.id} style={btnSecondary}>
-                      Terminar
-                    </button>
-                  )}
-                </span>
+                <div onClick={(e) => e.stopPropagation()}>
+                  <NotasTareaCelda notas={t.notas ?? ''} onGuardar={(n) => guardarNotas(t.id, n)} />
+                </div>
+                {puedeAvanzar && (
+                  <span style={{ fontSize: 10, fontStyle: 'italic', color: color.text }}>
+                    Toca para {t.estado === 'planificado' ? 'iniciar' : 'terminar'}
+                  </span>
+                )}
               </div>
-              <NotasTareaCelda notas={t.notas ?? ''} onGuardar={(n) => guardarNotas(t.id, n)} />
-            </div>
-          ))}
+            );
+          })}
           {tareas.length === 0 && <p style={{ color: 'var(--text-muted)' }}>No hay tareas.</p>}
         </div>
       )}
@@ -640,4 +665,15 @@ const tarjetaHabStyle: CSSProperties = {
   flexDirection: 'column',
   gap: 4,
   minHeight: 60,
+};
+
+// Un poco más alta que tarjetaHabStyle -- lleva tipo, estado, nota y el
+// texto de "toca para..." además del número de habitación.
+const tarjetaTareaStyle: CSSProperties = {
+  borderRadius: 12,
+  padding: 12,
+  display: 'flex',
+  flexDirection: 'column',
+  gap: 6,
+  minHeight: 110,
 };
