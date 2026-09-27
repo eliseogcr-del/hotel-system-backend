@@ -691,22 +691,25 @@ export function Habitaciones() {
                 <td style={tdStyle}>
                   <div>{h.huesped ?? h.reservaHoy?.huesped ?? ''}</div>
                   {h.proximaReservaHoy && (
-                    <div
+                    <button
+                      onClick={() => setReservaModal(h)}
                       style={{
                         marginTop: 2,
                         display: 'inline-block',
                         background: ESTADO_COLOR_INTENSO.reservada.bg,
                         color: ESTADO_COLOR_INTENSO.reservada.text,
+                        border: 'none',
                         fontSize: 10,
                         fontWeight: 700,
                         padding: '1px 6px',
                         borderRadius: 999,
                         whiteSpace: 'nowrap',
+                        cursor: 'pointer',
                       }}
-                      title={`Reserva de hoy sin check-in todavía: ${h.proximaReservaHoy.huesped ?? '—'}`}
+                      title={`Ver la reserva -- ${h.proximaReservaHoy.huesped ?? '—'}, sin check-in todavía`}
                     >
                       🔜 Reserva {horaLima(h.proximaReservaHoy.checkinPrevisto)}
-                    </div>
+                    </button>
                   )}
                 </td>
                 <td style={tdStyle}>{h.huesped ? formatoFechaHora(h.checkinReal) : ''}</td>
@@ -855,6 +858,7 @@ export function Habitaciones() {
             const hab = habitaciones.find((h) => h.hab_numero === c.ocupante!.habNumero);
             if (hab?.estadiaId) navigate(`/estadias/${hab.estadiaId}`);
           }}
+          onClickProximaReserva={(h) => setReservaModal(h)}
           onGuardarNotas={guardarNotas}
           onGuardarNotasHabitacion={guardarNotasHabitacion}
           onCambiarEstadoCochera={cambiarEstadoCochera}
@@ -890,23 +894,34 @@ export function Habitaciones() {
         />
       )}
 
-      {reservaModal && reservaModal.reservaHoy && (
-        <ReservaFormModal
-          hotelId={hotelActual.hotelId}
-          habitacionId={reservaModal.id}
-          habNumero={reservaModal.hab_numero}
-          aforoMax={reservaModal.tipos_habitacion?.aforo_max ?? 0}
-          tarifaSugerida={preciosDe(reservaModal.tipos_habitacion?.id)?.precio_normal ?? 0}
-          precioMascotaDia={precioMascotaDia}
-          horaCheckoutHotel={horaCheckoutHotel}
-          modo24h={modo24h}
-          modo="editar"
-          reservaId={reservaModal.reservaHoy.reservaId}
-          lineaId={reservaModal.reservaHoy.lineaId}
-          onClose={() => setReservaModal(null)}
-          onGuardado={cargarSiAutomatico}
-        />
-      )}
+      {reservaModal &&
+        (() => {
+          // reservaHoy es para una habitación disponible (dispara "pasar a
+          // estadía"); proximaReservaHoy es la misma info pero para una
+          // habitación ocupada que ya tiene otra reserva de hoy esperando
+          // (ver badge "🔜 Reserva HH:MM") -- nunca vienen los dos a la vez
+          // para la misma habitación, así que se puede abrir el mismo modal
+          // con cualquiera de las dos.
+          const infoReserva = reservaModal.reservaHoy ?? reservaModal.proximaReservaHoy;
+          if (!infoReserva) return null;
+          return (
+            <ReservaFormModal
+              hotelId={hotelActual.hotelId}
+              habitacionId={reservaModal.id}
+              habNumero={reservaModal.hab_numero}
+              aforoMax={reservaModal.tipos_habitacion?.aforo_max ?? 0}
+              tarifaSugerida={preciosDe(reservaModal.tipos_habitacion?.id)?.precio_normal ?? 0}
+              precioMascotaDia={precioMascotaDia}
+              horaCheckoutHotel={horaCheckoutHotel}
+              modo24h={modo24h}
+              modo="editar"
+              reservaId={infoReserva.reservaId}
+              lineaId={infoReserva.lineaId}
+              onClose={() => setReservaModal(null)}
+              onGuardado={cargarSiAutomatico}
+            />
+          );
+        })()}
     </div>
   );
 }
@@ -916,6 +931,7 @@ function VistaTarjetas({
   cocheras,
   onClickHabitacion,
   onClickCochera,
+  onClickProximaReserva,
   onGuardarNotas,
   onGuardarNotasHabitacion,
   onCambiarEstadoCochera,
@@ -925,6 +941,7 @@ function VistaTarjetas({
   cocheras: Cochera[];
   onClickHabitacion: (h: Habitacion) => void;
   onClickCochera: (c: Cochera) => void;
+  onClickProximaReserva: (h: Habitacion) => void;
   onGuardarNotas: (h: Habitacion, notas: string) => void;
   onGuardarNotasHabitacion: (h: Habitacion, notas: string) => void;
   onCambiarEstadoCochera: (c: Cochera, ocupada: boolean) => void;
@@ -1016,20 +1033,26 @@ function VistaTarjetas({
                 </span>
               )}
               {h.proximaReservaHoy && (
-                <span
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onClickProximaReserva(h);
+                  }}
                   style={{
                     alignSelf: 'flex-start',
                     background: ESTADO_COLOR_INTENSO.reservada.bg,
                     color: ESTADO_COLOR_INTENSO.reservada.text,
+                    border: 'none',
                     fontSize: 10,
                     fontWeight: 700,
                     padding: '2px 8px',
                     borderRadius: 999,
+                    cursor: 'pointer',
                   }}
-                  title={`Reserva de hoy sin check-in todavía: ${h.proximaReservaHoy.huesped ?? '—'}`}
+                  title={`Ver la reserva -- ${h.proximaReservaHoy.huesped ?? '—'}, sin check-in todavía`}
                 >
                   🔜 Reserva {horaLima(h.proximaReservaHoy.checkinPrevisto)}
-                </span>
+                </button>
               )}
               {h.huesped && (
                 <div onClick={(e) => e.stopPropagation()}>
