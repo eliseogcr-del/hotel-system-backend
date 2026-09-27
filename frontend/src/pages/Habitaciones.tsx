@@ -71,6 +71,7 @@ interface Cochera {
   estado: 'disponible' | 'ocupada';
   es_externa: boolean;
   precio_externa: number;
+  notas: string | null;
   ocupante: {
     habNumero: number | null;
     huesped: string | null;
@@ -329,6 +330,32 @@ export function Habitaciones() {
     try {
       await api.patch(`/hoteles/${hotelActual.hotelId}/habitaciones/${hab.id}/notas`, { notas });
       setHabitaciones((prev) => prev.map((h) => (h.id === hab.id ? { ...h, notas_operativas: notas || null } : h)));
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'No se pudieron guardar las notas');
+    }
+  }
+
+  // Ocupar/liberar una cochera a mano (ej. auto de un cliente externo o del
+  // personal) sin que esté ligada a ninguna habitación -- el backend
+  // rechaza el cambio si la cochera sí está asignada a una estadía en curso
+  // (ver ConfiguracionService.actualizarCocheraOperativo()), así que este
+  // control solo se muestra cuando `c.ocupante` es null.
+  async function cambiarEstadoCochera(cochera: Cochera, ocupada: boolean) {
+    if (!hotelActual) return;
+    const estado = ocupada ? 'ocupada' : 'disponible';
+    try {
+      await api.patch(`/hoteles/${hotelActual.hotelId}/cocheras/${cochera.id}/operativo`, { estado });
+      setCocheras((prev) => prev.map((c) => (c.id === cochera.id ? { ...c, estado } : c)));
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'No se pudo cambiar el estado de la cochera');
+    }
+  }
+
+  async function guardarNotasCochera(cochera: Cochera, notas: string) {
+    if (!hotelActual) return;
+    try {
+      await api.patch(`/hoteles/${hotelActual.hotelId}/cocheras/${cochera.id}/operativo`, { notas });
+      setCocheras((prev) => prev.map((c) => (c.id === cochera.id ? { ...c, notas: notas || null } : c)));
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'No se pudieron guardar las notas');
     }
@@ -700,10 +727,11 @@ export function Habitaciones() {
                   <th style={thStyle}>N°</th>
                   <th style={thStyle}>Tamaño</th>
                   <th style={thStyle}>Tipo permitido</th>
-                  <th style={thStyle}>Estado</th>
+                  <th style={{ ...thStyle, textAlign: 'center' }}>Estado</th>
                   <th style={thStyle}>Habitación</th>
                   <th style={thStyle}>Huésped</th>
-                  <th style={{ ...thStyle, borderRight: 'none' }}>Vehículo</th>
+                  <th style={thStyle}>Vehículo</th>
+                  <th style={{ ...thStyle, borderRight: 'none' }}>Notas</th>
                 </tr>
               </thead>
               <tbody>
@@ -721,28 +749,41 @@ export function Habitaciones() {
                       {c.es_externa ? ' · externa' : ''}
                     </td>
                     <td style={tdStyle}>{c.tipo_vehiculo_permitido ?? '—'}</td>
-                    <td style={tdStyle}>
-                      <span
-                        style={{
-                          background: ESTADO_COLOR_INTENSO[c.estado].bg,
-                          color: ESTADO_COLOR_INTENSO[c.estado].text,
-                          fontWeight: 700,
-                          padding: '2px 8px',
-                          borderRadius: 999,
-                          fontSize: 11,
-                        }}
-                      >
-                        {ESTADO_COCHERA_LABEL[c.estado]}
-                      </span>
+                    <td style={{ ...tdStyle, textAlign: 'center' }}>
+                      {c.ocupante ? (
+                        <span
+                          style={{
+                            background: ESTADO_COLOR_INTENSO[c.estado].bg,
+                            color: ESTADO_COLOR_INTENSO[c.estado].text,
+                            fontWeight: 700,
+                            padding: '2px 8px',
+                            borderRadius: 999,
+                            fontSize: 11,
+                          }}
+                        >
+                          {ESTADO_COCHERA_LABEL[c.estado]}
+                        </span>
+                      ) : (
+                        <input
+                          type="checkbox"
+                          checked={c.estado === 'ocupada'}
+                          onChange={(e) => cambiarEstadoCochera(c, e.target.checked)}
+                          title="Ocupar/liberar esta cochera a mano (sin ligarla a ninguna habitación, ej. auto de un cliente externo o del personal)"
+                          style={checkboxGrandeStyle}
+                        />
+                      )}
                     </td>
                     <td style={tdStyle}>{c.ocupante?.habNumero ?? ''}</td>
                     <td style={tdStyle}>{c.ocupante?.huesped ?? ''}</td>
-                    <td style={{ ...tdStyle, borderRight: 'none' }}>
+                    <td style={tdStyle}>
                       {c.ocupante?.vehiculo
                         ? [c.ocupante.vehiculo.marca, c.ocupante.vehiculo.tipo, c.ocupante.vehiculo.placa]
                             .filter(Boolean)
                             .join(' · ')
                         : ''}
+                    </td>
+                    <td style={{ ...tdStyle, borderRight: 'none' }}>
+                      <NotasCelda notas={c.notas ?? ''} onGuardar={(n) => guardarNotasCochera(c, n)} />
                     </td>
                   </tr>
                 ))}

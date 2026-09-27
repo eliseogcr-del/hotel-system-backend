@@ -21,6 +21,7 @@ import { CrearHabitacionDto } from './dto/crear-habitacion.dto';
 import { ActualizarHabitacionDto } from './dto/actualizar-habitacion.dto';
 import { CrearCocheraDto } from './dto/crear-cochera.dto';
 import { ActualizarCocheraDto } from './dto/actualizar-cochera.dto';
+import { ActualizarCocheraOperativaDto } from './dto/actualizar-cochera-operativa.dto';
 import { ActualizarHotelDto } from './dto/actualizar-hotel.dto';
 
 @Controller('hoteles/:hotelId')
@@ -171,5 +172,21 @@ export class ConfiguracionController {
   ) {
     const client = this.supabase.getClientForRequest(user.accessToken);
     return this.configuracionService.actualizarCochera(client, hotelId, id, dto);
+  }
+
+  // A diferencia del PATCH de arriba (edición de catálogo, admin-only), esto
+  // es lo que recepción usa día a día desde el panel de Habitaciones para
+  // ocupar/liberar una cochera a mano y dejar una nota -- ver
+  // ConfiguracionService.actualizarCocheraOperativo().
+  @Patch('cocheras/:id/operativo')
+  @Roles('admin', 'recepcion')
+  async actualizarCocheraOperativo(
+    @Param('hotelId') hotelId: string,
+    @Param('id') id: string,
+    @Body() dto: ActualizarCocheraOperativaDto,
+    @CurrentUser() user: RequestUser,
+  ) {
+    const client = this.supabase.getClientForRequest(user.accessToken);
+    return this.configuracionService.actualizarCocheraOperativo(client, hotelId, id, dto);
   }
 }

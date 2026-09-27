@@ -167,7 +167,8 @@ create table cocheras (
     tipo_vehiculo_permitido text,      -- camioneta, auto, moto...
     estado text not null default 'disponible' check (estado in ('disponible','ocupada')),
     es_externa boolean not null default false,
-    precio_externa numeric(10,2) default 0
+    precio_externa numeric(10,2) default 0,
+    notas text
 );
 
 create table tarifas (
