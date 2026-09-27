@@ -7,6 +7,7 @@ import { CrearHabitacionDto } from './dto/crear-habitacion.dto';
 import { ActualizarHabitacionDto } from './dto/actualizar-habitacion.dto';
 import { CrearCocheraDto } from './dto/crear-cochera.dto';
 import { ActualizarCocheraDto } from './dto/actualizar-cochera.dto';
+import { ActualizarCocheraOperativaDto } from './dto/actualizar-cochera-operativa.dto';
 import { ActualizarHotelDto } from './dto/actualizar-hotel.dto';
 
 const CODIGO_UNIQUE_VIOLATION = '23505';
@@ -430,6 +431,68 @@ export class ConfiguracionService {
       .select()
       .maybeSingle();
 
+    if (error) throw error;
+    if (!data) throw new NotFoundException('Cochera no encontrada en este hotel');
+    return data;
+  }
+
+  /**
+   * Uso día a día desde el panel de Habitaciones (a diferencia de
+   * actualizarCochera(), que es la edición de catálogo admin-only): ocupar
+   * o liberar una cochera a mano -- ej. el auto de un cliente externo
+   * (es_externa) o del personal, sin que esté ligada a ninguna
+   * habitación/reserva -- y dejar una nota libre. Si la cochera SÍ está
+   * asignada a una estadía en curso, se rechaza cambiar el estado: esa
+   * ocupación se libera sola al hacer checkout (ver EstadiasService.checkout()),
+   * nunca a mano desde acá, para no perder de vista una cochera que
+   * realmente sigue en uso.
+   */
+  async actualizarCocheraOperativo(
+    client: SupabaseClient,
+    hotelId: string,
+    id: string,
+    dto: ActualizarCocheraOperativaDto,
+  ) {
+    if (dto.estado === undefined && dto.notas === undefined) {
+      throw new BadRequestException('No se enviaron cambios');
+    }
+
+    const { data: cochera, error: cocheraError } = await client
+      .from('cocheras')
+      .select('id')
+      .eq('id', id)
+      .eq('hotel_id', hotelId)
+      .maybeSingle();
+    if (cocheraError) throw cocheraError;
+    if (!cochera) throw new NotFoundException('Cochera no encontrada en este hotel');
+
+    if (dto.estado !== undefined) {
+      const { data: ocupacionVigente, error: ocupacionError } = await client
+        .from('reserva_habitacion')
+        .select('id, estadias!inner(estado_actual)')
+        .eq('cochera_id', id)
+        .eq('estadias.estado_actual', 'en_curso')
+        .limit(1)
+        .maybeSingle();
+      if (ocupacionError) throw ocupacionError;
+      if (ocupacionVigente) {
+        throw new BadRequestException(
+          'Esta cochera está asignada a una estadía en curso -- se libera sola al hacer checkout, no se puede cambiar a mano.',
+        );
+      }
+    }
+
+    const cambios: Record<string, unknown> = {};
+    if (dto.estado !== undefined) cambios.estado = dto.estado;
+    if (dto.notas !== undefined) cambios.notas = dto.notas || null;
+
+    const { data, error } = await client
+      .from('cocheras')
+      .update(cambios)
+      .eq('id', id)
+      .eq('hotel_id', hotelId)
+      .select()
+      .maybeSingle();
     if (error) throw error;
     if (!data) throw new NotFoundException('Cochera no encontrada en este hotel');
     return data;
