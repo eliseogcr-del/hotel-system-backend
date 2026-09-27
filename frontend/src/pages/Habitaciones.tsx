@@ -1363,6 +1363,15 @@ function SeccionMantenimientoLimpieza({
       }
     }
   }
+  // Si además de "no necesita mantenimiento" ya existe otra tarea para la
+  // misma habitación hoy (ej. la limpieza que se crea sola al hacer
+  // checkout), esa marca quedó obsoleta -- ya no aporta nada nuevo y solo
+  // hace ver la habitación "duplicada" con un registro que no es la tarea
+  // real pendiente. Se oculta en la vista por defecto; con "Ver plan del
+  // día" se sigue viendo, ahí sí es historial completo del día.
+  const habitacionesConOtraTarea = new Set(
+    filasBrutas.filter((f) => f.categoria !== 'sin_necesidad').map((f) => f.habitacionId),
+  );
   // Para HOY, una tarea ya terminada no tiene nada más por hacer -- por
   // defecto se saca de la vista apenas se completa (ej. hab. 403: limpieza
   // terminada, ya está disponible, no debe seguir apareciendo acá) salvo
@@ -1371,11 +1380,16 @@ function SeccionMantenimientoLimpieza({
   // poder verla marcada el resto del día (para no volver a preguntar dos
   // veces), así que no se oculta aunque cuente como 'terminado' -- al día
   // siguiente desaparece sola porque el filtro de fecha (?fecha=) ya no
-  // trae ese registro (ver TareasHkService.marcarSinMantenimiento()).
+  // trae ese registro (ver TareasHkService.marcarSinMantenimiento()), y
+  // ANTES de eso se oculta igual si ya la superó otra tarea (arriba).
   // Para una fecha pasada siempre se ve todo: es un filtro histórico.
   const filas =
     esHoy && !mostrarTerminadas
-      ? filasBrutas.filter((f) => f.categoria === 'sin_necesidad' || f.tarea?.estado !== 'terminado')
+      ? filasBrutas.filter((f) =>
+          f.categoria === 'sin_necesidad'
+            ? !habitacionesConOtraTarea.has(f.habitacionId)
+            : f.tarea?.estado !== 'terminado',
+        )
       : filasBrutas;
   filas.sort((a, b) => a.habNumero - b.habNumero);
 
