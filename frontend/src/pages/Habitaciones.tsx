@@ -1148,7 +1148,7 @@ function VistaTarjetas({
                           type="checkbox"
                           checked={c.estado === 'ocupada'}
                           onChange={(e) => onCambiarEstadoCochera(c, e.target.checked)}
-                          style={checkboxGrandeStyle}
+                          style={checkboxCocheraTarjetaStyle}
                         />
                         <span style={{ fontSize: 10, fontWeight: 700, color: ESTADO_COLOR_INTENSO[c.estado].text }}>
                           {ESTADO_COCHERA_LABEL[c.estado]}
@@ -1867,6 +1867,16 @@ const checkboxGrandeStyle: CSSProperties = {
   height: 22,
   accentColor: '#eab308',
   transform: 'scale(1.15)',
+  cursor: 'pointer',
+};
+
+// La tarjeta de cochera es angosta (minHeight: 76) -- el checkboxGrandeStyle
+// de arriba, pensado para una tabla espaciosa, se salía del recuadro y
+// atropellaba la etiqueta "Disponible"/"Ocupada" de al lado.
+const checkboxCocheraTarjetaStyle: CSSProperties = {
+  width: 14,
+  height: 14,
+  accentColor: '#eab308',
   cursor: 'pointer',
 };
 
