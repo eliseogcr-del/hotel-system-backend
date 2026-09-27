@@ -1352,15 +1352,20 @@ function SeccionMantenimientoLimpieza({
   // resuelta hoy no reaparezca como "ocupada sin tarea".
   if (esHoy) {
     for (const h of habitaciones) {
-      if (h.estado === 'ocupada' && !idsConTarea.has(h.id)) {
-        filasBrutas.push({
-          habitacionId: h.id,
-          habNumero: h.hab_numero,
-          tipoHabitacion: h.tipos_habitacion?.nombre ?? null,
-          tarea: null,
-          categoria: 'ocupada_sin_tarea',
-        });
-      }
+      if (h.estado !== 'ocupada' || idsConTarea.has(h.id)) continue;
+      // Si el checkout ya está programado para hoy, no tiene sentido
+      // pedirle a recepción que evalúe mantenimiento -- al hacer el
+      // checkout se genera sola la tarea de limpieza (ver
+      // EstadiasService.checkout()), que es la única tarea real que va a
+      // existir para esta habitación hoy.
+      if (h.checkoutPrevisto && fechaLimaYMD(h.checkoutPrevisto) === fechaFiltro) continue;
+      filasBrutas.push({
+        habitacionId: h.id,
+        habNumero: h.hab_numero,
+        tipoHabitacion: h.tipos_habitacion?.nombre ?? null,
+        tarea: null,
+        categoria: 'ocupada_sin_tarea',
+      });
     }
   }
   // Si además de "no necesita mantenimiento" ya existe otra tarea para la
