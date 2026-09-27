@@ -693,19 +693,7 @@ export function Habitaciones() {
                   {h.proximaReservaHoy && (
                     <button
                       onClick={() => setReservaModal(h)}
-                      style={{
-                        marginTop: 2,
-                        display: 'inline-block',
-                        background: ESTADO_COLOR_INTENSO.reservada.bg,
-                        color: ESTADO_COLOR_INTENSO.reservada.text,
-                        border: 'none',
-                        fontSize: 10,
-                        fontWeight: 700,
-                        padding: '1px 6px',
-                        borderRadius: 999,
-                        whiteSpace: 'nowrap',
-                        cursor: 'pointer',
-                      }}
+                      style={{ ...linkBtnStyle, display: 'block', marginTop: 2, whiteSpace: 'nowrap' }}
                       title={`Ver la reserva -- ${h.proximaReservaHoy.huesped ?? '—'}, sin check-in todavía`}
                     >
                       🔜 Reserva {horaLima(h.proximaReservaHoy.checkinPrevisto)}
@@ -1040,13 +1028,13 @@ function VistaTarjetas({
                   }}
                   style={{
                     alignSelf: 'flex-start',
-                    background: ESTADO_COLOR_INTENSO.reservada.bg,
-                    color: ESTADO_COLOR_INTENSO.reservada.text,
+                    background: 'none',
                     border: 'none',
-                    fontSize: 10,
+                    padding: 0,
+                    color: 'var(--nota-texto)',
+                    fontSize: 11,
                     fontWeight: 700,
-                    padding: '2px 8px',
-                    borderRadius: 999,
+                    textDecoration: 'underline',
                     cursor: 'pointer',
                   }}
                   title={`Ver la reserva -- ${h.proximaReservaHoy.huesped ?? '—'}, sin check-in todavía`}
