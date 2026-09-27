@@ -11,19 +11,29 @@ type Vista = 'tabla' | 'tarjetas';
 
 type Estado = 'disponible' | 'ocupada' | 'limpieza' | 'mantenimiento' | 'bloqueada';
 
+interface ReservaHoyInfo {
+  reservaId: string;
+  lineaId: string;
+  huesped: string | null;
+  origen: string | null;
+  creadoPorAgente: boolean;
+  checkinPrevisto: string;
+}
+
 interface Habitacion {
   id: string;
   hab_numero: number;
   piso: number;
   estado: Estado;
   mantenimiento_planificado: boolean;
-  reservaHoy: {
-    reservaId: string;
-    lineaId: string;
-    huesped: string | null;
-    origen: string | null;
-    creadoPorAgente: boolean;
-  } | null;
+  reservaHoy: ReservaHoyInfo | null;
+  // Habitación OCUPADA que además ya tiene una reserva de hoy sin check-in
+  // esperando (el huésped actual sale, otro entra el mismo día) -- separado
+  // de reservaHoy (que es para una habitación libre y dispara el modal de
+  // "pasar a estadía" al hacer clic) para no cambiarle el comportamiento
+  // del clic a esta habitación, que debe seguir yendo directo al checkout
+  // del huésped actual.
+  proximaReservaHoy: ReservaHoyInfo | null;
   // Solo viene con valor si la habitación está realmente disponible (sin
   // reservaHoy): días de margen antes de topar con la próxima reserva
   // futura, dentro de una ventana de 30 días. null = ninguna reserva
@@ -678,7 +688,27 @@ export function Habitaciones() {
                     {etiquetaEstado(h)}
                   </span>
                 </td>
-                <td style={tdStyle}>{h.huesped ?? h.reservaHoy?.huesped ?? ''}</td>
+                <td style={tdStyle}>
+                  <div>{h.huesped ?? h.reservaHoy?.huesped ?? ''}</div>
+                  {h.proximaReservaHoy && (
+                    <div
+                      style={{
+                        marginTop: 2,
+                        display: 'inline-block',
+                        background: ESTADO_COLOR_INTENSO.reservada.bg,
+                        color: ESTADO_COLOR_INTENSO.reservada.text,
+                        fontSize: 10,
+                        fontWeight: 700,
+                        padding: '1px 6px',
+                        borderRadius: 999,
+                        whiteSpace: 'nowrap',
+                      }}
+                      title={`Reserva de hoy sin check-in todavía: ${h.proximaReservaHoy.huesped ?? '—'}`}
+                    >
+                      🔜 Reserva {horaLima(h.proximaReservaHoy.checkinPrevisto)}
+                    </div>
+                  )}
+                </td>
                 <td style={tdStyle}>{h.huesped ? formatoFechaHora(h.checkinReal) : ''}</td>
                 <td style={tdStyle}>{h.huesped ? formatoFechaHora(h.checkoutPrevisto) : ''}</td>
                 <td style={tdStyle}>{h.huesped ? formatoMonto(h.totalAlquiler) : ''}</td>
@@ -983,6 +1013,22 @@ function VistaTarjetas({
               {h.cocheraNumero && (
                 <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--nota-texto)' }}>
                   {h.vehiculoTipo === 'moto' ? '🏍️' : '🚗'} Cochera {h.cocheraNumero}
+                </span>
+              )}
+              {h.proximaReservaHoy && (
+                <span
+                  style={{
+                    alignSelf: 'flex-start',
+                    background: ESTADO_COLOR_INTENSO.reservada.bg,
+                    color: ESTADO_COLOR_INTENSO.reservada.text,
+                    fontSize: 10,
+                    fontWeight: 700,
+                    padding: '2px 8px',
+                    borderRadius: 999,
+                  }}
+                  title={`Reserva de hoy sin check-in todavía: ${h.proximaReservaHoy.huesped ?? '—'}`}
+                >
+                  🔜 Reserva {horaLima(h.proximaReservaHoy.checkinPrevisto)}
                 </span>
               )}
               {h.huesped && (

@@ -145,6 +145,7 @@ export class HabitacionesService {
         huesped: string | null;
         origen: string | null;
         creadoPorAgente: boolean;
+        checkinPrevisto: string;
       }
     >();
     for (const linea of (reservasSinCheckin ?? []) as any[]) {
@@ -157,6 +158,7 @@ export class HabitacionesService {
         huesped: huesped ? `${huesped.nombres} ${huesped.apellidos}` : (empresa?.razon_social ?? null),
         origen: linea.reservas.origen ?? null,
         creadoPorAgente: linea.reservas.creado_por_agente ?? false,
+        checkinPrevisto: linea.fecha_hora_checkin_prevista,
       });
     }
 
@@ -252,6 +254,15 @@ export class HabitacionesService {
       // habitación está físicamente libre ahora mismo -- si está ocupada,
       // en limpieza, etc, ese estado real manda sobre el aviso de reserva.
       const reservaHoy = hab.estado === 'disponible' ? (reservaHoyPorHabitacion.get(hab.id) ?? null) : null;
+      // Si la habitación está OCUPADA pero ya hay una reserva de hoy sin
+      // check-in esperando por ella (mismo caso real: huésped actual sale a
+      // mediodía, el siguiente llega a las 6pm), recepción no debe perder de
+      // vista que viene otro huésped apenas se desocupe -- se informa aparte
+      // de `reservaHoy` (que sigue reservado para el caso "disponible", y
+      // dispara el modal de "pasar a estadía" al hacer clic) para no
+      // cambiarle el comportamiento del clic a una habitación ocupada, que
+      // debe seguir yendo directo al checkout del huésped actual.
+      const proximaReservaHoy = hab.estado === 'ocupada' ? (reservaHoyPorHabitacion.get(hab.id) ?? null) : null;
       // El aviso de "días disponible" solo aplica a una habitación
       // genuinamente libre ahora mismo -- si ya tiene una reserva de hoy
       // sin check-in, esa reserva es la próxima, no tiene sentido mostrar
@@ -263,6 +274,7 @@ export class HabitacionesService {
       return {
         ...hab,
         reservaHoy,
+        proximaReservaHoy,
         diasHastaProximaReserva,
         tareaHkEnProceso: tareaEnProcesoPorHabitacion.get(hab.id) ?? null,
         ...(detallePorHabitacion.get(hab.id) ?? {
