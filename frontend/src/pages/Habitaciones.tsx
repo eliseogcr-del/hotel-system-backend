@@ -811,6 +811,8 @@ export function Habitaciones() {
           }}
           onGuardarNotas={guardarNotas}
           onGuardarNotasHabitacion={guardarNotasHabitacion}
+          onCambiarEstadoCochera={cambiarEstadoCochera}
+          onGuardarNotasCochera={guardarNotasCochera}
         />
       )}
 
@@ -870,6 +872,8 @@ function VistaTarjetas({
   onClickCochera,
   onGuardarNotas,
   onGuardarNotasHabitacion,
+  onCambiarEstadoCochera,
+  onGuardarNotasCochera,
 }: {
   habitaciones: Habitacion[];
   cocheras: Cochera[];
@@ -877,6 +881,8 @@ function VistaTarjetas({
   onClickCochera: (c: Cochera) => void;
   onGuardarNotas: (h: Habitacion, notas: string) => void;
   onGuardarNotasHabitacion: (h: Habitacion, notas: string) => void;
+  onCambiarEstadoCochera: (c: Cochera, ocupada: boolean) => void;
+  onGuardarNotasCochera: (c: Cochera, notas: string) => void;
 }) {
   return (
     <div>
@@ -1055,9 +1061,27 @@ function VistaTarjetas({
                     >
                       {c.numero}
                     </span>
-                    <span style={{ fontSize: 10, fontWeight: 700, color: ESTADO_COLOR_INTENSO[c.estado].text }}>
-                      {ESTADO_COCHERA_LABEL[c.estado]}
-                    </span>
+                    {c.ocupante ? (
+                      <span style={{ fontSize: 10, fontWeight: 700, color: ESTADO_COLOR_INTENSO[c.estado].text }}>
+                        {ESTADO_COCHERA_LABEL[c.estado]}
+                      </span>
+                    ) : (
+                      <label
+                        onClick={(e) => e.stopPropagation()}
+                        style={{ display: 'flex', alignItems: 'center', gap: 4, cursor: 'pointer' }}
+                        title="Ocupar/liberar esta cochera a mano (sin ligarla a ninguna habitación, ej. auto de un cliente externo o del personal)"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={c.estado === 'ocupada'}
+                          onChange={(e) => onCambiarEstadoCochera(c, e.target.checked)}
+                          style={checkboxGrandeStyle}
+                        />
+                        <span style={{ fontSize: 10, fontWeight: 700, color: ESTADO_COLOR_INTENSO[c.estado].text }}>
+                          {ESTADO_COCHERA_LABEL[c.estado]}
+                        </span>
+                      </label>
+                    )}
                   </div>
                   <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
                     {c.tamano}
@@ -1069,6 +1093,9 @@ function VistaTarjetas({
                       Hab. <b style={{ fontSize: 15 }}>{c.ocupante.habNumero}</b> · {c.ocupante.huesped ?? '—'}
                     </span>
                   )}
+                  <div onClick={(e) => e.stopPropagation()}>
+                    <NotasCelda notas={c.notas ?? ''} onGuardar={(n) => onGuardarNotasCochera(c, n)} tarjeta />
+                  </div>
                 </div>
               );
             })}
