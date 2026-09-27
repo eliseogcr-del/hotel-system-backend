@@ -1454,13 +1454,25 @@ export class EstadiasService {
   }
 
   /**
-   * Huéspedes que no avisan que se quedan más días: si ya pasó más de 1 hora
-   * desde la salida programada de una estadía 'en_curso' (solo pernocte; una
-   * reserva por horas no tiene sentido "extenderla un día"), se asume que
-   * sigue ocupada y el sistema mismo extiende la salida un día más y cobra
-   * la tarifa de ese día -- mismo mecanismo que "días adicionales" en
-   * actualizar(), pero sin personal detrás (registrado_por queda null) y con
-   * una nota que deja claro que fue automático, no que lo pidió recepción.
+   * Huéspedes que no avisan que se quedan más días: si ya pasaron más de 5
+   * horas desde la salida programada de una estadía 'en_curso' (solo
+   * pernocte; una reserva por horas no tiene sentido "extenderla un día"),
+   * se asume que sigue ocupada y el sistema mismo extiende la salida un día
+   * más y cobra la tarifa de ese día -- mismo mecanismo que "días
+   * adicionales" en actualizar(), pero sin personal detrás (registrado_por
+   * queda null) y con una nota que deja claro que fue automático, no que lo
+   * pidió recepción.
+   *
+   * Solo aplica a una salida "de fábrica": hoy, exactamente a la hora de
+   * checkout estándar del hotel (hoteles.hora_checkout). Si recepción ya
+   * cambió esa hora (ej. un late checkout a las 15:00 porque el huésped
+   * avisó que sale más tarde ese mismo día), NO se toca -- eso ya es una
+   * decisión tomada por alguien, no un huésped que no avisó nada, y
+   * seguir extendiéndola de todos modos deshacía la corrección sin que
+   * nadie se diera cuenta. Un hotel en modo_24h no tiene una hora de
+   * checkout fija que comparar (cada estadía calcula la suya según su
+   * check-in), así que ahí se mantiene el criterio anterior: cualquier
+   * salida vencida por el margen, sin importar la hora.
    *
    * No hay un cron real corriendo en el backend (Render free tier se
    * duerme); esto se dispara desde el frontend cada vez que se carga/
@@ -1468,9 +1480,11 @@ export class EstadiasService {
    * que alguien mira esa pantalla -- que es el uso normal de recepción.
    */
   async procesarSalidasVencidas(client: SupabaseClient, hotelId: string) {
-    const haceUnaHora = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+    const hotel = await this.obtenerConfigHotel(client, hotelId);
+    const margenMs = 5 * 60 * 60 * 1000;
+    const limiteInstante = new Date(Date.now() - margenMs).toISOString();
 
-    const { data: vencidas, error } = await client
+    let query = client
       .from('reserva_habitacion')
       .select(
         `
@@ -1482,7 +1496,17 @@ export class EstadiasService {
       .eq('reservas.hotel_id', hotelId)
       .eq('estadias.estado_actual', 'en_curso')
       .eq('tipo_alquiler', 'pernocte')
-      .lt('fecha_hora_checkout_prevista', haceUnaHora);
+      .lt('fecha_hora_checkout_prevista', limiteInstante);
+
+    if (!hotel.modo_24h) {
+      const [hh, mm] = hotel.hora_checkout.split(':').map(Number);
+      const hoyAHoraCheckoutLima = comoRelojLima(new Date());
+      hoyAHoraCheckoutLima.setUTCHours(hh, mm, 0, 0);
+      const hoyAHoraCheckoutInstante = desdeRelojLima(hoyAHoraCheckoutLima).toISOString();
+      query = query.eq('fecha_hora_checkout_prevista', hoyAHoraCheckoutInstante);
+    }
+
+    const { data: vencidas, error } = await query;
     if (error) throw error;
 
     const extendidas: string[] = [];
