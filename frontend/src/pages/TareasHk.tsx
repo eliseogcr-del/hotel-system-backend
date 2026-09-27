@@ -302,14 +302,17 @@ export function TareasHk() {
                     : undefined
                 }
               >
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
-                  <span style={{ fontSize: 22, fontWeight: 700, color: 'var(--text-primary)' }}>
-                    {t.habitaciones?.hab_numero}
-                  </span>
-                  <span style={{ fontSize: 11, fontWeight: 700, color: color.text }}>
-                    {TIPO_LABEL[t.tipo] ?? t.tipo}
-                  </span>
-                </div>
+                <span style={{ fontSize: 22, fontWeight: 700, color: 'var(--text-primary)' }}>
+                  {t.habitaciones?.hab_numero}
+                </span>
+                {/* "Mantenimiento" es una palabra larga y sin espacios --
+                    puesta al lado del número (space-between) se salía del
+                    recuadro en vez de achicarse. Va en su propia línea,
+                    igual que el tipo de habitación en las tarjetas de
+                    Habitaciones.tsx, así tiene todo el ancho para acomodarse. */}
+                <span style={{ fontSize: 12, fontWeight: 700, color: color.text }}>
+                  {TIPO_LABEL[t.tipo] ?? t.tipo}
+                </span>
                 {t.con_huesped_dentro && (
                   <span style={{ fontSize: 11, fontWeight: 600, color: color.text }}>Con huésped dentro</span>
                 )}
