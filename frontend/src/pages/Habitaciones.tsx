@@ -1333,6 +1333,19 @@ function SeccionMantenimientoLimpieza({
   }
 
   const esHoy = fechaFiltro === hoyLimaYMD();
+  // Una habitación cuyo checkout ya está programado para el día que se está
+  // viendo no necesita ninguna decisión de mantenimiento -- al hacer el
+  // checkout se genera sola la tarea de limpieza (ver
+  // EstadiasService.checkout()), que es la única tarea real que va a
+  // existir para esa habitación ese día. Se usa tanto para no generar la
+  // fila sintética de "hay que evaluar" como para ocultar una marca de
+  // "no necesita mantenimiento" que ya se hubiera puesto antes de que se
+  // programara/supiera esa salida (ver más abajo).
+  const habitacionesConCheckoutHoy = new Set(
+    habitaciones
+      .filter((h) => h.checkoutPrevisto && fechaLimaYMD(h.checkoutPrevisto) === fechaFiltro)
+      .map((h) => h.id),
+  );
   const filasBrutas: FilaMantenimiento[] = [];
   const idsConTarea = new Set<string>();
   for (const t of tareas) {
@@ -1353,12 +1366,7 @@ function SeccionMantenimientoLimpieza({
   if (esHoy) {
     for (const h of habitaciones) {
       if (h.estado !== 'ocupada' || idsConTarea.has(h.id)) continue;
-      // Si el checkout ya está programado para hoy, no tiene sentido
-      // pedirle a recepción que evalúe mantenimiento -- al hacer el
-      // checkout se genera sola la tarea de limpieza (ver
-      // EstadiasService.checkout()), que es la única tarea real que va a
-      // existir para esta habitación hoy.
-      if (h.checkoutPrevisto && fechaLimaYMD(h.checkoutPrevisto) === fechaFiltro) continue;
+      if (habitacionesConCheckoutHoy.has(h.id)) continue;
       filasBrutas.push({
         habitacionId: h.id,
         habNumero: h.hab_numero,
@@ -1386,13 +1394,14 @@ function SeccionMantenimientoLimpieza({
   // veces), así que no se oculta aunque cuente como 'terminado' -- al día
   // siguiente desaparece sola porque el filtro de fecha (?fecha=) ya no
   // trae ese registro (ver TareasHkService.marcarSinMantenimiento()), y
-  // ANTES de eso se oculta igual si ya la superó otra tarea (arriba).
+  // ANTES de eso se oculta igual si ya la superó otra tarea, o si su
+  // checkout ya quedó programado para hoy (ambas arriba).
   // Para una fecha pasada siempre se ve todo: es un filtro histórico.
   const filas =
     esHoy && !mostrarTerminadas
       ? filasBrutas.filter((f) =>
           f.categoria === 'sin_necesidad'
-            ? !habitacionesConOtraTarea.has(f.habitacionId)
+            ? !habitacionesConOtraTarea.has(f.habitacionId) && !habitacionesConCheckoutHoy.has(f.habitacionId)
             : f.tarea?.estado !== 'terminado',
         )
       : filasBrutas;
