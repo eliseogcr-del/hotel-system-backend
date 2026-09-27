@@ -50,12 +50,21 @@ function calcularCheckoutLocal(checkin: Date, dias: number, horaCheckoutHotel: s
   return salida;
 }
 
-// Mismo criterio (ceil, mínimo 1 día) que ReservasService.calcularDias() en
-// el backend: una salida programada el mismo día del check-in siempre
-// cuenta como 1 día, aunque el huésped entre de mañana y salga esa misma
-// noche.
+// Días de CALENDARIO en Lima (fija UTC-5 todo el año), no horas exactas
+// transcurridas desde el check-in -- mismo criterio que
+// ReservasService.calcularDias() en el backend: si se usaran horas exactas,
+// una llegada temprana (que ya se cobra aparte como 'early') corría el
+// punto de corte de cada "día" hacia una hora más temprana, y una salida a
+// la hora estándar del hotel terminaba cayendo justo después de ese corte,
+// sumando un día de más. Con fechas de calendario, entrar cualquier hora
+// del día X y salir cualquier hora del día X+2 son siempre 2 noches.
 function calcularDiasDesdeCheckout(checkin: Date, checkout: Date): number {
-  const dias = Math.ceil((checkout.getTime() - checkin.getTime()) / (24 * 60 * 60 * 1000));
+  const OFFSET_LIMA_MS = 5 * 60 * 60 * 1000;
+  const checkinLima = new Date(checkin.getTime() - OFFSET_LIMA_MS);
+  const checkoutLima = new Date(checkout.getTime() - OFFSET_LIMA_MS);
+  const checkinFecha = Date.UTC(checkinLima.getUTCFullYear(), checkinLima.getUTCMonth(), checkinLima.getUTCDate());
+  const checkoutFecha = Date.UTC(checkoutLima.getUTCFullYear(), checkoutLima.getUTCMonth(), checkoutLima.getUTCDate());
+  const dias = Math.round((checkoutFecha - checkinFecha) / (24 * 60 * 60 * 1000));
   return Math.max(1, dias);
 }
 

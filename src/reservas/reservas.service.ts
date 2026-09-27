@@ -1230,17 +1230,26 @@ export class ReservasService {
     return Number(precios.precio_normal);
   }
 
+  // Días de CALENDARIO en Lima, no horas exactas transcurridas desde el
+  // check-in -- si se usara la diferencia exacta en horas, una llegada
+  // temprana (que ya se cobra aparte como 'early', ver calcularCobroEarly())
+  // corría el punto de corte de cada "día" hacia una hora más temprana, y
+  // una salida a la hora estándar del hotel terminaba cayendo justo después
+  // de ese corte, sumando un día de más (caso real: check-in 07:07 a.m.,
+  // salida 2 días después a las 12:00 p.m. -- daba 3 días, no 2). Con fechas
+  // de calendario, entrar cualquier hora del día X y salir cualquier hora
+  // del día X+2 son siempre 2 noches.
   private calcularDias(
     tipoAlquiler: TipoAlquiler,
     checkinPrevisto: string,
     checkoutPrevisto: string,
   ): number {
     if (tipoAlquiler === 'por_horas') return 1;
-    const noches = Math.ceil(
-      (new Date(checkoutPrevisto).getTime() -
-        new Date(checkinPrevisto).getTime()) /
-        (1000 * 60 * 60 * 24),
-    );
-    return Math.max(1, noches);
+    const checkinLima = comoRelojLima(new Date(checkinPrevisto));
+    const checkoutLima = comoRelojLima(new Date(checkoutPrevisto));
+    const checkinFecha = Date.UTC(checkinLima.getUTCFullYear(), checkinLima.getUTCMonth(), checkinLima.getUTCDate());
+    const checkoutFecha = Date.UTC(checkoutLima.getUTCFullYear(), checkoutLima.getUTCMonth(), checkoutLima.getUTCDate());
+    const dias = Math.round((checkoutFecha - checkinFecha) / (1000 * 60 * 60 * 24));
+    return Math.max(1, dias);
   }
 }

@@ -1308,13 +1308,24 @@ export class EstadiasService {
         if (nuevoCheckout <= checkinReal) {
           throw new BadRequestException('La fecha/hora de salida programada debe ser posterior al check-in.');
         }
-        // Mismo criterio (ceil, mínimo 1 día) que ReservasService.calcularDias():
-        // una salida programada el mismo día del check-in siempre cuenta como
-        // 1 día, aunque el huésped entre de mañana y salga esa misma noche.
-        const diasNuevosTotal = Math.max(
-          1,
-          Math.ceil((nuevoCheckout.getTime() - checkinReal.getTime()) / (24 * 60 * 60 * 1000)),
+        // Días de CALENDARIO en Lima, no horas exactas desde el check-in real
+        // -- mismo criterio que ReservasService.calcularDias() (ver ese
+        // comentario): si se usaran horas exactas, una llegada temprana (ya
+        // cobrada aparte como 'early') inflaba el número de días cuando la
+        // salida se programaba a la hora estándar del hotel.
+        const checkinRealLima = comoRelojLima(checkinReal);
+        const nuevoCheckoutLima = comoRelojLima(nuevoCheckout);
+        const checkinFecha = Date.UTC(
+          checkinRealLima.getUTCFullYear(),
+          checkinRealLima.getUTCMonth(),
+          checkinRealLima.getUTCDate(),
         );
+        const checkoutFecha = Date.UTC(
+          nuevoCheckoutLima.getUTCFullYear(),
+          nuevoCheckoutLima.getUTCMonth(),
+          nuevoCheckoutLima.getUTCDate(),
+        );
+        const diasNuevosTotal = Math.max(1, Math.round((checkoutFecha - checkinFecha) / (24 * 60 * 60 * 1000)));
         diasDelta = diasNuevosTotal - Number(rhActual.dias);
       } else {
         // Solo se llega acá cuando dto.diasAdicionales fue truthy (ver la
