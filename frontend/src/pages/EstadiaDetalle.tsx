@@ -867,10 +867,15 @@ function EditarEstadiaModal({
       // habitaciones (ej. el contacto de un grupo), así que tocar sus
       // campos aquí corrompería esas otras reservas también. Editar datos
       // en línea solo aplica cuando se sigue apuntando al huésped original.
+      //
+      // nombres/apellidos NUNCA se mandan desde acá, ni siquiera sin
+      // reasignar: son identidad de un registro compartido por todas las
+      // estadías/reservas de esa persona, y este modal siempre trabaja
+      // sobre un huésped ya existente (no hay alta de huésped nuevo aquí).
+      // Los inputs quedan deshabilitados -- si el nombre está mal escrito
+      // se corrige en Huéspedes; si es otra persona, se usa "Buscar".
       const cambiosHuesped: Record<string, string> = {};
       if (!reasignando) {
-        if (nombres !== huesped?.nombres) cambiosHuesped.nombres = nombres;
-        if (apellidos !== huesped?.apellidos) cambiosHuesped.apellidos = apellidos;
         if (tipoDoc !== huesped?.tipo_doc) cambiosHuesped.tipoDoc = tipoDoc;
         if (nroDoc !== huesped?.nro_doc) cambiosHuesped.nroDoc = nroDoc;
         if (telefono !== (huesped?.telefono ?? '')) cambiosHuesped.telefono = telefono;
@@ -996,6 +1001,13 @@ function EditarEstadiaModal({
                   Mostrando los datos del huésped que se va a asignar a esta habitación (de solo lectura).
                 </p>
               )}
+              {!reasignando && (
+                <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: '0 0 8px' }}>
+                  Nombres y apellidos pertenecen a la ficha del huésped y no se editan desde aquí. Si están mal
+                  escritos, corrígelos en Huéspedes. Si esta habitación es de una persona distinta, usa "Buscar"
+                  arriba para reasignarla — nunca escribas el nombre nuevo encima.
+                </p>
+              )}
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 8 }}>
                 <div style={{ width: 150 }}>
                   <label style={labelStyle}>Tipo de documento</label>
@@ -1015,11 +1027,14 @@ function EditarEstadiaModal({
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 8 }}>
                 <div style={{ flex: 1, minWidth: 140 }}>
                   <label style={labelStyle}>Nombres</label>
-                  <input value={nombres} onChange={(e) => setNombres(e.target.value)} style={inputStyle} required disabled={reasignando} />
+                  {/* Siempre bloqueado (no solo al reasignar): este modal nunca da
+                      de alta un huésped nuevo, siempre apunta a uno ya existente,
+                      así que editar el nombre acá pisaría un registro compartido. */}
+                  <input value={nombres} onChange={(e) => setNombres(e.target.value)} style={inputStyle} required disabled />
                 </div>
                 <div style={{ flex: 1, minWidth: 140 }}>
                   <label style={labelStyle}>Apellidos</label>
-                  <input value={apellidos} onChange={(e) => setApellidos(e.target.value)} style={inputStyle} required disabled={reasignando} />
+                  <input value={apellidos} onChange={(e) => setApellidos(e.target.value)} style={inputStyle} required disabled />
                 </div>
               </div>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>

@@ -219,10 +219,6 @@ export function CotizacionDetalle() {
   const [error, setError] = useState<string | null>(null);
   const [accionando, setAccionando] = useState(false);
   const [quitandoId, setQuitandoId] = useState<string | null>(null);
-  const [editandoNombre, setEditandoNombre] = useState(false);
-  const [nombresEdit, setNombresEdit] = useState('');
-  const [apellidosEdit, setApellidosEdit] = useState('');
-  const [guardandoNombre, setGuardandoNombre] = useState(false);
 
   const [editandoLineaId, setEditandoLineaId] = useState<string | null>(null);
   const [personasEdit, setPersonasEdit] = useState(1);
@@ -376,35 +372,6 @@ export function CotizacionDetalle() {
     }
   }
 
-  function iniciarEdicionNombre() {
-    if (!cotizacion?.huespedes) return;
-    setNombresEdit(cotizacion.huespedes.nombres);
-    setApellidosEdit(cotizacion.huespedes.apellidos);
-    setEditandoNombre(true);
-  }
-
-  async function guardarNombre() {
-    if (!hotelActual || !cotizacion?.huesped_id) return;
-    if (!nombresEdit.trim() || !apellidosEdit.trim()) {
-      setError('Nombres y apellidos no pueden quedar vacíos.');
-      return;
-    }
-    setGuardandoNombre(true);
-    setError(null);
-    try {
-      await api.patch(`/hoteles/${hotelActual.hotelId}/huespedes/${cotizacion.huesped_id}`, {
-        nombres: nombresEdit.trim(),
-        apellidos: apellidosEdit.trim(),
-      });
-      setEditandoNombre(false);
-      cargar();
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'No se pudo actualizar el nombre del cliente');
-    } finally {
-      setGuardandoNombre(false);
-    }
-  }
-
   function iniciarEdicionFechas() {
     if (!cotizacion) return;
     setFechaDesdeEdit(cotizacion.fecha_desde.slice(0, 10));
@@ -466,41 +433,18 @@ export function CotizacionDetalle() {
 
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, justifyContent: 'space-between', alignItems: 'center', margin: '12px 0 20px' }}>
         <div>
-          {editandoNombre ? (
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
-              <input
-                value={nombresEdit}
-                onChange={(e) => setNombresEdit(e.target.value)}
-                placeholder="Nombres"
-                style={inputEditStyle}
-              />
-              <input
-                value={apellidosEdit}
-                onChange={(e) => setApellidosEdit(e.target.value)}
-                placeholder="Apellidos"
-                style={inputEditStyle}
-              />
-              <button type="button" onClick={guardarNombre} disabled={guardandoNombre} style={btnPrimary}>
-                {guardandoNombre ? 'Guardando...' : 'Guardar'}
-              </button>
-              <button type="button" onClick={() => setEditandoNombre(false)} disabled={guardandoNombre} style={btnSecondary}>
-                Cancelar
-              </button>
-            </div>
-          ) : (
-            <h1 style={{ fontSize: 20, display: 'flex', alignItems: 'center', gap: 8 }}>
-              {cotizacion.huespedes ? `${cotizacion.huespedes.nombres} ${cotizacion.huespedes.apellidos}` : cotizacion.empresas?.razon_social}
-              {cotizacion.huesped_id && (
-                <button
-                  type="button"
-                  onClick={iniciarEdicionNombre}
-                  title="Editar nombre del cliente"
-                  style={{ ...btnSecondary, padding: '2px 8px', fontSize: 11 }}
-                >
-                  Editar
-                </button>
-              )}
-            </h1>
+          <h1 style={{ fontSize: 20, display: 'flex', alignItems: 'center', gap: 8 }}>
+            {cotizacion.huespedes ? `${cotizacion.huespedes.nombres} ${cotizacion.huespedes.apellidos}` : cotizacion.empresas?.razon_social}
+          </h1>
+          {/* El nombre ya no se edita directamente aquí: cotizacion.huesped_id
+              apunta a un registro de huespedes compartido por todas sus
+              reservas/estadías/cotizaciones -- editarlo desde este atajo
+              renombraba silenciosamente a esa persona en todo su historial.
+              Corregir un nombre mal escrito se hace en Huéspedes. */}
+          {cotizacion.huesped_id && (
+            <Link to="/huespedes" style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+              ¿Nombre mal escrito? Corrígelo en Huéspedes
+            </Link>
           )}
           {editandoFechas ? (
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center', margin: '6px 0 0' }}>
