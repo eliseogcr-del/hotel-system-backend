@@ -117,13 +117,22 @@ function isoAHoraLocal(iso: string): string {
 // Compara los campos editables del huésped contra su snapshot original y
 // arma solo el objeto de campos que cambiaron, para PATCH /huespedes/:id
 // (mismo patrón que EditarEstadiaModal en EstadiaDetalle.tsx).
+//
+// A propósito NO compara nombres/apellidos: son datos de identidad de un
+// registro COMPARTIDO por todas las reservas/estadías de ese huésped, y
+// este formulario trabaja sobre una sola reserva. Si se permitiera editarlos
+// aquí, un recepcionista que quisiera reasignar la reserva a otra persona
+// pero escribiera el nombre directo (en vez de usar "Buscar huésped")
+// terminaría renombrando silenciosamente al huésped original en TODO su
+// historial. Los campos de nombres/apellidos se dejan deshabilitados en la
+// UI mientras haya un huesped_id existente (ver inputs más abajo); corregir
+// un nombre mal escrito se hace en la sección Huéspedes, y cambiar a otra
+// persona se hace con "Buscar huésped".
 function diffDatosHuesped(
   original: Huesped,
-  actual: { nombres: string; apellidos: string; telefono: string; correo: string; ruc: string; razonSocial: string },
+  actual: { telefono: string; correo: string; ruc: string; razonSocial: string },
 ): Record<string, string> {
   const cambios: Record<string, string> = {};
-  if (actual.nombres.trim() !== original.nombres) cambios.nombres = actual.nombres.trim();
-  if (actual.apellidos.trim() !== original.apellidos) cambios.apellidos = actual.apellidos.trim();
   if (actual.telefono.trim() !== (original.telefono ?? '')) cambios.telefono = actual.telefono.trim();
   if (actual.correo.trim() !== (original.correo ?? '')) cambios.correo = actual.correo.trim();
   if (actual.ruc.trim() !== (original.ruc ?? '')) cambios.ruc = actual.ruc.trim();
@@ -582,10 +591,11 @@ export function ReservaFormModal({
           idHuesped = creado.id;
         } else if (idHuesped && huespedOriginal) {
           // Huésped ya existente encontrado por la búsqueda: si se corrigió
-          // algún dato (ej. nombre mal escrito, teléfono desactualizado) se
-          // guarda en su ficha antes de crear la reserva.
+          // algún dato de contacto (teléfono desactualizado, etc.) se guarda
+          // en su ficha antes de crear la reserva. Nombres/apellidos NO se
+          // tocan desde aquí -- ver comentario de diffDatosHuesped().
           const cambios = diffDatosHuesped(huespedOriginal, {
-            nombres, apellidos, telefono, correo, ruc: huespedRuc, razonSocial: huespedRazonSocial,
+            telefono, correo, ruc: huespedRuc, razonSocial: huespedRazonSocial,
           });
           if (Object.keys(cambios).length > 0) {
             await api.patch(`/hoteles/${hotelId}/huespedes/${idHuesped}`, cambios);
@@ -620,8 +630,10 @@ export function ReservaFormModal({
         });
       } else {
         if (!reasignando && huespedId && huespedOriginal) {
+          // Nombres/apellidos NO se tocan desde aquí -- ver comentario de
+          // diffDatosHuesped(). Para eso está "Buscar huésped" arriba.
           const cambios = diffDatosHuesped(huespedOriginal, {
-            nombres, apellidos, telefono, correo, ruc: huespedRuc, razonSocial: huespedRazonSocial,
+            telefono, correo, ruc: huespedRuc, razonSocial: huespedRazonSocial,
           });
           if (Object.keys(cambios).length > 0) {
             await api.patch(`/hoteles/${hotelId}/huespedes/${huespedId}`, cambios);
@@ -1059,7 +1071,13 @@ export function ReservaFormModal({
                         value={nombres}
                         onChange={(e) => setNombres(e.target.value)}
                         style={inputStyle}
-                        disabled={modo === 'editar' && reasignando}
+                        // Bloqueado siempre que huespedId apunte a un huésped ya
+                        // existente (encontrado por búsqueda, cargado al editar, o
+                        // reasignado) -- editar el nombre a mano acá pisaría el
+                        // registro compartido de esa persona. Solo queda editable
+                        // cuando se está registrando un huésped nuevo de cero
+                        // (sinResultados, huespedId null). Ver diffDatosHuesped().
+                        disabled={!!huespedId}
                         required
                       />
                     </div>
@@ -1069,7 +1087,7 @@ export function ReservaFormModal({
                         value={apellidos}
                         onChange={(e) => setApellidos(e.target.value)}
                         style={inputStyle}
-                        disabled={modo === 'editar' && reasignando}
+                        disabled={!!huespedId}
                         required
                       />
                     </div>
@@ -1150,15 +1168,17 @@ export function ReservaFormModal({
                     )}
                     {modo === 'crear' && huespedId && (
                       <p style={{ fontSize: 11, color: 'var(--text-muted)', gridColumn: '1 / -1', margin: 0 }}>
-                        Puedes corregir estos datos si hay un error (ej. nombre mal escrito) — se guardan en la
-                        ficha del huésped al crear la reserva.
+                        Este es un huésped ya registrado — nombres y apellidos no se editan desde aquí (para no
+                        renombrar por error la ficha de otra persona). Si están mal escritos, corrígelos en
+                        Huéspedes. Sí puedes actualizar teléfono, correo, RUC o razón social si cambiaron.
                       </p>
                     )}
                     {modo === 'editar' && !reasignando && (
                       <p style={{ fontSize: 11, color: 'var(--text-muted)', gridColumn: '1 / -1', margin: 0 }}>
-                        Puedes corregir estos datos si hay un error (ej. nombre mal escrito o teléfono desactualizado)
-                        — se guardan en la ficha del huésped. Si la reserva es de una persona distinta, usa "Buscar
-                        huésped" arriba para reasignarla en vez de editar estos datos.
+                        Nombres y apellidos pertenecen a la ficha del huésped y no se editan desde aquí. Si están
+                        mal escritos, corrígelos en Huéspedes. Si esta reserva es de una persona distinta, usa
+                        "Buscar huésped" arriba para reasignarla — nunca escribas el nombre nuevo encima. Sí puedes
+                        actualizar teléfono, correo, RUC o razón social si cambiaron.
                       </p>
                     )}
                     {modo === 'editar' && reasignando && (
