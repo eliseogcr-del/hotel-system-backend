@@ -1,11 +1,62 @@
 import { useState, type ChangeEvent, type CSSProperties } from 'react';
 import { api, ApiError } from '../lib/api';
 
-const FOTO_TIPOS_ACEPTADOS = ['image/png', 'image/jpeg', 'image/webp'];
-// Mismo límite que el logo del hotel (Configuracion.tsx) -- imagen chica
-// guardada como data URI, sin bucket de storage (ver comentario en
-// sql/schema.sql, tabla habitaciones).
-const FOTO_TAMANO_MAX = 1_500_000;
+// Tope del archivo que se deja elegir ANTES de comprimir -- solo para evitar
+// que el navegador intente decodificar algo absurdamente pesado (una foto de
+// celular normal pesa 2-8MB y entra sin problema). El peso final que
+// realmente se guarda lo define comprimirImagen() de abajo.
+const ARCHIVO_ORIGEN_MAX = 15_000_000;
+// Lado más largo al que se reduce la imagen -- de sobra para una tarjeta/
+// miniatura del panel, no hace falta más resolución que esa.
+const DIMENSION_MAX = 1280;
+// Peso aproximado (bytes) al que se apunta comprimiendo: se guarda como data
+// URI en la misma columna de la base (igual patrón que hoteles.logo_url, sin
+// bucket de storage -- ver comentario en sql/schema.sql), así que mientras
+// más liviano, menos espacio ocupa el catálogo completo de habitaciones.
+const PESO_OBJETIVO_BYTES = 200_000;
+
+// Reduce cualquier imagen a JPEG, achicando resolución y bajando calidad
+// hasta acercarse a PESO_OBJETIVO_BYTES (máximo 6 intentos, para no colgar
+// el navegador con una imagen que simplemente no comprime más).
+async function comprimirImagen(archivo: File): Promise<string> {
+  const img = await cargarImagen(archivo);
+  const canvas = document.createElement('canvas');
+  const ctx = canvas.getContext('2d');
+  if (!ctx) throw new Error('No se pudo procesar la imagen');
+
+  let escala = Math.min(1, DIMENSION_MAX / Math.max(img.width, img.height));
+  let calidad = 0.75;
+  let dataUrl = '';
+
+  for (let intento = 0; intento < 6; intento++) {
+    canvas.width = Math.max(1, Math.round(img.width * escala));
+    canvas.height = Math.max(1, Math.round(img.height * escala));
+    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+    dataUrl = canvas.toDataURL('image/jpeg', calidad);
+
+    const pesoAprox = (dataUrl.length * 3) / 4; // base64 -> bytes, aproximado
+    if (pesoAprox <= PESO_OBJETIVO_BYTES) break;
+    if (calidad > 0.4) calidad -= 0.15;
+    else escala *= 0.8;
+  }
+  return dataUrl;
+}
+
+function cargarImagen(archivo: File): Promise<HTMLImageElement> {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(archivo);
+    const img = new Image();
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      resolve(img);
+    };
+    img.onerror = () => {
+      URL.revokeObjectURL(url);
+      reject(new Error('No se pudo leer la imagen'));
+    };
+    img.src = url;
+  });
+}
 
 interface Props {
   hotelId: string;
@@ -37,36 +88,46 @@ export function FotosHabitacionModal({
     const archivo = e.target.files?.[0];
     e.target.value = '';
     if (!archivo) return;
-    if (!FOTO_TIPOS_ACEPTADOS.includes(archivo.type)) {
-      setError('La foto debe ser una imagen PNG, JPG o WEBP');
+    if (!archivo.type.startsWith('image/')) {
+      setError('El archivo debe ser una imagen');
       return;
     }
-    if (archivo.size > FOTO_TAMANO_MAX) {
-      setError('La foto no puede pesar más de 1.5MB');
+    if (archivo.size > ARCHIVO_ORIGEN_MAX) {
+      setError('La imagen es demasiado pesada (máx. 15MB antes de comprimir)');
       return;
     }
     setError(null);
-    const lector = new FileReader();
-    lector.onload = () => guardar(slot, lector.result as string);
-    lector.readAsDataURL(archivo);
-  }
-
-  async function guardar(slot: 1 | 2, fotoUrl: string | null) {
     setSubiendoSlot(slot);
-    setError(null);
     try {
-      await api.patch(`/hoteles/${hotelId}/habitaciones/${habitacionId}/foto`, { slot, fotoUrl });
-      if (slot === 1) setFoto1(fotoUrl);
-      else setFoto2(fotoUrl);
-      onGuardado({
-        foto1_url: slot === 1 ? fotoUrl : foto1,
-        foto2_url: slot === 2 ? fotoUrl : foto2,
-      });
+      const fotoUrl = await comprimirImagen(archivo);
+      await guardarFoto(slot, fotoUrl);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'No se pudo guardar la foto');
+      setError(err instanceof ApiError ? err.message : 'No se pudo procesar la imagen');
     } finally {
       setSubiendoSlot(null);
     }
+  }
+
+  async function quitar(slot: 1 | 2) {
+    setSubiendoSlot(slot);
+    setError(null);
+    try {
+      await guardarFoto(slot, null);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'No se pudo quitar la foto');
+    } finally {
+      setSubiendoSlot(null);
+    }
+  }
+
+  async function guardarFoto(slot: 1 | 2, fotoUrl: string | null) {
+    await api.patch(`/hoteles/${hotelId}/habitaciones/${habitacionId}/foto`, { slot, fotoUrl });
+    if (slot === 1) setFoto1(fotoUrl);
+    else setFoto2(fotoUrl);
+    onGuardado({
+      foto1_url: slot === 1 ? fotoUrl : foto1,
+      foto2_url: slot === 2 ? fotoUrl : foto2,
+    });
   }
 
   function slotUI(slot: 1 | 2, fotoUrl: string | null) {
@@ -96,17 +157,17 @@ export function FotosHabitacionModal({
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
           <label style={{ ...btnSecondary, cursor: subiendo ? 'default' : 'pointer', opacity: subiendo ? 0.6 : 1 }}>
-            {subiendo ? 'Subiendo...' : fotoUrl ? 'Reemplazar' : 'Subir foto'}
+            {subiendo ? 'Procesando...' : fotoUrl ? 'Reemplazar' : 'Subir foto'}
             <input
               type="file"
-              accept={FOTO_TIPOS_ACEPTADOS.join(',')}
+              accept="image/*"
               onChange={(e) => subir(slot, e)}
               disabled={subiendo}
               style={{ display: 'none' }}
             />
           </label>
           {fotoUrl && (
-            <button type="button" onClick={() => guardar(slot, null)} disabled={subiendo} style={btnSecondary}>
+            <button type="button" onClick={() => quitar(slot)} disabled={subiendo} style={btnSecondary}>
               Quitar
             </button>
           )}
@@ -123,7 +184,7 @@ export function FotosHabitacionModal({
           {tipoNombre ? <span style={{ fontWeight: 400, color: 'var(--text-secondary)' }}> ({tipoNombre})</span> : null}
         </h2>
         <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: '0 0 16px' }}>
-          Hasta 2 fotos por habitación, PNG/JPG/WEBP de hasta 1.5MB cada una.
+          Hasta 2 fotos por habitación. Se comprimen automáticamente al subirlas para ocupar poco espacio.
         </p>
         {error && <p style={{ color: 'var(--danger)', fontSize: 13, marginBottom: 12 }}>{error}</p>}
         <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap', justifyContent: 'center' }}>
