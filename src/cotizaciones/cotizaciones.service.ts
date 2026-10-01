@@ -197,7 +197,7 @@ export class CotizacionesService {
     const dias = this.calcularDias(dto.fechaDesde, dto.fechaHasta);
 
     const totalEstimado = dto.habitaciones.reduce(
-      (acc, l) => acc + l.nroPersonas * l.precioPersona * dias,
+      (acc, l) => acc + l.nroPersonas * l.precioPersona * dias + (l.cobroEarly ?? 0) + (l.cobroLate ?? 0),
       0,
     );
     const venceEn =
@@ -225,16 +225,22 @@ export class CotizacionesService {
       .single();
     if (cotizacionError) throw cotizacionError;
 
-    const filas = dto.habitaciones.map((l) => ({
-      cotizacion_id: cotizacion.id,
-      habitacion_id: l.habitacionId,
-      nro_personas: l.nroPersonas,
-      dias,
-      precio_persona: l.precioPersona,
-      notas: l.notas?.trim() || null,
-      subtotal: l.nroPersonas * l.precioPersona * dias,
-      disponibilidad_forzada: !!l.forzarNoDisponible,
-    }));
+    const filas = dto.habitaciones.map((l) => {
+      const cobroEarly = l.cobroEarly ?? 0;
+      const cobroLate = l.cobroLate ?? 0;
+      return {
+        cotizacion_id: cotizacion.id,
+        habitacion_id: l.habitacionId,
+        nro_personas: l.nroPersonas,
+        dias,
+        precio_persona: l.precioPersona,
+        notas: l.notas?.trim() || null,
+        cobro_early: cobroEarly,
+        cobro_late: cobroLate,
+        subtotal: l.nroPersonas * l.precioPersona * dias + cobroEarly + cobroLate,
+        disponibilidad_forzada: !!l.forzarNoDisponible,
+      };
+    });
 
     const { error: detalleError } = await client.from('cotizacion_detalle').insert(filas);
     if (detalleError) {
@@ -392,10 +398,14 @@ export class CotizacionesService {
     const dias = this.calcularDias(dto.fechaDesde, dto.fechaHasta);
 
     for (const linea of actual.cotizacion_detalle as any[]) {
-      const subtotal =
+      // cobro_early/cobro_late son cargos únicos por toda la línea -- no se
+      // multiplican por los días nuevos, solo se recalcula la parte que sí
+      // depende de días (precio_persona/precio_noche).
+      const costoPorDias =
         linea.precio_persona != null
           ? Number(linea.nro_personas) * Number(linea.precio_persona) * dias
           : Number(linea.precio_noche ?? 0) * dias;
+      const subtotal = costoPorDias + Number(linea.cobro_early ?? 0) + Number(linea.cobro_late ?? 0);
       const { error: updLineaError } = await client
         .from('cotizacion_detalle')
         .update({ dias, subtotal })
@@ -484,6 +494,8 @@ export class CotizacionesService {
     }
 
     const dias = this.calcularDias(actual.fecha_desde, actual.fecha_hasta);
+    const cobroEarly = dto.cobroEarly ?? 0;
+    const cobroLate = dto.cobroLate ?? 0;
     const { error: insError } = await client.from('cotizacion_detalle').insert({
       cotizacion_id: id,
       habitacion_id: dto.habitacionId,
@@ -491,7 +503,9 @@ export class CotizacionesService {
       dias,
       precio_persona: dto.precioPersona,
       notas: dto.notas?.trim() || null,
-      subtotal: dto.nroPersonas * dto.precioPersona * dias,
+      cobro_early: cobroEarly,
+      cobro_late: cobroLate,
+      subtotal: dto.nroPersonas * dto.precioPersona * dias + cobroEarly + cobroLate,
       disponibilidad_forzada: !!dto.forzarNoDisponible,
     });
     if (insError) throw insError;
@@ -528,7 +542,9 @@ export class CotizacionesService {
     const notas = dto.notas !== undefined ? dto.notas.trim() || null : linea.notas;
     const tipoManual =
       dto.tipoManual !== undefined ? dto.tipoManual.trim() || null : linea.tipo_manual;
-    const subtotal = nroPersonas * precioPersona * Number(linea.dias);
+    const cobroEarly = dto.cobroEarly ?? Number(linea.cobro_early ?? 0);
+    const cobroLate = dto.cobroLate ?? Number(linea.cobro_late ?? 0);
+    const subtotal = nroPersonas * precioPersona * Number(linea.dias) + cobroEarly + cobroLate;
 
     const { error: updLineaError } = await client
       .from('cotizacion_detalle')
@@ -537,6 +553,8 @@ export class CotizacionesService {
         precio_persona: precioPersona,
         notas,
         tipo_manual: tipoManual,
+        cobro_early: cobroEarly,
+        cobro_late: cobroLate,
         subtotal,
       })
       .eq('id', lineaId)
@@ -597,6 +615,8 @@ export class CotizacionesService {
         // habitación para no perder el total cotizado.
         tarifaDiaManual:
           d.precio_persona != null ? Number(d.precio_persona) * Number(d.nro_personas) : Number(d.precio_noche),
+        cobroEarly: Number(d.cobro_early ?? 0),
+        cobroLate: Number(d.cobro_late ?? 0),
       })),
     };
 

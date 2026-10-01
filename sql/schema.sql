@@ -453,6 +453,13 @@ create table cotizacion_detalle (
     precio_noche numeric(10,2),
     precio_persona numeric(10,2),
     notas text,
+    -- Cargos únicos por toda la estadía de esta línea (no se multiplican por
+    -- `dias`): early check-in al ingresar, late check-out al salir -- mismo
+    -- concepto que reserva_habitacion.cobro_early/cobro_late (CLAUDE.md
+    -- 3.3). Antes de esto solo se anotaban como texto suelto en `notas` y no
+    -- sumaban al subtotal real.
+    cobro_early numeric(10,2) not null default 0,
+    cobro_late numeric(10,2) not null default 0,
     subtotal numeric(10,2) not null,
     -- true cuando esta línea se agregó a propósito estando ocupada/sin
     -- margen de limpieza en ese rango (botón "Agregar habitación no
