@@ -156,6 +156,11 @@ create table habitaciones (
     -- es una exclusión puramente comercial/de política del hotel, no afecta
     -- el motor de disponibilidad real que usan reservas/cotizaciones humanas.
     visible_whatsapp boolean not null default true,
+    -- Hasta 2 fotos por habitación, como data URI (igual patrón que
+    -- hoteles.logo_url) -- no vale la pena un bucket de storage para fotos
+    -- chicas de un catálogo de este tamaño. null = sin foto en ese slot.
+    foto1_url text,
+    foto2_url text,
     unique (hotel_id, hab_numero)
 );
 

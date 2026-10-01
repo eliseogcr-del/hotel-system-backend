@@ -5,6 +5,7 @@ import { useHotel } from '../contexts/HotelContext';
 import { useIsMobile } from '../hooks/useIsMobile';
 import { CheckinRapidoModal } from '../components/CheckinRapidoModal';
 import { ReservaFormModal } from '../components/ReservaFormModal';
+import { FotosHabitacionModal } from '../components/FotosHabitacionModal';
 import { colorPorOrigen, labelPorOrigen } from '../lib/colorOrigen';
 
 type Vista = 'tabla' | 'tarjetas';
@@ -58,6 +59,8 @@ interface Habitacion {
   notas: string | null;
   notas_operativas: string | null;
   visible_whatsapp: boolean;
+  foto1_url: string | null;
+  foto2_url: string | null;
   cocheraNumero: string | null;
   vehiculoTipo: string | null;
   origen: string | null;
@@ -231,6 +234,7 @@ export function Habitaciones() {
   const [ahora, setAhora] = useState(new Date());
   const [checkinHab, setCheckinHab] = useState<Habitacion | null>(null);
   const [reservaModal, setReservaModal] = useState<Habitacion | null>(null);
+  const [fotosModal, setFotosModal] = useState<Habitacion | null>(null);
   const [precioMascotaDia, setPrecioMascotaDia] = useState(0);
   const [horaCheckoutHotel, setHoraCheckoutHotel] = useState<string | undefined>(undefined);
   const [modo24h, setModo24h] = useState(false);
@@ -671,6 +675,13 @@ export function Habitaciones() {
                       Marcar disponible
                     </button>
                   )}
+                  <button
+                    onClick={() => setFotosModal(h)}
+                    style={linkBtnStyle}
+                    title={h.foto1_url || h.foto2_url ? 'Ver fotos de la habitación' : 'Subir foto de la habitación'}
+                  >
+                    📷 Fotos
+                  </button>
                 </td>
                 <td style={{ ...tdStyle, fontWeight: 500, color: 'var(--text-primary)' }}>{h.hab_numero}</td>
                 <td style={tdStyle}>{h.tipos_habitacion?.nombre ?? '—'}</td>
@@ -847,6 +858,7 @@ export function Habitaciones() {
             if (hab?.estadiaId) navigate(`/estadias/${hab.estadiaId}`);
           }}
           onClickProximaReserva={(h) => setReservaModal(h)}
+          onClickFotos={(h) => setFotosModal(h)}
           onGuardarNotas={guardarNotas}
           onGuardarNotasHabitacion={guardarNotasHabitacion}
           onCambiarEstadoCochera={cambiarEstadoCochera}
@@ -879,6 +891,21 @@ export function Habitaciones() {
           modo24h={modo24h}
           onClose={() => setCheckinHab(null)}
           onCreado={cargarSiAutomatico}
+        />
+      )}
+
+      {fotosModal && (
+        <FotosHabitacionModal
+          hotelId={hotelActual.hotelId}
+          habitacionId={fotosModal.id}
+          habNumero={fotosModal.hab_numero}
+          tipoNombre={fotosModal.tipos_habitacion?.nombre}
+          foto1Url={fotosModal.foto1_url}
+          foto2Url={fotosModal.foto2_url}
+          onClose={() => setFotosModal(null)}
+          onGuardado={(fotos) =>
+            setHabitaciones((prev) => prev.map((h) => (h.id === fotosModal.id ? { ...h, ...fotos } : h)))
+          }
         />
       )}
 
@@ -920,6 +947,7 @@ function VistaTarjetas({
   onClickHabitacion,
   onClickCochera,
   onClickProximaReserva,
+  onClickFotos,
   onGuardarNotas,
   onGuardarNotasHabitacion,
   onCambiarEstadoCochera,
@@ -930,6 +958,7 @@ function VistaTarjetas({
   onClickHabitacion: (h: Habitacion) => void;
   onClickCochera: (c: Cochera) => void;
   onClickProximaReserva: (h: Habitacion) => void;
+  onClickFotos: (h: Habitacion) => void;
   onGuardarNotas: (h: Habitacion, notas: string) => void;
   onGuardarNotasHabitacion: (h: Habitacion, notas: string) => void;
   onCambiarEstadoCochera: (c: Cochera, ocupada: boolean) => void;
@@ -976,6 +1005,25 @@ function VistaTarjetas({
                     </span>
                   )}
                   <span style={{ fontSize: 20, fontWeight: 700, color: 'var(--text-primary)' }}>{h.hab_numero}</span>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onClickFotos(h);
+                    }}
+                    title={h.foto1_url || h.foto2_url ? 'Ver fotos de la habitación' : 'Subir foto de la habitación'}
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      padding: 0,
+                      cursor: 'pointer',
+                      fontSize: 14,
+                      lineHeight: 1,
+                      opacity: h.foto1_url || h.foto2_url ? 1 : 0.4,
+                    }}
+                  >
+                    📷
+                  </button>
                 </span>
                 <span style={{ fontSize: 10, fontWeight: 700, color: ESTADO_COLOR_INTENSO[color].text }}>{etiqueta}</span>
               </div>

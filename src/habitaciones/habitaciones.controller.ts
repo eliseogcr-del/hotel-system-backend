@@ -17,6 +17,7 @@ import { HabitacionesService } from './habitaciones.service';
 import { ValidarDisponibilidadDto } from './dto/validar-disponibilidad.dto';
 import { AlternarMantenimientoDto } from './dto/alternar-mantenimiento.dto';
 import { ActualizarNotasHabitacionDto } from './dto/actualizar-notas.dto';
+import { ActualizarFotoHabitacionDto } from './dto/actualizar-foto.dto';
 import { AlternarVisibleWhatsappDto } from './dto/alternar-visible-whatsapp.dto';
 
 @Controller('hoteles/:hotelId/habitaciones')
@@ -93,6 +94,18 @@ export class HabitacionesController {
   ) {
     const client = this.supabase.getClientForRequest(user.accessToken);
     return this.habitacionesService.actualizarNotas(client, hotelId, id, dto.notas);
+  }
+
+  @Patch(':id/foto')
+  @Roles('admin', 'recepcion')
+  async actualizarFoto(
+    @Param('hotelId') hotelId: string,
+    @Param('id') id: string,
+    @Body() dto: ActualizarFotoHabitacionDto,
+    @CurrentUser() user: RequestUser,
+  ) {
+    const client = this.supabase.getClientForRequest(user.accessToken);
+    return this.habitacionesService.actualizarFoto(client, hotelId, id, dto.slot, dto.fotoUrl ?? null);
   }
 
   @Patch(':id/visible-whatsapp')

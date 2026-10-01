@@ -55,6 +55,7 @@ export class HabitacionesService {
       .select(
         `
         id, hab_numero, piso, estado, mantenimiento_planificado, notas_operativas, visible_whatsapp,
+        foto1_url, foto2_url,
         tipos_habitacion(id, nombre, aforo_max)
       `,
       )
@@ -510,6 +511,33 @@ export class HabitacionesService {
       .eq('id', habitacionId)
       .eq('hotel_id', hotelId)
       .select('id, visible_whatsapp')
+      .maybeSingle();
+    if (error) throw error;
+    if (!data) throw new NotFoundException('La habitación no existe en este hotel');
+    return data;
+  }
+
+  /**
+   * Foto de una habitación (hasta 2, por slot): la carga/reemplaza/quita
+   * cualquier rol con acceso al panel de Habitaciones, igual que la nota
+   * operativa -- no es un dato de catálogo restringido a admin, es algo que
+   * recepción puede querer actualizar en el momento (ej. tomar una foto
+   * nueva tras una renovación). fotoUrl null = quitar la foto de ese slot.
+   */
+  async actualizarFoto(
+    client: SupabaseClient,
+    hotelId: string,
+    habitacionId: string,
+    slot: 1 | 2,
+    fotoUrl: string | null,
+  ) {
+    const columna = slot === 1 ? 'foto1_url' : 'foto2_url';
+    const { data, error } = await client
+      .from('habitaciones')
+      .update({ [columna]: fotoUrl })
+      .eq('id', habitacionId)
+      .eq('hotel_id', hotelId)
+      .select('id, foto1_url, foto2_url')
       .maybeSingle();
     if (error) throw error;
     if (!data) throw new NotFoundException('La habitación no existe en este hotel');
