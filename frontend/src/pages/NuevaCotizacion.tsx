@@ -35,6 +35,10 @@ interface FilaGrid {
   nota: string;
   personas: number;
   precioPersona: number;
+  // Cargos únicos por toda la línea (no se multiplican por noches) -- igual
+  // concepto que CotizacionDetalle.tsx / cotizacion_detalle.cobro_early/late.
+  early: number;
+  late: number;
   // true = agregada con el botón "Agregar habitaciones no disponibles" --
   // ver CLAUDE.md/comentario en cotizaciones.service.ts: cotizar no bloquea
   // la habitación de verdad, así que se permite igual, marcada como aviso.
@@ -127,6 +131,8 @@ export function NuevaCotizacion() {
           nota: '',
           personas: 0,
           precioPersona: 0,
+          early: 0,
+          late: 0,
           forzada: false,
           motivoNoDisponible: null,
         })),
@@ -168,6 +174,8 @@ export function NuevaCotizacion() {
         nota: '',
         personas: 0,
         precioPersona: 0,
+        early: 0,
+        late: 0,
         forzada: true,
         motivoNoDisponible: h.motivo,
       },
@@ -230,6 +238,8 @@ export function NuevaCotizacion() {
           habitacionId: f.habitacionId,
           nroPersonas: f.personas,
           precioPersona: f.precioPersona,
+          cobroEarly: f.early,
+          cobroLate: f.late,
           notas: f.nota.trim() || undefined,
           forzarNoDisponible: f.forzada || undefined,
         })),
@@ -444,11 +454,13 @@ export function NuevaCotizacion() {
                   <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, tableLayout: 'fixed', minWidth: 720 }}>
                     <colgroup>
                       <col style={{ width: 90 }} />
-                      <col style={{ width: 130 }} />
-                      <col style={{ width: 90 }} />
-                      <col style={{ width: 130 }} />
-                      <col style={{ width: 110 }} />
-                      <col style={{ width: 190 }} />
+                      <col style={{ width: 120 }} />
+                      <col style={{ width: 80 }} />
+                      <col style={{ width: 120 }} />
+                      <col style={{ width: 80 }} />
+                      <col style={{ width: 80 }} />
+                      <col style={{ width: 100 }} />
+                      <col style={{ width: 160 }} />
                       <col style={{ width: 80 }} />
                     </colgroup>
                     <thead>
@@ -457,6 +469,8 @@ export function NuevaCotizacion() {
                         <th style={thStyle}>Tipo</th>
                         <th style={{ ...thStyle, textAlign: 'right' }}>Personas</th>
                         <th style={{ ...thStyle, textAlign: 'right' }}>Precio/persona/noche</th>
+                        <th style={{ ...thStyle, textAlign: 'right' }}>Early</th>
+                        <th style={{ ...thStyle, textAlign: 'right' }}>Late</th>
                         <th style={{ ...thStyle, textAlign: 'right' }}>Subtotal</th>
                         <th style={thStyle}>Nota</th>
                         <th style={{ ...thStyle, textAlign: 'center' }}></th>
@@ -505,6 +519,30 @@ export function NuevaCotizacion() {
                               style={{ ...inputCeldaStyle, textAlign: 'right' }}
                             />
                           </td>
+                          <td style={tdStyle}>
+                            <input
+                              type="number"
+                              min={0}
+                              step={0.01}
+                              value={f.early}
+                              onChange={(e) =>
+                                actualizarFila(f.habitacionId, { early: Math.max(0, Number(e.target.value)) })
+                              }
+                              style={{ ...inputCeldaStyle, textAlign: 'right' }}
+                            />
+                          </td>
+                          <td style={tdStyle}>
+                            <input
+                              type="number"
+                              min={0}
+                              step={0.01}
+                              value={f.late}
+                              onChange={(e) =>
+                                actualizarFila(f.habitacionId, { late: Math.max(0, Number(e.target.value)) })
+                              }
+                              style={{ ...inputCeldaStyle, textAlign: 'right' }}
+                            />
+                          </td>
                           <td style={{ ...tdStyle, textAlign: 'right', fontWeight: 600 }}>
                             {subtotalFila(f, disponibilidad.dias).toFixed(2)}
                           </td>
@@ -544,7 +582,11 @@ export function NuevaCotizacion() {
 }
 
 function subtotalFila(f: FilaGrid, dias: number): number {
-  return (Number(f.personas) || 0) * (Number(f.precioPersona) || 0) * dias;
+  return (
+    (Number(f.personas) || 0) * (Number(f.precioPersona) || 0) * dias +
+    (Number(f.early) || 0) +
+    (Number(f.late) || 0)
+  );
 }
 
 function fechaCheckoutYMD(fechaCheckin: string, noches: number): string {
