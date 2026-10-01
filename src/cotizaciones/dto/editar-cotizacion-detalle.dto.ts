@@ -15,6 +15,16 @@ export class EditarCotizacionDetalleDto {
   @IsString()
   notas?: string;
 
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  cobroEarly?: number;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  cobroLate?: number;
+
   // Etiqueta de tipo editada a mano, solo para esta cotización (no toca
   // tipos_habitacion real). String vacío limpia la edición manual y vuelve
   // a la etiqueta automática (Individual/Múltiple/tipo real según personas).

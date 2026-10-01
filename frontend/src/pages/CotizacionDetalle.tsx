@@ -12,6 +12,8 @@ interface DetalleLinea {
   precio_noche: number | null;
   precio_persona: number | null;
   notas: string | null;
+  cobro_early: number;
+  cobro_late: number;
   subtotal: number;
   disponibilidad_forzada: boolean;
   tipo_manual: string | null;
@@ -113,6 +115,8 @@ function imprimirCotizacionPDF(cotizacion: CotizacionDetalleData, hotel: HotelId
       <td style="text-align:right">${l.nro_personas}</td>
       <td style="text-align:right">${l.precio_persona != null ? fmt(Number(l.precio_persona)) : '—'}</td>
       <td style="text-align:right">${l.dias}</td>
+      <td style="text-align:right">${fmt(Number(l.cobro_early ?? 0))}</td>
+      <td style="text-align:right">${fmt(Number(l.cobro_late ?? 0))}</td>
       <td style="text-align:right;font-weight:700">${fmt(Number(l.subtotal))}</td>
       <td>${escapeHtml(l.notas ?? '')}</td>
     </tr>`,
@@ -184,12 +188,13 @@ function imprimirCotizacionPDF(cotizacion: CotizacionDetalleData, hotel: HotelId
 
   <table>
     <colgroup>
-      <col style="width:9%"><col style="width:16%"><col style="width:11%">
-      <col style="width:16%"><col style="width:8%"><col style="width:14%"><col style="width:26%">
+      <col style="width:8%"><col style="width:13%"><col style="width:9%">
+      <col style="width:13%"><col style="width:6%"><col style="width:8%"><col style="width:8%">
+      <col style="width:12%"><col style="width:23%">
     </colgroup>
     <thead>
       <tr>
-        <th>Hab.</th><th>Tipo</th><th>Personas</th><th>Precio/persona/noche</th><th>Días</th><th>Subtotal</th><th>Nota</th>
+        <th>Hab.</th><th>Tipo</th><th>Personas</th><th>Precio/persona/noche</th><th>Días</th><th>Early</th><th>Late</th><th>Subtotal</th><th>Nota</th>
       </tr>
     </thead>
     <tbody>${filasHtml}</tbody>
@@ -223,6 +228,8 @@ export function CotizacionDetalle() {
   const [editandoLineaId, setEditandoLineaId] = useState<string | null>(null);
   const [personasEdit, setPersonasEdit] = useState(1);
   const [precioEdit, setPrecioEdit] = useState(0);
+  const [earlyEdit, setEarlyEdit] = useState(0);
+  const [lateEdit, setLateEdit] = useState(0);
   const [notaEdit, setNotaEdit] = useState('');
   const [tipoEdit, setTipoEdit] = useState('');
   const [guardandoLinea, setGuardandoLinea] = useState(false);
@@ -237,6 +244,8 @@ export function CotizacionDetalle() {
   >(null);
   const [nuevaPersonas, setNuevaPersonas] = useState(1);
   const [nuevoPrecio, setNuevoPrecio] = useState(0);
+  const [nuevoEarly, setNuevoEarly] = useState(0);
+  const [nuevoLate, setNuevoLate] = useState(0);
   const [nuevaNota, setNuevaNota] = useState('');
   const [agregando, setAgregando] = useState(false);
 
@@ -298,6 +307,8 @@ export function CotizacionDetalle() {
     setEditandoLineaId(l.id);
     setPersonasEdit(l.nro_personas);
     setPrecioEdit(Number(l.precio_persona ?? l.precio_noche ?? 0));
+    setEarlyEdit(Number(l.cobro_early ?? 0));
+    setLateEdit(Number(l.cobro_late ?? 0));
     setNotaEdit(l.notas ?? '');
     setTipoEdit(l.tipo_manual ?? '');
     setError(null);
@@ -311,6 +322,8 @@ export function CotizacionDetalle() {
       await api.patch(`/hoteles/${hotelActual.hotelId}/cotizaciones/${id}/detalle/${lineaId}`, {
         nroPersonas: personasEdit,
         precioPersona: precioEdit,
+        cobroEarly: earlyEdit,
+        cobroLate: lateEdit,
         notas: notaEdit.trim(),
         tipoManual: tipoEdit.trim(),
       });
@@ -347,6 +360,8 @@ export function CotizacionDetalle() {
     setHabitacionSeleccionada(h);
     setNuevaPersonas(1);
     setNuevoPrecio(0);
+    setNuevoEarly(0);
+    setNuevoLate(0);
     setNuevaNota('');
   }
 
@@ -359,6 +374,8 @@ export function CotizacionDetalle() {
         habitacionId: habitacionSeleccionada.id,
         nroPersonas: nuevaPersonas,
         precioPersona: nuevoPrecio,
+        cobroEarly: nuevoEarly,
+        cobroLate: nuevoLate,
         notas: nuevaNota.trim() || undefined,
         forzarNoDisponible: panelAgregar === 'no_disponibles' || undefined,
       });
@@ -661,6 +678,28 @@ export function CotizacionDetalle() {
                 />
               </label>
               <label style={{ display: 'flex', flexDirection: 'column', gap: 3, fontSize: 11 }}>
+                Early (único)
+                <input
+                  type="number"
+                  min={0}
+                  step={0.01}
+                  value={nuevoEarly}
+                  onChange={(e) => setNuevoEarly(Math.max(0, Number(e.target.value)))}
+                  style={{ ...inputEditStyle, width: 90 }}
+                />
+              </label>
+              <label style={{ display: 'flex', flexDirection: 'column', gap: 3, fontSize: 11 }}>
+                Late (único)
+                <input
+                  type="number"
+                  min={0}
+                  step={0.01}
+                  value={nuevoLate}
+                  onChange={(e) => setNuevoLate(Math.max(0, Number(e.target.value)))}
+                  style={{ ...inputEditStyle, width: 90 }}
+                />
+              </label>
+              <label style={{ display: 'flex', flexDirection: 'column', gap: 3, fontSize: 11 }}>
                 Nota (opcional)
                 <input
                   value={nuevaNota}
@@ -687,6 +726,8 @@ export function CotizacionDetalle() {
               <th style={thStyle}>Personas</th>
               <th style={thStyle}>Precio/persona/noche</th>
               <th style={thStyle}>Días</th>
+              <th style={thStyle}>Early</th>
+              <th style={thStyle}>Late</th>
               <th style={thStyle}>Subtotal</th>
               <th style={thStyle}>Nota</th>
               {puedeEditar && <th style={{ ...thStyle, textAlign: 'center' }}></th>}
@@ -747,6 +788,34 @@ export function CotizacionDetalle() {
                     )}
                   </td>
                   <td style={tdStyle}>{l.dias}</td>
+                  <td style={tdStyle}>
+                    {editando ? (
+                      <input
+                        type="number"
+                        min={0}
+                        step={0.01}
+                        value={earlyEdit}
+                        onChange={(e) => setEarlyEdit(Math.max(0, Number(e.target.value)))}
+                        style={{ ...inputEditStyle, width: 80 }}
+                      />
+                    ) : (
+                      Number(l.cobro_early ?? 0)
+                    )}
+                  </td>
+                  <td style={tdStyle}>
+                    {editando ? (
+                      <input
+                        type="number"
+                        min={0}
+                        step={0.01}
+                        value={lateEdit}
+                        onChange={(e) => setLateEdit(Math.max(0, Number(e.target.value)))}
+                        style={{ ...inputEditStyle, width: 80 }}
+                      />
+                    ) : (
+                      Number(l.cobro_late ?? 0)
+                    )}
+                  </td>
                   <td style={{ ...tdStyle, fontWeight: 600 }}>{l.subtotal}</td>
                   <td style={tdStyle}>
                     {editando ? (

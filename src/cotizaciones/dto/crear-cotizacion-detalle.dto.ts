@@ -18,6 +18,19 @@ export class CrearCotizacionDetalleDto {
   @IsString()
   notas?: string;
 
+  // Cargos únicos por toda la línea (no se multiplican por días) -- igual
+  // concepto que CrearReservaHabitacionDto.cobroEarly/cobroLate. Si no
+  // vienen, quedan en 0 (ver CotizacionesService).
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  cobroEarly?: number;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  cobroLate?: number;
+
   // true = viene del botón "Agregar habitación no disponible": el usuario
   // vio el motivo (ocupada, sin margen de limpieza, etc.) y decidió
   // cotizarla igual. Salta el chequeo de disponibilidad.validar() al
