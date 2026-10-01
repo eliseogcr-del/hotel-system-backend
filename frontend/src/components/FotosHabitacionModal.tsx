@@ -83,6 +83,7 @@ export function FotosHabitacionModal({
   const [foto2, setFoto2] = useState(foto2Url);
   const [subiendoSlot, setSubiendoSlot] = useState<1 | 2 | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [zoomUrl, setZoomUrl] = useState<string | null>(null);
 
   async function subir(slot: 1 | 2, e: ChangeEvent<HTMLInputElement>) {
     const archivo = e.target.files?.[0];
@@ -148,7 +149,13 @@ export function FotosHabitacionModal({
           }}
         >
           {fotoUrl ? (
-            <img src={fotoUrl} alt={`Foto ${slot} de la habitación ${habNumero}`} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+            <img
+              src={fotoUrl}
+              alt={`Foto ${slot} de la habitación ${habNumero}`}
+              onClick={() => setZoomUrl(fotoUrl)}
+              title="Ver en grande"
+              style={{ width: '100%', height: '100%', objectFit: 'cover', cursor: 'zoom-in' }}
+            />
           ) : (
             <span style={{ fontSize: 11, color: 'var(--text-muted)', textAlign: 'center', padding: 8 }}>
               Sin foto
@@ -197,6 +204,20 @@ export function FotosHabitacionModal({
           </button>
         </div>
       </div>
+
+      {zoomUrl && (
+        <div style={zoomOverlayStyle} onClick={(e) => { e.stopPropagation(); setZoomUrl(null); }}>
+          <img src={zoomUrl} alt="Foto de la habitación en grande" style={zoomImgStyle} />
+          <button
+            type="button"
+            onClick={(e) => { e.stopPropagation(); setZoomUrl(null); }}
+            style={zoomCerrarBtnStyle}
+            title="Cerrar"
+          >
+            ✕
+          </button>
+        </div>
+      )}
     </div>
   );
 }
@@ -228,4 +249,40 @@ const btnSecondary: CSSProperties = {
   border: '1px solid var(--border)',
   borderRadius: 'var(--radius)',
   fontSize: 13,
+};
+
+// Por encima del overlay del modal (zIndex 100) -- se abre sobre él, no en
+// vez de él, para volver directo a los 2 slots al cerrar el zoom.
+const zoomOverlayStyle: CSSProperties = {
+  position: 'fixed',
+  inset: 0,
+  background: 'rgba(0,0,0,0.85)',
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  padding: 24,
+  zIndex: 200,
+  cursor: 'zoom-out',
+};
+
+const zoomImgStyle: CSSProperties = {
+  maxWidth: '100%',
+  maxHeight: '100%',
+  objectFit: 'contain',
+  borderRadius: 'var(--radius)',
+};
+
+const zoomCerrarBtnStyle: CSSProperties = {
+  position: 'fixed',
+  top: 16,
+  right: 20,
+  background: 'rgba(255,255,255,0.15)',
+  border: 'none',
+  color: '#fff',
+  fontSize: 20,
+  lineHeight: 1,
+  width: 36,
+  height: 36,
+  borderRadius: '50%',
+  cursor: 'pointer',
 };
