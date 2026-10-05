@@ -1,6 +1,6 @@
 import { useEffect, useState, type CSSProperties, type FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { api, ApiError } from '../lib/api';
+import { api, ApiError, mensajeDeError } from '../lib/api';
 import { useIsMobile } from '../hooks/useIsMobile';
 import {
   buscarHuespedPorDni,
@@ -436,7 +436,7 @@ export function ReservaFormModal({
         setMensajeReasignar('No se encontró ningún huésped con ese dato.');
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'No se pudo buscar el huésped');
+      setError(mensajeDeError(err, 'No se pudo buscar el huésped'));
     } finally {
       setBuscandoReasignar(false);
     }
@@ -519,7 +519,7 @@ export function ReservaFormModal({
         setResultados(combinados);
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'No se pudo buscar el cliente');
+      setError(mensajeDeError(err, 'No se pudo buscar el cliente'));
     } finally {
       setBuscando(false);
       setBuscado(true);
@@ -667,7 +667,7 @@ export function ReservaFormModal({
           `${err.message} — si es una persona distinta, usa "Buscar huésped" arriba para reasignar en vez de editar estos datos.`,
         );
       } else {
-        setError(err instanceof ApiError ? err.message : err instanceof Error ? err.message : 'No se pudo guardar la reserva');
+        setError(mensajeDeError(err, 'No se pudo guardar la reserva'));
       }
     } finally {
       setEnviando(false);
