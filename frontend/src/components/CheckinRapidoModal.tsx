@@ -1,5 +1,5 @@
 import { useEffect, useState, type CSSProperties, type FormEvent } from 'react';
-import { api, ApiError } from '../lib/api';
+import { api, ApiError, mensajeDeError } from '../lib/api';
 import { useIsMobile } from '../hooks/useIsMobile';
 import { buscarHuespedPorDni, buscarHuespedPorRuc, buscarHuespedesPorTexto, type Huesped } from '../lib/huespedes';
 
@@ -279,7 +279,7 @@ export function CheckinRapidoModal({
         });
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'No se pudo buscar el huésped');
+      setError(mensajeDeError(err, 'No se pudo buscar el huésped'));
     } finally {
       setBuscando(false);
     }

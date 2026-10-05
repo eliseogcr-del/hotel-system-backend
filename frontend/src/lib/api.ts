@@ -10,6 +10,24 @@ export class ApiError extends Error {
   }
 }
 
+// Las búsquedas/altas de huésped (lib/huespedes.ts) van directo contra
+// Supabase desde el frontend, no contra este backend -- el error que lanzan
+// es un PostgrestError (ej. violación de la unique (hotel_id, tipo_doc,
+// nro_doc) de huespedes al reusar un documento provisional repetido), que
+// es un objeto plano con `message` pero NO es instanceof Error. Un catch
+// que solo revisa `instanceof ApiError`/`instanceof Error` lo deja pasar de
+// largo y termina mostrando el fallback genérico, escondiendo el motivo
+// real (ej. "ya existe un huésped con ese documento en este hotel"). Esta
+// función cubre los tres casos (ApiError, Error, objeto plano con
+// `message`) para que ese mensaje real siempre llegue a pantalla.
+export function mensajeDeError(err: unknown, fallback: string): string {
+  if (err instanceof Error) return err.message;
+  if (err && typeof err === 'object' && 'message' in err && typeof (err as { message: unknown }).message === 'string') {
+    return (err as { message: string }).message;
+  }
+  return fallback;
+}
+
 async function llamar(path: string, options: RequestInit, token: string | undefined): Promise<Response> {
   return fetch(`${API_URL}${path}`, {
     ...options,

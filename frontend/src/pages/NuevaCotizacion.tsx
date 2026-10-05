@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, type CSSProperties, type FormEvent } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { api, ApiError } from '../lib/api';
+import { api, ApiError, mensajeDeError } from '../lib/api';
 import { useHotel } from '../contexts/HotelContext';
 import { buscarHuespedPorDni, crearHuesped } from '../lib/huespedes';
 
@@ -104,7 +104,7 @@ export function NuevaCotizacion() {
         setHuespedNombre('');
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Error al buscar huésped');
+      setError(mensajeDeError(err, 'Error al buscar huésped'));
     } finally {
       setBuscandoCliente(false);
     }
@@ -246,7 +246,7 @@ export function NuevaCotizacion() {
       });
       navigate(`/cotizaciones/${resultado.id}`);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'No se pudo grabar la cotización');
+      setError(mensajeDeError(err, 'No se pudo grabar la cotización'));
     } finally {
       setGuardando(false);
     }

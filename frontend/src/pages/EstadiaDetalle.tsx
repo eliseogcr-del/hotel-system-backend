@@ -1,6 +1,6 @@
 import { useEffect, useState, type CSSProperties, type FormEvent } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { api, ApiError } from '../lib/api';
+import { api, ApiError, mensajeDeError } from '../lib/api';
 import { useHotel } from '../contexts/HotelContext';
 import { useIsMobile } from '../hooks/useIsMobile';
 import { buscarHuespedPorDni, buscarHuespedPorRuc, buscarHuespedesPorTexto, type Huesped } from '../lib/huespedes';
@@ -818,7 +818,7 @@ function EditarEstadiaModal({
         setMensajeBusqueda('No se encontró ningún huésped con ese dato.');
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'No se pudo buscar el huésped');
+      setError(mensajeDeError(err, 'No se pudo buscar el huésped'));
     } finally {
       setBuscando(false);
     }
