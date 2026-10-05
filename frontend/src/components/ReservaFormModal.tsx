@@ -906,22 +906,27 @@ export function ReservaFormModal({
                 {modo === 'crear' && (
                   <>
                     <label style={labelStyle}>DNI, RUC (empresa), nombre o teléfono del cliente</label>
-                    <input
-                      value={busqueda}
-                      onChange={(e) => {
-                        setBusqueda(e.target.value);
-                        limpiarSeleccionCliente();
-                      }}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter') {
-                          e.preventDefault();
-                          buscarCliente();
-                        }
-                      }}
-                      placeholder="Ej. 45678912, 20601234567, RIOS o 987654321 — Enter para buscar"
-                      style={inputStyle}
-                      required={!huespedId && !empresaId}
-                    />
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                      <input
+                        value={busqueda}
+                        onChange={(e) => {
+                          setBusqueda(e.target.value);
+                          limpiarSeleccionCliente();
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            buscarCliente();
+                          }
+                        }}
+                        placeholder="Ej. 45678912, 20601234567, RIOS o 987654321 — Enter para buscar"
+                        style={{ ...inputStyle, flex: 1, minWidth: 160 }}
+                        required={!huespedId && !empresaId}
+                      />
+                      <button type="button" onClick={buscarCliente} disabled={buscando} style={btnSecondary}>
+                        {buscando ? 'Buscando...' : 'Buscar'}
+                      </button>
+                    </div>
                     {buscando && (
                       <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: '4px 0 0' }}>Buscando...</p>
                     )}
