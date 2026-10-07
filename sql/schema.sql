@@ -173,7 +173,14 @@ create table cocheras (
     estado text not null default 'disponible' check (estado in ('disponible','ocupada')),
     es_externa boolean not null default false,
     precio_externa numeric(10,2) default 0,
-    notas text
+    notas text,
+    -- Hasta 2 fotos por cochera, con una descripción propia cada una (ej.
+    -- medidas: ancho/largo/altura) -- mismo patrón que habitaciones.foto1_url/
+    -- foto2_url (data URI, sin bucket de storage).
+    foto1_url text,
+    foto1_descripcion text,
+    foto2_url text,
+    foto2_descripcion text
 );
 
 create table tarifas (

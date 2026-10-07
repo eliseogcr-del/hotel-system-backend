@@ -8,6 +8,7 @@ import { ActualizarHabitacionDto } from './dto/actualizar-habitacion.dto';
 import { CrearCocheraDto } from './dto/crear-cochera.dto';
 import { ActualizarCocheraDto } from './dto/actualizar-cochera.dto';
 import { ActualizarCocheraOperativaDto } from './dto/actualizar-cochera-operativa.dto';
+import { ActualizarFotoCocheraDto } from './dto/actualizar-foto-cochera.dto';
 import { ActualizarHotelDto } from './dto/actualizar-hotel.dto';
 
 const CODIGO_UNIQUE_VIOLATION = '23505';
@@ -485,6 +486,41 @@ export class ConfiguracionService {
     const cambios: Record<string, unknown> = {};
     if (dto.estado !== undefined) cambios.estado = dto.estado;
     if (dto.notas !== undefined) cambios.notas = dto.notas || null;
+
+    const { data, error } = await client
+      .from('cocheras')
+      .update(cambios)
+      .eq('id', id)
+      .eq('hotel_id', hotelId)
+      .select()
+      .maybeSingle();
+    if (error) throw error;
+    if (!data) throw new NotFoundException('Cochera no encontrada en este hotel');
+    return data;
+  }
+
+  /**
+   * Foto de una cochera (hasta 2, por slot) + su propia descripción (ej.
+   * medidas: ancho/largo/altura) -- mismo criterio de acceso que
+   * actualizarCocheraOperativo(): uso día a día desde el panel de
+   * Habitaciones, no catálogo admin-only. fotoUrl/descripcion solo se tocan
+   * si vienen en el body, para poder editar uno sin pisar el otro.
+   */
+  async actualizarFotoCochera(
+    client: SupabaseClient,
+    hotelId: string,
+    id: string,
+    dto: ActualizarFotoCocheraDto,
+  ) {
+    if (dto.fotoUrl === undefined && dto.descripcion === undefined) {
+      throw new BadRequestException('No se enviaron cambios');
+    }
+
+    const colFoto = dto.slot === 1 ? 'foto1_url' : 'foto2_url';
+    const colDescripcion = dto.slot === 1 ? 'foto1_descripcion' : 'foto2_descripcion';
+    const cambios: Record<string, unknown> = {};
+    if (dto.fotoUrl !== undefined) cambios[colFoto] = dto.fotoUrl;
+    if (dto.descripcion !== undefined) cambios[colDescripcion] = dto.descripcion || null;
 
     const { data, error } = await client
       .from('cocheras')
