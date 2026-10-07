@@ -22,6 +22,7 @@ import { ActualizarHabitacionDto } from './dto/actualizar-habitacion.dto';
 import { CrearCocheraDto } from './dto/crear-cochera.dto';
 import { ActualizarCocheraDto } from './dto/actualizar-cochera.dto';
 import { ActualizarCocheraOperativaDto } from './dto/actualizar-cochera-operativa.dto';
+import { ActualizarFotoCocheraDto } from './dto/actualizar-foto-cochera.dto';
 import { ActualizarHotelDto } from './dto/actualizar-hotel.dto';
 
 @Controller('hoteles/:hotelId')
@@ -188,5 +189,20 @@ export class ConfiguracionController {
   ) {
     const client = this.supabase.getClientForRequest(user.accessToken);
     return this.configuracionService.actualizarCocheraOperativo(client, hotelId, id, dto);
+  }
+
+  // Mismo criterio que PATCH .../operativo (uso día a día, no catálogo
+  // admin-only): foto + descripción de una cochera, ver
+  // ConfiguracionService.actualizarFotoCochera().
+  @Patch('cocheras/:id/foto')
+  @Roles('admin', 'recepcion')
+  async actualizarFotoCochera(
+    @Param('hotelId') hotelId: string,
+    @Param('id') id: string,
+    @Body() dto: ActualizarFotoCocheraDto,
+    @CurrentUser() user: RequestUser,
+  ) {
+    const client = this.supabase.getClientForRequest(user.accessToken);
+    return this.configuracionService.actualizarFotoCochera(client, hotelId, id, dto);
   }
 }

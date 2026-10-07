@@ -6,6 +6,7 @@ import { useIsMobile } from '../hooks/useIsMobile';
 import { CheckinRapidoModal } from '../components/CheckinRapidoModal';
 import { ReservaFormModal } from '../components/ReservaFormModal';
 import { FotosHabitacionModal } from '../components/FotosHabitacionModal';
+import { FotosCocheraModal } from '../components/FotosCocheraModal';
 import { colorPorOrigen, labelPorOrigen } from '../lib/colorOrigen';
 
 type Vista = 'tabla' | 'tarjetas';
@@ -85,6 +86,10 @@ interface Cochera {
   es_externa: boolean;
   precio_externa: number;
   notas: string | null;
+  foto1_url: string | null;
+  foto1_descripcion: string | null;
+  foto2_url: string | null;
+  foto2_descripcion: string | null;
   ocupante: {
     habNumero: number | null;
     huesped: string | null;
@@ -235,6 +240,7 @@ export function Habitaciones() {
   const [checkinHab, setCheckinHab] = useState<Habitacion | null>(null);
   const [reservaModal, setReservaModal] = useState<Habitacion | null>(null);
   const [fotosModal, setFotosModal] = useState<Habitacion | null>(null);
+  const [fotosCocheraModal, setFotosCocheraModal] = useState<Cochera | null>(null);
   const [precioMascotaDia, setPrecioMascotaDia] = useState(0);
   const [horaCheckoutHotel, setHoraCheckoutHotel] = useState<string | undefined>(undefined);
   const [modo24h, setModo24h] = useState(false);
@@ -863,6 +869,7 @@ export function Habitaciones() {
           onGuardarNotasHabitacion={guardarNotasHabitacion}
           onCambiarEstadoCochera={cambiarEstadoCochera}
           onGuardarNotasCochera={guardarNotasCochera}
+          onClickFotosCochera={(c) => setFotosCocheraModal(c)}
         />
       )}
 
@@ -905,6 +912,23 @@ export function Habitaciones() {
           onClose={() => setFotosModal(null)}
           onGuardado={(fotos) =>
             setHabitaciones((prev) => prev.map((h) => (h.id === fotosModal.id ? { ...h, ...fotos } : h)))
+          }
+        />
+      )}
+
+      {fotosCocheraModal && (
+        <FotosCocheraModal
+          hotelId={hotelActual.hotelId}
+          cocheraId={fotosCocheraModal.id}
+          numero={fotosCocheraModal.numero}
+          tamano={fotosCocheraModal.tamano as 'grande' | 'chica'}
+          foto1Url={fotosCocheraModal.foto1_url}
+          foto1Descripcion={fotosCocheraModal.foto1_descripcion}
+          foto2Url={fotosCocheraModal.foto2_url}
+          foto2Descripcion={fotosCocheraModal.foto2_descripcion}
+          onClose={() => setFotosCocheraModal(null)}
+          onGuardado={(fotos) =>
+            setCocheras((prev) => prev.map((c) => (c.id === fotosCocheraModal.id ? { ...c, ...fotos } : c)))
           }
         />
       )}
@@ -952,6 +976,7 @@ function VistaTarjetas({
   onGuardarNotasHabitacion,
   onCambiarEstadoCochera,
   onGuardarNotasCochera,
+  onClickFotosCochera,
 }: {
   habitaciones: Habitacion[];
   cocheras: Cochera[];
@@ -963,6 +988,7 @@ function VistaTarjetas({
   onGuardarNotasHabitacion: (h: Habitacion, notas: string) => void;
   onCambiarEstadoCochera: (c: Cochera, ocupada: boolean) => void;
   onGuardarNotasCochera: (c: Cochera, notas: string) => void;
+  onClickFotosCochera: (c: Cochera) => void;
 }) {
   return (
     <div>
@@ -1172,15 +1198,36 @@ function VistaTarjetas({
                   title={clickable ? 'Ver detalle' : undefined}
                 >
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
-                    <span
-                      style={{
-                        fontSize: 24,
-                        fontWeight: 700,
-                        color: '#fff',
-                        textShadow: '0 1px 3px rgba(0,0,0,0.6)',
-                      }}
-                    >
-                      {c.numero}
+                    <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                      <span
+                        style={{
+                          fontSize: 24,
+                          fontWeight: 700,
+                          color: '#fff',
+                          textShadow: '0 1px 3px rgba(0,0,0,0.6)',
+                        }}
+                      >
+                        {c.numero}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onClickFotosCochera(c);
+                        }}
+                        title={c.foto1_url || c.foto2_url ? 'Ver fotos de la cochera' : 'Subir foto de la cochera'}
+                        style={{
+                          background: 'none',
+                          border: 'none',
+                          padding: 0,
+                          cursor: 'pointer',
+                          fontSize: 14,
+                          lineHeight: 1,
+                          opacity: c.foto1_url || c.foto2_url ? 1 : 0.5,
+                        }}
+                      >
+                        📷
+                      </button>
                     </span>
                     {c.ocupante ? (
                       <span style={{ fontSize: 10, fontWeight: 700, color: ESTADO_COLOR_INTENSO[c.estado].text }}>
