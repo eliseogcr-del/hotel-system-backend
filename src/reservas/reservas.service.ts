@@ -21,6 +21,9 @@ import { TrasladarHabitacionReservaDto } from './dto/trasladar-habitacion-reserv
 
 type MetodoPagoAnticipo = 'efectivo' | 'transferencia' | 'yape' | 'tarjeta';
 
+// Tope de filas para ReservasService.listar() -- ver comentario en el uso.
+const LIMITE_FILAS_LISTA = 500;
+
 // Perú (America/Lima) es UTC-5 todo el año -- mismo criterio que en
 // estadias.service.ts para no comparar contra medianoche UTC por error.
 const PERU_UTC_OFFSET_MS = 5 * 60 * 60 * 1000;
@@ -286,7 +289,18 @@ export class ReservasService {
       `,
       )
       .eq('reservas.hotel_id', hotelId)
-      .order('fecha_hora_checkin_prevista', { ascending: false });
+      .order('fecha_hora_checkin_prevista', { ascending: false })
+      // Sin este tope, "Todos los estados" sin fechas (el filtro por
+      // defecto de la pestaña Lista) le pide al backend TODA la historia
+      // de reservas del hotel -- crece para siempre y, pasado cierto
+      // volumen, revienta la petición (y de paso el .in() de más abajo
+      // contra anticipos_reserva, cuya URL también crece con la cantidad
+      // de reservas). Mismo criterio de acotar que ya usan
+      // obtenerCalendario() y proximasLlegadas() más abajo en este
+      // archivo: acá se limita a las LIMITE_FILAS_LISTA más recientes en
+      // vez de un rango de fechas, porque la lista también se usa para
+      // buscar por estado/nombre sin fecha fija.
+      .limit(LIMITE_FILAS_LISTA);
 
     if (filtros.estado) query = query.eq('reservas.estado', filtros.estado);
     if (filtros.desde) query = query.gte('fecha_hora_checkin_prevista', `${filtros.desde}T00:00:00`);
