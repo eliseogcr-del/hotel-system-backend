@@ -311,21 +311,25 @@ export class ReservasService {
     if (error) throw error;
 
     const filas = data ?? [];
-    const reservaIds = [...new Set(filas.map((f: any) => f.reservas.id))];
 
     // Los adelantos se registran a nivel de la reserva completa (no por
     // línea/habitación) -- ver anticipos_reserva en CLAUDE.md 3.3 -- así
     // que se agregan aparte y se repiten en cada línea de la misma reserva.
+    //
+    // Filtrado por hotel vía el join con reservas (igual que la consulta de
+    // arriba), NO con un .in(reservaIds): con suficientes reservas, esa
+    // lista de UUIDs en la URL del .in() se vuelve tan larga que la
+    // petición falla a nivel de red (TypeError: fetch failed) antes de
+    // llegar a Supabase -- fue justo lo que le pasó a este endpoint en
+    // producción.
     const anticiposPorReserva = new Map<string, number>();
-    if (reservaIds.length > 0) {
-      const { data: anticipos, error: anticiposError } = await client
-        .from('anticipos_reserva')
-        .select('reserva_id, monto')
-        .in('reserva_id', reservaIds);
-      if (anticiposError) throw anticiposError;
-      for (const a of anticipos ?? []) {
-        anticiposPorReserva.set(a.reserva_id, (anticiposPorReserva.get(a.reserva_id) ?? 0) + Number(a.monto));
-      }
+    const { data: anticipos, error: anticiposError } = await client
+      .from('anticipos_reserva')
+      .select('reserva_id, monto, reservas!inner(hotel_id)')
+      .eq('reservas.hotel_id', hotelId);
+    if (anticiposError) throw anticiposError;
+    for (const a of (anticipos ?? []) as any[]) {
+      anticiposPorReserva.set(a.reserva_id, (anticiposPorReserva.get(a.reserva_id) ?? 0) + Number(a.monto));
     }
 
     const filasMapeadas = filas.map((f: any) => ({
