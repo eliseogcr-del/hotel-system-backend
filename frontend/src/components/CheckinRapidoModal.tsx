@@ -335,7 +335,7 @@ export function CheckinRapidoModal({
 
   return (
     <div style={overlayStyle}>
-      <div style={{ ...modalStyle, maxWidth: isMobile ? 560 : 960 }}>
+      <div style={{ ...modalStyle, maxWidth: isMobile ? 560 : 1180 }}>
         <h2 style={{ fontSize: 17, marginBottom: 16 }}>
           Check-in · Habitación {habNumero}
           {habTipo ? <span style={{ fontWeight: 400, color: 'var(--text-secondary)' }}> ({habTipo})</span> : null}
@@ -736,8 +736,9 @@ const cardTitleStyle: CSSProperties = {
 };
 
 const labelStyle: CSSProperties = {
-  fontSize: 11,
-  color: 'var(--text-secondary)',
+  fontSize: 12,
+  fontWeight: 600,
+  color: 'var(--text-primary)',
   display: 'block',
   marginBottom: 3,
 };
