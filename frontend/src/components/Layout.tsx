@@ -322,6 +322,27 @@ export function Layout() {
               {item.label}
             </NavLink>
           ))}
+
+          <a
+            href="/manual-usuario.docx"
+            download
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8,
+              padding: '8px 8px',
+              marginTop: 10,
+              paddingTop: 14,
+              borderTop: '1px solid var(--chrome-border)',
+              borderRadius: 'var(--radius)',
+              fontSize: 13,
+              textDecoration: 'none',
+              color: 'var(--chrome-text-muted)',
+            }}
+          >
+            <span aria-hidden="true">📘</span>
+            Manual de usuario
+          </a>
         </aside>
       )}
 
