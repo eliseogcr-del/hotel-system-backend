@@ -333,6 +333,12 @@ export function CheckinRapidoModal({
     gap: 16,
   };
 
+  const rowEstanciaTarifaVehiculoStyle: CSSProperties = {
+    display: 'grid',
+    gridTemplateColumns: isMobile ? '1fr' : '1.3fr 0.8fr 1fr',
+    gap: 16,
+  };
+
   return (
     <div style={overlayStyle}>
       <div style={{ ...modalStyle, maxWidth: isMobile ? 560 : 1180 }}>
@@ -498,8 +504,8 @@ export function CheckinRapidoModal({
             </div>
           </div>
 
-          {/* ---------- Estancia + Tarifa ---------- */}
-          <div style={gridRowStyle}>
+          {/* ---------- Estancia + Tarifa + Vehículo y cochera ---------- */}
+          <div style={rowEstanciaTarifaVehiculoStyle}>
             <div style={cardStyle}>
               <p style={cardTitleStyle}>Estancia</p>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 8 }}>
@@ -633,56 +639,55 @@ export function CheckinRapidoModal({
                 pon 0 para no cobrarlo.
               </p>
             </div>
-          </div>
 
-          {/* ---------- Vehículo y cochera ---------- */}
-          <div style={cardStyle}>
-            <p style={cardTitleStyle}>Vehículo y cochera</p>
-            <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, marginBottom: tieneVehiculo ? 8 : 0 }}>
-              <input type="checkbox" checked={tieneVehiculo} onChange={(e) => setTieneVehiculo(e.target.checked)} />
-              El huésped tiene vehículo
-            </label>
-            {tieneVehiculo && (
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-                <div style={{ width: 160 }}>
-                  <label style={labelStyle}>Marca</label>
-                  <input value={vehiculoMarca} onChange={(e) => setVehiculoMarca(e.target.value)} style={inputStyle} />
+            <div style={cardStyle}>
+              <p style={cardTitleStyle}>Vehículo y cochera</p>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, marginBottom: tieneVehiculo ? 8 : 0 }}>
+                <input type="checkbox" checked={tieneVehiculo} onChange={(e) => setTieneVehiculo(e.target.checked)} />
+                El huésped tiene vehículo
+              </label>
+              {tieneVehiculo && (
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                  <div style={{ flex: 1, minWidth: 130 }}>
+                    <label style={labelStyle}>Marca</label>
+                    <input value={vehiculoMarca} onChange={(e) => setVehiculoMarca(e.target.value)} style={inputStyle} />
+                  </div>
+                  <div style={{ flex: 1, minWidth: 130 }}>
+                    <label style={labelStyle}>Tipo</label>
+                    <select value={vehiculoTipo} onChange={(e) => setVehiculoTipo(e.target.value)} style={inputStyle}>
+                      <option value="">Sin especificar</option>
+                      {TIPOS_VEHICULO.map((t) => (
+                        <option key={t.value} value={t.value}>
+                          {t.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div style={{ flex: 1, minWidth: 130 }}>
+                    <label style={labelStyle}>Placa</label>
+                    <input value={vehiculoPlaca} onChange={(e) => setVehiculoPlaca(e.target.value)} style={inputStyle} />
+                  </div>
+                  <div style={{ flex: 1, minWidth: 130 }}>
+                    <label style={labelStyle}>Cochera</label>
+                    <select value={cocheraId} onChange={(e) => setCocheraId(e.target.value)} style={inputStyle}>
+                      <option value="">Sin asignar</option>
+                      {cocherasDisponibles.map((c) => (
+                        <option key={c.id} value={c.id}>
+                          {c.numero} ({c.tamano}
+                          {c.tipo_vehiculo_permitido ? ` · ${c.tipo_vehiculo_permitido}` : ''}
+                          {c.es_externa ? ' · externa' : ''})
+                        </option>
+                      ))}
+                    </select>
+                    {cocherasDisponibles.length === 0 && (
+                      <p style={{ fontSize: 11, color: 'var(--danger)', margin: '4px 0 0' }}>
+                        No se puede asignar cochera: todas están ocupadas ahora mismo.
+                      </p>
+                    )}
+                  </div>
                 </div>
-                <div style={{ width: 140 }}>
-                  <label style={labelStyle}>Tipo</label>
-                  <select value={vehiculoTipo} onChange={(e) => setVehiculoTipo(e.target.value)} style={inputStyle}>
-                    <option value="">Sin especificar</option>
-                    {TIPOS_VEHICULO.map((t) => (
-                      <option key={t.value} value={t.value}>
-                        {t.label}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div style={{ width: 140 }}>
-                  <label style={labelStyle}>Placa</label>
-                  <input value={vehiculoPlaca} onChange={(e) => setVehiculoPlaca(e.target.value)} style={inputStyle} />
-                </div>
-                <div style={{ flex: 1, minWidth: 180 }}>
-                  <label style={labelStyle}>Cochera</label>
-                  <select value={cocheraId} onChange={(e) => setCocheraId(e.target.value)} style={inputStyle}>
-                    <option value="">Sin asignar</option>
-                    {cocherasDisponibles.map((c) => (
-                      <option key={c.id} value={c.id}>
-                        {c.numero} ({c.tamano}
-                        {c.tipo_vehiculo_permitido ? ` · ${c.tipo_vehiculo_permitido}` : ''}
-                        {c.es_externa ? ' · externa' : ''})
-                      </option>
-                    ))}
-                  </select>
-                  {cocherasDisponibles.length === 0 && (
-                    <p style={{ fontSize: 11, color: 'var(--danger)', margin: '4px 0 0' }}>
-                      No se puede asignar cochera: todas están ocupadas ahora mismo.
-                    </p>
-                  )}
-                </div>
-              </div>
-            )}
+              )}
+            </div>
           </div>
 
           <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 4 }}>
