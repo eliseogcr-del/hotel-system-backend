@@ -1197,11 +1197,19 @@ function VistaTarjetas({
                   }}
                   title={clickable ? 'Ver detalle' : undefined}
                 >
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+                  <div
+                    style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'baseline',
+                      flexWrap: 'wrap',
+                      rowGap: 4,
+                    }}
+                  >
                     <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                       <span
                         style={{
-                          fontSize: 24,
+                          fontSize: c.numero.length > 3 ? 16 : 24,
                           fontWeight: 700,
                           color: '#fff',
                           textShadow: '0 1px 3px rgba(0,0,0,0.6)',
