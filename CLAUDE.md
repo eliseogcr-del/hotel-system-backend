@@ -109,9 +109,44 @@ obvias detrás de cada módulo:
   `personal_hotel` como tabla puente, con el rol pudiendo ser distinto en
   cada hotel. `es_super_admin` es un flag aparte en `personal`, no un rol
   de `personal_hotel`: el súper admin no está "asignado" a un hotel en
-  particular, ve el consolidado de todos.
+  particular, ve el consolidado de todos **de cualquier organización** —
+  está reservado para el operador de la plataforma, no para un admin del
+  lado del cliente (ver 3.4.1 abajo).
 - Roles válidos hoy: `admin`, `recepcion`, `hk`. No hay rol de gerente
   separado del admin (decisión explícita del cliente).
+
+#### 3.4.1 Multi-empresa (`organizaciones`) — camino 2 de aislamiento
+
+El sistema nació pensado para una sola cadena con varios hoteles. Para
+hostear **empresas distintas y no relacionadas en la misma base de datos**
+sin que una vea los datos de la otra, se agregó una capa `organizaciones`
+por encima de `hoteles` (ver `sql/migracion_organizaciones.sql`):
+
+- `hoteles.organizacion_id` — todo hotel pertenece a una organización.
+- `personal.organizacion_id` + `personal.es_admin_organizacion` — un
+  "admin de organización" administra **todos** los hoteles de su propia
+  organización (como si tuviera `personal_hotel` con rol `admin` en cada
+  uno), sin tener fila explícita en `personal_hotel` por cada uno. Esto se
+  resuelve en dos lugares que deben mantenerse en sync si cambia el
+  criterio:
+  1. RLS: `my_hotel_ids()`/`my_hotel_ids_by_rol()` hacen `UNION` con los
+     hoteles de la organización del usuario cuando `es_admin_organizacion
+     = true` — así las ~20 policies existentes no necesitan saber nada de
+     organizaciones.
+  2. Backend: `AuthGuard` sintetiza esas mismas asignaciones (rol
+     `'admin'`) dentro de `request.user.asignaciones`, para que
+     `RolesGuard` tampoco necesite saber nada de organizaciones.
+  3. Frontend: `HotelContext.tsx` hace lo mismo al armar la lista de
+     hoteles del selector (consulta Supabase directo, no pasa por el
+     backend).
+- `es_super_admin` sigue siendo GLOBAL (ve todo, de cualquier
+  organización) — reservarlo solo para la cuenta del operador de la
+  plataforma es una decisión **operativa**, no algo que el schema pueda
+  garantizar por sí solo. Nunca dárselo a un usuario del lado del cliente.
+- No existe (todavía) una pantalla para crear organizaciones/hoteles
+  nuevos — al día de hoy solo hay una organización y un hotel. Onboardear
+  una empresa nueva es, por ahora, un INSERT a mano en Supabase (misma
+  lógica que crear el hotel original).
 
 ### 3.5 Cotizaciones
 - Pensado para clientes que reservan muchas habitaciones a futuro (grupos,

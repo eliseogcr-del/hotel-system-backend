@@ -42,7 +42,7 @@ export class AuthGuard implements CanActivate {
 
     const { data: personalRow, error: personalError } = await client
       .from('personal')
-      .select('id, nombre, es_super_admin, activo')
+      .select('id, nombre, es_super_admin, organizacion_id, es_admin_organizacion, activo')
       .eq('auth_user_id', userId)
       .single();
 
@@ -52,11 +52,31 @@ export class AuthGuard implements CanActivate {
       );
     }
 
-    const { data: asignaciones } = await client
+    const { data: asignacionesDirectas } = await client
       .from('personal_hotel')
       .select('hotel_id, rol')
       .eq('personal_id', personalRow.id)
       .eq('activo', true);
+
+    const asignaciones = [...(asignacionesDirectas ?? [])];
+
+    // Admin de organización: actúa como 'admin' en TODOS los hoteles de su
+    // organización, no solo en los que tiene fila explícita en
+    // personal_hotel (mismo criterio que my_hotel_ids_by_rol() en RLS --
+    // ver migracion_organizaciones.sql). Se completa acá, en vez de tocar
+    // RolesGuard, porque ya consume `asignaciones` tal cual.
+    if (personalRow.es_admin_organizacion && personalRow.organizacion_id) {
+      const { data: hotelesOrg } = await client
+        .from('hoteles')
+        .select('id')
+        .eq('organizacion_id', personalRow.organizacion_id);
+      const idsExistentes = new Set(asignaciones.map((a) => a.hotel_id));
+      for (const h of hotelesOrg ?? []) {
+        if (!idsExistentes.has(h.id)) {
+          asignaciones.push({ hotel_id: h.id, rol: 'admin' });
+        }
+      }
+    }
 
     const user: RequestUser = {
       authUserId: userId,
@@ -64,7 +84,9 @@ export class AuthGuard implements CanActivate {
       personalId: personalRow.id,
       nombre: personalRow.nombre,
       esSuperAdmin: personalRow.es_super_admin,
-      asignaciones: asignaciones ?? [],
+      organizacionId: personalRow.organizacion_id,
+      esAdminOrganizacion: personalRow.es_admin_organizacion,
+      asignaciones,
     };
 
     (request as Request & { user: RequestUser }).user = user;

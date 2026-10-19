@@ -16,5 +16,14 @@ export interface RequestUser {
   personalId: string;
   nombre: string;
   esSuperAdmin: boolean;
+  // Ver migracion_organizaciones.sql: un admin de organización no tiene
+  // necesariamente una fila en personal_hotel por cada hotel de su empresa
+  // -- por eso AuthGuard sintetiza esas asignaciones (rol 'admin') dentro
+  // de `asignaciones` para que RolesGuard no tenga que saber nada de
+  // organizaciones. Estos dos campos quedan disponibles igual por si algún
+  // endpoint necesita distinguir el origen (ej. una futura pantalla de
+  // "Organizaciones").
+  organizacionId: string | null;
+  esAdminOrganizacion: boolean;
   asignaciones: AsignacionHotel[];
 }
