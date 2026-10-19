@@ -52,7 +52,7 @@ export function HotelProvider({ children }: { children: ReactNode }) {
       // quien lee su propia fila de personal + sus propias asignaciones.
       const { data: personal } = await supabase
         .from('personal')
-        .select('id, nombre')
+        .select('id, nombre, organizacion_id, es_admin_organizacion')
         .eq('auth_user_id', authUserId)
         .maybeSingle();
 
@@ -75,6 +75,22 @@ export function HotelProvider({ children }: { children: ReactNode }) {
         rol: row.rol,
         nombre: row.hoteles?.nombre ?? 'Hotel',
       }));
+
+      // Admin de organización: ve TODOS los hoteles de su organización, no
+      // solo los que tiene en personal_hotel (mismo criterio que
+      // AuthGuard.ts del lado del backend -- ver migracion_organizaciones.sql).
+      if (personal.es_admin_organizacion && personal.organizacion_id) {
+        const { data: hotelesOrg } = await supabase
+          .from('hoteles')
+          .select('id, nombre')
+          .eq('organizacion_id', personal.organizacion_id);
+        const idsExistentes = new Set(lista.map((a) => a.hotelId));
+        for (const h of hotelesOrg ?? []) {
+          if (!idsExistentes.has(h.id)) {
+            lista.push({ hotelId: h.id, rol: 'admin', nombre: h.nombre });
+          }
+        }
+      }
 
       setAsignaciones(lista);
       setHotelActualId((actual) => actual && lista.some((a) => a.hotelId === actual)

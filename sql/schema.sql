@@ -10,8 +10,21 @@ create extension if not exists "pgcrypto"; -- gen_random_uuid()
 -- MÓDULO 0: TENANT RAÍZ
 -- ============================================================================
 
+-- Agrupa uno o más `hoteles` bajo una misma empresa cliente de la
+-- plataforma (ver sql/migracion_organizaciones.sql para el porqué: aísla
+-- de verdad a dos empresas distintas que comparten la misma base de
+-- datos, algo que `personal.es_super_admin` -- global, no por empresa --
+-- no podía garantizar).
+create table organizaciones (
+    id uuid primary key default gen_random_uuid(),
+    nombre text not null,
+    activo boolean not null default true,
+    created_at timestamptz not null default now()
+);
+
 create table hoteles (
     id uuid primary key default gen_random_uuid(),
+    organizacion_id uuid not null references organizaciones(id),
     nombre text not null,
     ruc text,
     cantidad_pisos int not null default 1,
@@ -64,7 +77,17 @@ create table personal (
     auth_user_id uuid references auth.users(id) on delete set null,
     nombre text not null,
     usuario text not null unique,
+    -- Ve literalmente todo, de cualquier organización -- reservado para el
+    -- operador de la plataforma, no para el admin de una empresa cliente
+    -- (ver organizacion_id/es_admin_organizacion abajo para ese caso).
     es_super_admin boolean not null default false,
+    -- A qué organización pertenece (null = ninguna en particular, el caso
+    -- típico de una cuenta con es_super_admin=true). es_admin_organizacion
+    -- = administra TODOS los hoteles de esa organización, no solo los que
+    -- tiene en personal_hotel -- ver my_hotel_ids()/my_hotel_ids_by_rol()
+    -- más abajo, en la sección de RLS.
+    organizacion_id uuid references organizaciones(id),
+    es_admin_organizacion boolean not null default false,
     activo boolean not null default true,
     created_at timestamptz not null default now()
 );
@@ -597,12 +620,23 @@ as $$
     select coalesce((select es_super_admin from personal where auth_user_id = auth.uid()), false);
 $$;
 
+-- El UNION de abajo hace que un admin de organización
+-- (personal.es_admin_organizacion) cuente como si tuviera, en CADA hotel de
+-- su organización, una fila de personal_hotel con rol 'admin' -- así las
+-- ~20 policies de más abajo (todas construidas sobre estas dos funciones)
+-- no necesitan saber nada de organizaciones. Para el resto del personal
+-- (es_admin_organizacion = false, el caso de hoy) el UNION no agrega
+-- ninguna fila: el resultado es idéntico al de antes de este cambio.
 create or replace function my_hotel_ids()
 returns setof uuid
 language sql stable security definer set search_path = public
 as $$
     select hotel_id from personal_hotel
-    where personal_id = my_personal_id() and activo = true;
+    where personal_id = my_personal_id() and activo = true
+    union
+    select h.id from hoteles h
+    join personal p on p.organizacion_id = h.organizacion_id
+    where p.id = my_personal_id() and p.es_admin_organizacion = true;
 $$;
 
 create or replace function my_hotel_ids_by_rol(p_rol text)
@@ -610,13 +644,18 @@ returns setof uuid
 language sql stable security definer set search_path = public
 as $$
     select hotel_id from personal_hotel
-    where personal_id = my_personal_id() and activo = true and rol = p_rol;
+    where personal_id = my_personal_id() and activo = true and rol = p_rol
+    union
+    select h.id from hoteles h
+    join personal p on p.organizacion_id = h.organizacion_id
+    where p.id = my_personal_id() and p.es_admin_organizacion = true and p_rol = 'admin';
 $$;
 
 -- ============================================================================
 -- ROW LEVEL SECURITY
 -- ============================================================================
 
+alter table organizaciones enable row level security;
 alter table hoteles enable row level security;
 alter table personal enable row level security;
 alter table personal_hotel enable row level security;
@@ -647,6 +686,13 @@ alter table tipo_cambio enable row level security;
 alter table notas enable row level security;
 
 -- Patrón general: super_admin ve todo; el resto solo ve datos de sus hoteles asignados.
+
+-- Cada quien ve el nombre de su propia organización; super_admin las ve
+-- todas. Crear/editar organizaciones queda fuera de RLS por ahora -- no hay
+-- UI para eso (solo existe una hoy), se hace a mano con la service_role key
+-- cuando haga falta onboardear una empresa nueva.
+create policy p_organizaciones on organizaciones for select
+    using (is_super_admin() or id = (select organizacion_id from personal where auth_user_id = auth.uid()));
 
 -- Sin esta policy nadie puede leer ni su propia fila de `personal` (RLS
 -- deniega todo por defecto sin policies) y el AuthGuard falla siempre con
