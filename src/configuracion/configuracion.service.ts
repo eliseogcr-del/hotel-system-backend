@@ -383,20 +383,29 @@ export class ConfiguracionService {
     // quedamos con la ocupación vigente, si la hay, para mostrar quién está
     // usando la cochera ahora mismo (no todo su historial).
     return (data ?? []).map((cochera) => {
-      const { reserva_habitacion, ...resto } = cochera as unknown as {
+      const { reserva_habitacion, foto1_url, foto2_url, ...resto } = cochera as unknown as {
         reserva_habitacion: Array<{
           habitaciones: { hab_numero: number } | null;
           reservas: { huespedes: { nombres: string; apellidos: string } | null } | null;
           estadias: { estado_actual: string } | null;
           vehiculos: { marca: string | null; tipo: string | null; placa: string | null } | null;
         }>;
+        foto1_url: string | null;
+        foto2_url: string | null;
         [key: string]: unknown;
       };
       const ocupacionVigente = (reserva_habitacion ?? []).find(
         (rh) => rh.estadias?.estado_actual === 'en_curso',
       );
+      // foto1_url/foto2_url (el data URI base64, hasta ~200KB cada uno) no
+      // se mandan en este listado -- mismo criterio que
+      // HabitacionesService.listarConEstado(): la tarjeta solo necesita
+      // saber SI hay foto para el ícono de cámara, la imagen en sí recién
+      // se pide al abrir el modal (ver GET :id/fotos).
       return {
         ...resto,
+        tieneFoto1: !!foto1_url,
+        tieneFoto2: !!foto2_url,
         ocupante: ocupacionVigente
           ? {
               habNumero: ocupacionVigente.habitaciones?.hab_numero ?? null,
@@ -493,6 +502,23 @@ export class ConfiguracionService {
       .eq('id', id)
       .eq('hotel_id', hotelId)
       .select()
+      .maybeSingle();
+    if (error) throw error;
+    if (!data) throw new NotFoundException('Cochera no encontrada en este hotel');
+    return data;
+  }
+
+  /**
+   * Las 2 fotos (base64 completo) + descripciones de UNA cochera -- aparte
+   * de listarCocheras(), que solo manda tieneFoto1/tieneFoto2 (booleanos)
+   * por la misma razón que HabitacionesService.obtenerFotos().
+   */
+  async obtenerFotosCochera(client: SupabaseClient, hotelId: string, id: string) {
+    const { data, error } = await client
+      .from('cocheras')
+      .select('foto1_url, foto1_descripcion, foto2_url, foto2_descripcion')
+      .eq('id', id)
+      .eq('hotel_id', hotelId)
       .maybeSingle();
     if (error) throw error;
     if (!data) throw new NotFoundException('Cochera no encontrada en este hotel');

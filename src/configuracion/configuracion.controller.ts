@@ -191,6 +191,17 @@ export class ConfiguracionController {
     return this.configuracionService.actualizarCocheraOperativo(client, hotelId, id, dto);
   }
 
+  @Get('cocheras/:id/fotos')
+  @Roles('admin', 'recepcion')
+  async obtenerFotosCochera(
+    @Param('hotelId') hotelId: string,
+    @Param('id') id: string,
+    @CurrentUser() user: RequestUser,
+  ) {
+    const client = this.supabase.getClientForRequest(user.accessToken);
+    return this.configuracionService.obtenerFotosCochera(client, hotelId, id);
+  }
+
   // Mismo criterio que PATCH .../operativo (uso día a día, no catálogo
   // admin-only): foto + descripción de una cochera, ver
   // ConfiguracionService.actualizarFotoCochera().
