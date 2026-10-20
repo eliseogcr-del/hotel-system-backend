@@ -272,8 +272,19 @@ export class HabitacionesService {
         hab.estado === 'disponible' && !reservaHoy
           ? (diasHastaProximaReservaPorHabitacion.get(hab.id) ?? null)
           : null;
+      // No se manda foto1_url/foto2_url (el data URI base64 completo, hasta
+      // ~200KB cada uno) en este listado: el dashboard solo necesita saber
+      // SI hay foto para prender/apagar el ícono de cámara, no la imagen en
+      // sí (que recién se pide, una habitación a la vez, al abrir el modal
+      // -- ver GET :id/fotos más abajo). Mandar el base64 completo acá
+      // significaba re-descargar las fotos de las 25 habitaciones en CADA
+      // carga del dashboard y en cada auto-refresh de 5 minutos, agotando
+      // rápido el ancho de banda gratuito de Render.
+      const { foto1_url, foto2_url, ...habSinFotos } = hab;
       return {
-        ...hab,
+        ...habSinFotos,
+        tieneFoto1: !!foto1_url,
+        tieneFoto2: !!foto2_url,
         reservaHoy,
         proximaReservaHoy,
         diasHastaProximaReserva,
@@ -511,6 +522,24 @@ export class HabitacionesService {
       .eq('id', habitacionId)
       .eq('hotel_id', hotelId)
       .select('id, visible_whatsapp')
+      .maybeSingle();
+    if (error) throw error;
+    if (!data) throw new NotFoundException('La habitación no existe en este hotel');
+    return data;
+  }
+
+  /**
+   * Las 2 fotos (base64 completo) de UNA habitación -- a propósito aparte
+   * de listarConEstado(), que solo manda tieneFoto1/tieneFoto2 (booleanos)
+   * para no re-descargar el base64 de las 25 habitaciones en cada carga del
+   * dashboard. Se pide recién al abrir el modal de fotos de esa habitación.
+   */
+  async obtenerFotos(client: SupabaseClient, hotelId: string, habitacionId: string) {
+    const { data, error } = await client
+      .from('habitaciones')
+      .select('foto1_url, foto2_url')
+      .eq('id', habitacionId)
+      .eq('hotel_id', hotelId)
       .maybeSingle();
     if (error) throw error;
     if (!data) throw new NotFoundException('La habitación no existe en este hotel');

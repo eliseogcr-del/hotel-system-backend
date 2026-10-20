@@ -96,6 +96,17 @@ export class HabitacionesController {
     return this.habitacionesService.actualizarNotas(client, hotelId, id, dto.notas);
   }
 
+  @Get(':id/fotos')
+  @Roles('admin', 'recepcion')
+  async obtenerFotos(
+    @Param('hotelId') hotelId: string,
+    @Param('id') id: string,
+    @CurrentUser() user: RequestUser,
+  ) {
+    const client = this.supabase.getClientForRequest(user.accessToken);
+    return this.habitacionesService.obtenerFotos(client, hotelId, id);
+  }
+
   @Patch(':id/foto')
   @Roles('admin', 'recepcion')
   async actualizarFoto(

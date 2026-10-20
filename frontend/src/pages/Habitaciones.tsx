@@ -60,8 +60,14 @@ interface Habitacion {
   notas: string | null;
   notas_operativas: string | null;
   visible_whatsapp: boolean;
-  foto1_url: string | null;
-  foto2_url: string | null;
+  // El listado trae solo si hay foto o no (ver HabitacionesService.
+  // listarConEstado()), nunca el base64 de la imagen -- eso se pide aparte,
+  // una habitación a la vez, recién al abrir el modal de fotos (ver
+  // abrirFotosHabitacion más abajo). Mandar el base64 de las 25
+  // habitaciones en cada carga/auto-refresh del dashboard agotaba rápido el
+  // ancho de banda gratuito de Render.
+  tieneFoto1: boolean;
+  tieneFoto2: boolean;
   cocheraNumero: string | null;
   vehiculoTipo: string | null;
   origen: string | null;
@@ -86,9 +92,11 @@ interface Cochera {
   es_externa: boolean;
   precio_externa: number;
   notas: string | null;
-  foto1_url: string | null;
+  // Mismo criterio que Habitacion.tieneFoto1/tieneFoto2 (ver ahí): el
+  // listado no trae el base64 de la imagen, solo si existe.
+  tieneFoto1: boolean;
   foto1_descripcion: string | null;
-  foto2_url: string | null;
+  tieneFoto2: boolean;
   foto2_descripcion: string | null;
   ocupante: {
     habNumero: number | null;
@@ -122,6 +130,27 @@ const ESTADO_COCHERA_LABEL: Record<Cochera['estado'], string> = {
   disponible: 'Disponible',
   ocupada: 'Ocupada',
 };
+
+// Estado del modal de fotos: separado de Habitacion/Cochera a propósito --
+// esos ya no traen el base64 de la imagen (ver tieneFoto1/tieneFoto2), así
+// que al abrir el modal se pide aparte con GET .../fotos y se guarda acá.
+interface FotosHabitacionEstado {
+  habitacionId: string;
+  habNumero: number;
+  tipoNombre: string | null | undefined;
+  foto1Url: string | null;
+  foto2Url: string | null;
+}
+
+interface FotosCocheraEstado {
+  cocheraId: string;
+  numero: string;
+  tamano: 'grande' | 'chica';
+  foto1Url: string | null;
+  foto1Descripcion: string | null;
+  foto2Url: string | null;
+  foto2Descripcion: string | null;
+}
 
 interface ProximaLlegada {
   checkinPrevisto: string;
@@ -239,8 +268,8 @@ export function Habitaciones() {
   const [ahora, setAhora] = useState(new Date());
   const [checkinHab, setCheckinHab] = useState<Habitacion | null>(null);
   const [reservaModal, setReservaModal] = useState<Habitacion | null>(null);
-  const [fotosModal, setFotosModal] = useState<Habitacion | null>(null);
-  const [fotosCocheraModal, setFotosCocheraModal] = useState<Cochera | null>(null);
+  const [fotosModal, setFotosModal] = useState<FotosHabitacionEstado | null>(null);
+  const [fotosCocheraModal, setFotosCocheraModal] = useState<FotosCocheraEstado | null>(null);
   const [precioMascotaDia, setPrecioMascotaDia] = useState(0);
   const [horaCheckoutHotel, setHoraCheckoutHotel] = useState<string | undefined>(undefined);
   const [modo24h, setModo24h] = useState(false);
@@ -435,6 +464,51 @@ export function Habitaciones() {
       cargarSiAutomatico();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'No se pudo marcar disponible');
+    }
+  }
+
+  // El listado de habitaciones/cocheras no trae el base64 de las fotos (ver
+  // tieneFoto1/tieneFoto2) -- se pide recién acá, al abrir el modal de UNA
+  // sola habitación/cochera, para no cargar el ancho de banda gratuito de
+  // Render con imágenes que la mayoría de las veces nadie va a mirar.
+  async function abrirFotosHabitacion(h: Habitacion) {
+    if (!hotelActual) return;
+    try {
+      const fotos = await api.get<{ foto1_url: string | null; foto2_url: string | null }>(
+        `/hoteles/${hotelActual.hotelId}/habitaciones/${h.id}/fotos`,
+      );
+      setFotosModal({
+        habitacionId: h.id,
+        habNumero: h.hab_numero,
+        tipoNombre: h.tipos_habitacion?.nombre,
+        foto1Url: fotos.foto1_url,
+        foto2Url: fotos.foto2_url,
+      });
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'No se pudieron cargar las fotos');
+    }
+  }
+
+  async function abrirFotosCochera(c: Cochera) {
+    if (!hotelActual) return;
+    try {
+      const fotos = await api.get<{
+        foto1_url: string | null;
+        foto1_descripcion: string | null;
+        foto2_url: string | null;
+        foto2_descripcion: string | null;
+      }>(`/hoteles/${hotelActual.hotelId}/cocheras/${c.id}/fotos`);
+      setFotosCocheraModal({
+        cocheraId: c.id,
+        numero: c.numero,
+        tamano: c.tamano as 'grande' | 'chica',
+        foto1Url: fotos.foto1_url,
+        foto1Descripcion: fotos.foto1_descripcion,
+        foto2Url: fotos.foto2_url,
+        foto2Descripcion: fotos.foto2_descripcion,
+      });
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'No se pudieron cargar las fotos');
     }
   }
 
@@ -682,9 +756,9 @@ export function Habitaciones() {
                     </button>
                   )}
                   <button
-                    onClick={() => setFotosModal(h)}
+                    onClick={() => abrirFotosHabitacion(h)}
                     style={linkBtnStyle}
-                    title={h.foto1_url || h.foto2_url ? 'Ver fotos de la habitación' : 'Subir foto de la habitación'}
+                    title={h.tieneFoto1 || h.tieneFoto2 ? 'Ver fotos de la habitación' : 'Subir foto de la habitación'}
                   >
                     📷 Fotos
                   </button>
@@ -864,12 +938,12 @@ export function Habitaciones() {
             if (hab?.estadiaId) navigate(`/estadias/${hab.estadiaId}`);
           }}
           onClickProximaReserva={(h) => setReservaModal(h)}
-          onClickFotos={(h) => setFotosModal(h)}
+          onClickFotos={abrirFotosHabitacion}
           onGuardarNotas={guardarNotas}
           onGuardarNotasHabitacion={guardarNotasHabitacion}
           onCambiarEstadoCochera={cambiarEstadoCochera}
           onGuardarNotasCochera={guardarNotasCochera}
-          onClickFotosCochera={(c) => setFotosCocheraModal(c)}
+          onClickFotosCochera={abrirFotosCochera}
         />
       )}
 
@@ -904,14 +978,20 @@ export function Habitaciones() {
       {fotosModal && (
         <FotosHabitacionModal
           hotelId={hotelActual.hotelId}
-          habitacionId={fotosModal.id}
-          habNumero={fotosModal.hab_numero}
-          tipoNombre={fotosModal.tipos_habitacion?.nombre}
-          foto1Url={fotosModal.foto1_url}
-          foto2Url={fotosModal.foto2_url}
+          habitacionId={fotosModal.habitacionId}
+          habNumero={fotosModal.habNumero}
+          tipoNombre={fotosModal.tipoNombre}
+          foto1Url={fotosModal.foto1Url}
+          foto2Url={fotosModal.foto2Url}
           onClose={() => setFotosModal(null)}
           onGuardado={(fotos) =>
-            setHabitaciones((prev) => prev.map((h) => (h.id === fotosModal.id ? { ...h, ...fotos } : h)))
+            setHabitaciones((prev) =>
+              prev.map((h) =>
+                h.id === fotosModal.habitacionId
+                  ? { ...h, tieneFoto1: !!fotos.foto1_url, tieneFoto2: !!fotos.foto2_url }
+                  : h,
+              ),
+            )
           }
         />
       )}
@@ -919,16 +999,28 @@ export function Habitaciones() {
       {fotosCocheraModal && (
         <FotosCocheraModal
           hotelId={hotelActual.hotelId}
-          cocheraId={fotosCocheraModal.id}
+          cocheraId={fotosCocheraModal.cocheraId}
           numero={fotosCocheraModal.numero}
-          tamano={fotosCocheraModal.tamano as 'grande' | 'chica'}
-          foto1Url={fotosCocheraModal.foto1_url}
-          foto1Descripcion={fotosCocheraModal.foto1_descripcion}
-          foto2Url={fotosCocheraModal.foto2_url}
-          foto2Descripcion={fotosCocheraModal.foto2_descripcion}
+          tamano={fotosCocheraModal.tamano}
+          foto1Url={fotosCocheraModal.foto1Url}
+          foto1Descripcion={fotosCocheraModal.foto1Descripcion}
+          foto2Url={fotosCocheraModal.foto2Url}
+          foto2Descripcion={fotosCocheraModal.foto2Descripcion}
           onClose={() => setFotosCocheraModal(null)}
           onGuardado={(fotos) =>
-            setCocheras((prev) => prev.map((c) => (c.id === fotosCocheraModal.id ? { ...c, ...fotos } : c)))
+            setCocheras((prev) =>
+              prev.map((c) =>
+                c.id === fotosCocheraModal.cocheraId
+                  ? {
+                      ...c,
+                      tieneFoto1: !!fotos.foto1_url,
+                      foto1_descripcion: fotos.foto1_descripcion,
+                      tieneFoto2: !!fotos.foto2_url,
+                      foto2_descripcion: fotos.foto2_descripcion,
+                    }
+                  : c,
+              ),
+            )
           }
         />
       )}
@@ -1037,7 +1129,7 @@ function VistaTarjetas({
                       e.stopPropagation();
                       onClickFotos(h);
                     }}
-                    title={h.foto1_url || h.foto2_url ? 'Ver fotos de la habitación' : 'Subir foto de la habitación'}
+                    title={h.tieneFoto1 || h.tieneFoto2 ? 'Ver fotos de la habitación' : 'Subir foto de la habitación'}
                     style={{
                       background: 'none',
                       border: 'none',
@@ -1045,7 +1137,7 @@ function VistaTarjetas({
                       cursor: 'pointer',
                       fontSize: 14,
                       lineHeight: 1,
-                      opacity: h.foto1_url || h.foto2_url ? 1 : 0.4,
+                      opacity: h.tieneFoto1 || h.tieneFoto2 ? 1 : 0.4,
                     }}
                   >
                     📷
@@ -1223,7 +1315,7 @@ function VistaTarjetas({
                           e.stopPropagation();
                           onClickFotosCochera(c);
                         }}
-                        title={c.foto1_url || c.foto2_url ? 'Ver fotos de la cochera' : 'Subir foto de la cochera'}
+                        title={c.tieneFoto1 || c.tieneFoto2 ? 'Ver fotos de la cochera' : 'Subir foto de la cochera'}
                         style={{
                           background: 'none',
                           border: 'none',
@@ -1231,7 +1323,7 @@ function VistaTarjetas({
                           cursor: 'pointer',
                           fontSize: 14,
                           lineHeight: 1,
-                          opacity: c.foto1_url || c.foto2_url ? 1 : 0.5,
+                          opacity: c.tieneFoto1 || c.tieneFoto2 ? 1 : 0.5,
                         }}
                       >
                         📷
