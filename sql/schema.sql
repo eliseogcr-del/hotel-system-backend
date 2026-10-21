@@ -184,6 +184,13 @@ create table habitaciones (
     -- chicas de un catálogo de este tamaño. null = sin foto en ese slot.
     foto1_url text,
     foto2_url text,
+    -- Columnas calculadas por Postgres (no la app): dicen si hay foto sin
+    -- cargar el data URI completo. El dashboard (auto-refresh cada 5 min)
+    -- selecciona SOLO estas dos para el ícono de cámara -- pedir
+    -- foto1_url/foto2_url en cada refresh fue lo que agotó la cuota
+    -- gratuita de Egress de Supabase (ver migracion_tiene_foto_generada.sql).
+    tiene_foto1 boolean generated always as (foto1_url is not null) stored,
+    tiene_foto2 boolean generated always as (foto2_url is not null) stored,
     unique (hotel_id, hab_numero)
 );
 
@@ -203,7 +210,10 @@ create table cocheras (
     foto1_url text,
     foto1_descripcion text,
     foto2_url text,
-    foto2_descripcion text
+    foto2_descripcion text,
+    -- Mismo criterio que habitaciones.tiene_foto1/tiene_foto2 (ver ahí).
+    tiene_foto1 boolean generated always as (foto1_url is not null) stored,
+    tiene_foto2 boolean generated always as (foto2_url is not null) stored
 );
 
 create table tarifas (
