@@ -365,7 +365,9 @@ export class ConfiguracionService {
       .from('cocheras')
       .select(
         `
-        *,
+        id, hotel_id, numero, tamano, tipo_vehiculo_permitido, estado, es_externa, precio_externa, notas,
+        foto1_descripcion, foto2_descripcion,
+        tieneFoto1:tiene_foto1, tieneFoto2:tiene_foto2,
         reserva_habitacion(
           id,
           habitaciones(hab_numero),
@@ -379,33 +381,32 @@ export class ConfiguracionService {
       .order('numero', { ascending: true });
     if (error) throw error;
 
+    // No se seleccionan foto1_url/foto2_url (el data URI base64, hasta
+    // ~200KB cada uno) -- en su lugar, tieneFoto1/tieneFoto2 (columnas
+    // GENERATED en Postgres, ver migracion_tiene_foto_generada.sql): la
+    // tarjeta solo necesita saber SI hay foto para el ícono de cámara, la
+    // imagen en sí recién se pide al abrir el modal (ver GET :id/fotos).
+    // Pedirle a Postgres el base64 completo en cada auto-refresh de 5
+    // minutos fue lo que agotó la cuota gratuita de Egress de Supabase.
+    //
     // reserva_habitacion viene como arreglo (relación inversa por FK): nos
     // quedamos con la ocupación vigente, si la hay, para mostrar quién está
     // usando la cochera ahora mismo (no todo su historial).
     return (data ?? []).map((cochera) => {
-      const { reserva_habitacion, foto1_url, foto2_url, ...resto } = cochera as unknown as {
+      const { reserva_habitacion, ...resto } = cochera as unknown as {
         reserva_habitacion: Array<{
           habitaciones: { hab_numero: number } | null;
           reservas: { huespedes: { nombres: string; apellidos: string } | null } | null;
           estadias: { estado_actual: string } | null;
           vehiculos: { marca: string | null; tipo: string | null; placa: string | null } | null;
         }>;
-        foto1_url: string | null;
-        foto2_url: string | null;
         [key: string]: unknown;
       };
       const ocupacionVigente = (reserva_habitacion ?? []).find(
         (rh) => rh.estadias?.estado_actual === 'en_curso',
       );
-      // foto1_url/foto2_url (el data URI base64, hasta ~200KB cada uno) no
-      // se mandan en este listado -- mismo criterio que
-      // HabitacionesService.listarConEstado(): la tarjeta solo necesita
-      // saber SI hay foto para el ícono de cámara, la imagen en sí recién
-      // se pide al abrir el modal (ver GET :id/fotos).
       return {
         ...resto,
-        tieneFoto1: !!foto1_url,
-        tieneFoto2: !!foto2_url,
         ocupante: ocupacionVigente
           ? {
               habNumero: ocupacionVigente.habitaciones?.hab_numero ?? null,

@@ -55,7 +55,7 @@ export class HabitacionesService {
       .select(
         `
         id, hab_numero, piso, estado, mantenimiento_planificado, notas_operativas, visible_whatsapp,
-        foto1_url, foto2_url,
+        tieneFoto1:tiene_foto1, tieneFoto2:tiene_foto2,
         tipos_habitacion(id, nombre, aforo_max)
       `,
       )
@@ -272,19 +272,16 @@ export class HabitacionesService {
         hab.estado === 'disponible' && !reservaHoy
           ? (diasHastaProximaReservaPorHabitacion.get(hab.id) ?? null)
           : null;
-      // No se manda foto1_url/foto2_url (el data URI base64 completo, hasta
-      // ~200KB cada uno) en este listado: el dashboard solo necesita saber
-      // SI hay foto para prender/apagar el ícono de cámara, no la imagen en
-      // sí (que recién se pide, una habitación a la vez, al abrir el modal
-      // -- ver GET :id/fotos más abajo). Mandar el base64 completo acá
-      // significaba re-descargar las fotos de las 25 habitaciones en CADA
-      // carga del dashboard y en cada auto-refresh de 5 minutos, agotando
-      // rápido el ancho de banda gratuito de Render.
-      const { foto1_url, foto2_url, ...habSinFotos } = hab;
+      // El select de arriba ya trae tieneFoto1/tieneFoto2 (columnas
+      // GENERATED en Postgres, ver migracion_tiene_foto_generada.sql) en vez
+      // de foto1_url/foto2_url: el dashboard solo necesita saber SI hay
+      // foto para el ícono de cámara, nunca el data URI completo acá (eso
+      // se pide aparte, una habitación a la vez, recién al abrir el modal
+      // -- ver GET :id/fotos más abajo). Pedirle a Postgres el base64
+      // completo de las 25 habitaciones en cada auto-refresh de 5 minutos
+      // fue lo que agotó la cuota gratuita de Egress de Supabase.
       return {
-        ...habSinFotos,
-        tieneFoto1: !!foto1_url,
-        tieneFoto2: !!foto2_url,
+        ...hab,
         reservaHoy,
         proximaReservaHoy,
         diasHastaProximaReserva,
