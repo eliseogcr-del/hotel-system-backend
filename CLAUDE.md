@@ -247,3 +247,24 @@ el sistema esté listo para producción.
   validación contra datos reales del cliente y varios cambios de diseño
   quedaron documentados arriba (ej. tarifas por tipo no por habitación,
   movimientos_cuenta como libro único).
+- **Presupuesto cero: todo corre en planes gratis** (Supabase Free,
+  Vercel Hobby, Render Free) — no hay margen para que un cambio dispare
+  un costo inesperado. Esto no es una preferencia, es una restricción
+  dura del cliente.
+  - Antes de implementar algo que agregue o repita transferencia de
+    datos (sobre todo: imágenes/base64 guardadas en columnas de la BD,
+    cualquier auto-refresh/polling nuevo, un listado que crece con el
+    tiempo), pensar explícitamente: "¿cuántas veces se va a pedir esto
+    por día, y cuánto pesa cada vez?" -- antes de escribir el código, no
+    después de que se dispare un aviso de cuota.
+  - **Regla concreta ya aprendida de la mala manera** (ver
+    `sql/migracion_tiene_foto_generada.sql`): una columna con una imagen
+    en base64 (`foto1_url`, `foto2_url`, `logo_url`, cualquier futura)
+    **nunca** va en el `select()` de un listado que se carga seguido o
+    se auto-refresca -- ahí solo van campos chicos (ids, booleanos,
+    texto corto). El contenido pesado se pide aparte, en un endpoint
+    propio, una sola fila a la vez, recién cuando el usuario de verdad
+    lo necesita (ej. abre el modal de fotos).
+  - Esto ya causó una interrupción real del sistema en producción
+    (Supabase bloqueó el proyecto entero por exceder la cuota gratis de
+    Egress) -- no es un riesgo teórico.
