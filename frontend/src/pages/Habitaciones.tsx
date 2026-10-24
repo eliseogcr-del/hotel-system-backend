@@ -276,13 +276,22 @@ export function Habitaciones() {
   const [vista, setVista] = useState<Vista>(
     () => (localStorage.getItem('habitaciones_vista') as Vista | null) ?? 'tabla',
   );
-  // Cada check-in/reserva/marcar-disponible recarga toda la tabla por
-  // defecto (ver cargarSiAutomatico) -- en jornadas con muchas acciones
-  // seguidas eso interrumpe seguido lo que se está haciendo, así que queda
-  // configurable y persistido; el botón "Refrescar" siempre está disponible
-  // para pedirlo a mano sin importar este valor.
+  // Gatea SOLO el auto-refresh por tiempo (cada 5 min, ver el setInterval
+  // más abajo) -- un check-in/reserva/marcar-disponible/mantenimiento
+  // siempre recarga la tabla de una (llaman a cargar() directo, no a
+  // cargarSiAutomatico()), sin importar este valor, porque eso es
+  // tráfico "gratis" (proporcional a una acción real que ya se hizo) y
+  // el usuario espera ver el resultado al toque.
+  //
+  // Por defecto en false (antes estaba en true): el refresh automático
+  // por tiempo es justo lo que agotó la cuota gratuita de Egress de
+  // Supabase (ver CLAUDE.md sección 7 y sql/migracion_tiene_foto_generada.sql)
+  // -- aunque ya no manda fotos, sigue siendo tráfico que no corresponde
+  // a ninguna acción real de nadie, 288 veces al día por cada pestaña
+  // abierta. El botón "Refrescar" siempre está disponible para pedirlo a
+  // mano.
   const [actualizacionAutomatica, setActualizacionAutomatica] = useState<boolean>(
-    () => localStorage.getItem('habitaciones_auto_refresh') !== 'false',
+    () => localStorage.getItem('habitaciones_auto_refresh') === 'true',
   );
 
   function cambiarVista(v: Vista) {
@@ -461,7 +470,7 @@ export function Habitaciones() {
     if (!hotelActual) return;
     try {
       await api.patch(`/hoteles/${hotelActual.hotelId}/habitaciones/${hab.id}/marcar-disponible`);
-      cargarSiAutomatico();
+      cargar();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'No se pudo marcar disponible');
     }
@@ -620,13 +629,16 @@ export function Habitaciones() {
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <label style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 12, color: 'var(--text-secondary)' }}>
+          <label
+            style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 12, color: 'var(--text-secondary)' }}
+            title="Solo afecta la actualización por tiempo (cada 5 min). Un check-in, reserva, mantenimiento o 'marcar disponible' siempre refresca la lista al toque, esté marcada o no."
+          >
             <input
               type="checkbox"
               checked={actualizacionAutomatica}
               onChange={(e) => cambiarActualizacionAutomatica(e.target.checked)}
             />
-            Actualizar automáticamente
+            Actualizar automáticamente (cada 5 min)
           </label>
           <button
             type="button"
@@ -952,7 +964,7 @@ export function Habitaciones() {
       <SeccionMantenimientoLimpieza
         hotelId={hotelActual.hotelId}
         habitaciones={habitaciones}
-        onCambio={cargarSiAutomatico}
+        onCambio={cargar}
       />
 
       <SeccionPlanificacionDesayunos
@@ -971,7 +983,7 @@ export function Habitaciones() {
           horaCheckoutHotel={horaCheckoutHotel}
           modo24h={modo24h}
           onClose={() => setCheckinHab(null)}
-          onCreado={cargarSiAutomatico}
+          onCreado={cargar}
         />
       )}
 
@@ -1049,7 +1061,7 @@ export function Habitaciones() {
               reservaId={infoReserva.reservaId}
               lineaId={infoReserva.lineaId}
               onClose={() => setReservaModal(null)}
-              onGuardado={cargarSiAutomatico}
+              onGuardado={cargar}
             />
           );
         })()}

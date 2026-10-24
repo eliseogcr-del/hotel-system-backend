@@ -43,7 +43,13 @@ interface EstadoTurno {
 // sistema ya no la cierra sola por vencimiento (si acaso, se cierra sola
 // al hacer logout sin haberla cerrado a mano, ver cerrarSesion() más
 // abajo).
-const POLL_ESTADO_TURNO_MS = 60_000;
+//
+// 3 min, no 1: corre en TODAS las pantallas (no solo Caja) todo el día --
+// 3 min sigue dejando margen de sobra contra el aviso (se dispara 10 min
+// antes del fin del turno, ver AVISO_CIERRE_MINUTOS_ANTES en
+// caja.service.ts), pero manda 1/3 de las peticiones que antes. Ver
+// CLAUDE.md sección 7 (presupuesto cero / cuota de Egress de Supabase).
+const POLL_ESTADO_TURNO_MS = 180_000;
 
 // Única fuente de verdad de qué rol ve qué: de acá salen tanto el menú
 // lateral como qué rutas puede visitar cada rol (rutaPermitida más abajo)

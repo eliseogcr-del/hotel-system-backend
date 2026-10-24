@@ -20,8 +20,11 @@ function comoYMD(d: Date): string {
 
 // Cada cuánto se refresca la lista de notas del hotel (para detectar notas
 // repetitivas nuevas/editadas sin recargar la página) -- mismo criterio que
-// POLL_ESTADO_TURNO_MS en Layout.tsx.
-const POLL_NOTAS_MS = 60_000;
+// POLL_ESTADO_TURNO_MS en Layout.tsx (corre en todas las pantallas todo el
+// día; 3 min en vez de 1 solo atrasa hasta 3 min el ver una nota repetitiva
+// nueva/editada, aceptable, y manda 1/3 de las peticiones -- ver CLAUDE.md
+// sección 7).
+const POLL_NOTAS_MS = 180_000;
 
 // Cada cuánto se revisa si alguna nota repetitiva ya debe volver a
 // mostrarse. Tiene que ser más chico que la periodicidad mínima que ofrece
