@@ -291,7 +291,15 @@ export class CajaService {
     if (updError) throw updError;
 
     // Si la sesión ya se cerró, su saldo_final quedó fijo al momento del
-    // cierre -- hay que recalcularlo para que refleje el ajuste.
+    // cierre -- hay que recalcularlo para que refleje el ajuste, y
+    // propagarlo en cascada: sesiones_turno.saldo_inicial de la(s)
+    // siguiente(s) sesión(es) es una COPIA fija (se asigna una sola vez al
+    // abrir, ver abrirTurno()), no una referencia en vivo -- si no se
+    // empuja el ajuste a mano acá, la caja que ya heredó el saldo viejo se
+    // queda con el número incorrecto para siempre (caso real: se corrigió
+    // un pago mal registrado como efectivo de un turno ya cerrado, pero el
+    // turno de la mañana siguiente, que ya había abierto con el saldo
+    // viejo, no se enteraba).
     if (sesion.estado === 'cerrada') {
       const { totalIngresosEfectivo, totalEgresosEfectivo } = await this.sumarMovimientos(
         service,
@@ -303,9 +311,51 @@ export class CajaService {
         .update({ saldo_final: saldoFinal })
         .eq('id', sesionId);
       if (sesError) throw sesError;
+      await this.propagarSaldoInicial(service, sesionId, saldoFinal);
     }
 
     return this.obtenerDetalle(client, hotelId, sesionId);
+  }
+
+  // Empuja un saldo_final corregido hacia cualquier sesión que lo haya
+  // heredado como su saldo_inicial (ver comentario en editarMovimiento) --
+  // y si esa sesión hija ya está cerrada, recalcula su propio saldo_final y
+  // sigue empujando más abajo en la cadena, por si hay varios turnos
+  // cerrados en fila desde entonces.
+  private async propagarSaldoInicial(
+    service: SupabaseClient,
+    sesionId: string,
+    nuevoSaldoFinal: number,
+  ) {
+    const { data: hijas, error: hijasError } = await service
+      .from('sesiones_turno')
+      .select('id, estado, saldo_inicial')
+      .eq('sesion_anterior_id', sesionId);
+    if (hijasError) throw hijasError;
+
+    for (const hija of hijas ?? []) {
+      if (Number(hija.saldo_inicial) === nuevoSaldoFinal) continue;
+
+      const { error: updError } = await service
+        .from('sesiones_turno')
+        .update({ saldo_inicial: nuevoSaldoFinal })
+        .eq('id', hija.id);
+      if (updError) throw updError;
+
+      if (hija.estado === 'cerrada') {
+        const { totalIngresosEfectivo, totalEgresosEfectivo } = await this.sumarMovimientos(
+          service,
+          hija.id,
+        );
+        const saldoFinalHija = nuevoSaldoFinal + totalIngresosEfectivo - totalEgresosEfectivo;
+        const { error: sesError } = await service
+          .from('sesiones_turno')
+          .update({ saldo_final: saldoFinalHija })
+          .eq('id', hija.id);
+        if (sesError) throw sesError;
+        await this.propagarSaldoInicial(service, hija.id, saldoFinalHija);
+      }
+    }
   }
 
   async listarSesiones(client: SupabaseClient, hotelId: string, estado?: string) {
