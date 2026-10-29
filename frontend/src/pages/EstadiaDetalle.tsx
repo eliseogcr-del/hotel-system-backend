@@ -297,8 +297,17 @@ export function EstadiaDetalle() {
   if (error && !estadia) return <p style={{ color: 'var(--danger)' }}>{error}</p>;
   if (!estadia) return <p style={{ color: 'var(--text-muted)' }}>Cargando...</p>;
 
+  // Neto de todo lo que NO es 'pago' (alquiler, early, late, cochera,
+  // consumo_bazar, desayuno, mascota, cargo_mascota y también 'ajuste' --
+  // un ajuste negativo, como una corrección de días cobrados de más, debe
+  // RESTAR acá, no quedar afuera). Si solo se sumaran los montos
+  // positivos (como antes), un ajuste negativo seguía contando como
+  // "cargado" el monto original sin corregir, y "Total cargado - Total
+  // pagado" dejaba de coincidir con el Adeudado real (que sí usa
+  // estadia.saldo, la suma de TODOS los movimientos -- ver
+  // EstadiasService.recalcularSaldo()).
   const totalCargos = estadia.movimientos
-    .filter((m) => Number(m.monto) > 0)
+    .filter((m) => m.tipo !== 'pago')
     .reduce((acc, m) => acc + Number(m.monto), 0);
   const totalPagado = Math.abs(
     estadia.movimientos.filter((m) => m.tipo === 'pago').reduce((acc, m) => acc + Number(m.monto), 0),
