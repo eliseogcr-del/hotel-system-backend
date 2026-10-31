@@ -268,3 +268,8 @@ el sistema esté listo para producción.
   - Esto ya causó una interrupción real del sistema en producción
     (Supabase bloqueó el proyecto entero por exceder la cuota gratis de
     Egress) -- no es un riesgo teórico.
+  - Si Supabase vuelve a bloquear el proyecto y no hay presupuesto para
+    subir de plan, el plan de emergencia (migrar a una organización/
+    proyecto nuevo, gratis) ya está escrito paso a paso en
+    `sql/runbook_migracion_emergencia_supabase.md` -- no hay que
+    improvisarlo de nuevo.
