@@ -67,6 +67,17 @@ export class EstadiasController {
     return this.estadiasService.checkout(client, hotelId, id, user.personalId, dto);
   }
 
+  @Post(':id/deshacer-checkout')
+  @Roles('admin', 'recepcion')
+  async deshacerCheckout(
+    @Param('hotelId') hotelId: string,
+    @Param('id') id: string,
+    @CurrentUser() user: RequestUser,
+  ) {
+    const client = this.supabase.getClientForRequest(user.accessToken);
+    return this.estadiasService.deshacerCheckout(client, hotelId, id);
+  }
+
   @Post(':id/trasladar-habitacion')
   @Roles('admin', 'recepcion')
   async trasladarHabitacion(

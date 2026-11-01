@@ -251,6 +251,25 @@ export function EstadiaDetalle() {
     }
   }
 
+  // Revierte un checkout hecho por error -- solo tiene sentido pedirlo muy
+  // poco después (ver EstadiasService.deshacerCheckout(): el backend lo
+  // rechaza si la habitación ya no sigue exactamente en "Limpieza" o si HK
+  // ya inició la tarea de limpieza que generó).
+  async function deshacerCheckout() {
+    if (!hotelActual || !id) return;
+    if (!confirm('¿Deshacer este checkout? La habitación vuelve a quedar "Ocupada" con este huésped.')) return;
+    setAccionando(true);
+    setError(null);
+    try {
+      await api.post(`/hoteles/${hotelActual.hotelId}/estadias/${id}/deshacer-checkout`);
+      cargar();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'No se pudo deshacer el checkout');
+    } finally {
+      setAccionando(false);
+    }
+  }
+
   async function anularMovimiento(movimientoId: string) {
     if (!hotelActual || !id) return;
     if (!confirm('¿Anular este cargo? El importe pasará a S/. 0 y no se puede deshacer.')) return;
@@ -492,6 +511,17 @@ export function EstadiaDetalle() {
             Cancelar
           </button>
         </div>
+      )}
+
+      {estadia.estado_actual === 'finalizada' && (
+        <button
+          onClick={deshacerCheckout}
+          disabled={accionando}
+          style={{ ...btnSecondary, marginBottom: 20 }}
+          title='Solo funciona si nada más pasó desde el checkout: la habitación debe seguir en "Limpieza" y HK no debe haber iniciado la tarea de limpieza.'
+        >
+          Deshacer checkout
+        </button>
       )}
 
       {(estadia.estado_actual !== 'finalizada' || Number(estadia.saldo) > 0) && (

@@ -414,6 +414,81 @@ export class EstadiasService {
   }
 
   /**
+   * Revierte un checkout hecho por error (caso real: recepción le dio
+   * checkout a la habitación equivocada mientras el huésped seguía
+   * hospedado). Solo seguro si nada más pasó desde entonces -- por eso
+   * exige que la habitación siga exactamente en 'limpieza' (el estado que
+   * dejó el propio checkout()) y que la tarea de limpieza que generó siga
+   * 'planificado' (nadie de HK la empezó). Si cualquiera de las dos ya
+   * cambió, no se adivina qué pasó: se corta y se pide corregirlo a mano,
+   * en vez de arriesgarse a pisar algo (ej. HK ya limpiando, o la
+   * habitación ya reasignada a otro huésped).
+   */
+  async deshacerCheckout(client: SupabaseClient, hotelId: string, estadiaId: string) {
+    const estadia = await this.cargarEstadiaHotel(client, hotelId, estadiaId);
+    if (estadia.estado_actual !== 'finalizada') {
+      throw new BadRequestException(
+        `No se puede deshacer el checkout: la estadía está en estado '${estadia.estado_actual}', no 'finalizada'`,
+      );
+    }
+
+    const habitacionId = estadia.reserva_habitacion.habitacion_id;
+
+    const { data: hab, error: habLeerError } = await client
+      .from('habitaciones')
+      .select('estado')
+      .eq('id', habitacionId)
+      .maybeSingle();
+    if (habLeerError) throw habLeerError;
+    if (hab?.estado !== 'limpieza') {
+      throw new ConflictException(
+        'No se puede deshacer: la habitación ya no está en "Limpieza" (algo pasó después del checkout). Corrígelo a mano desde Habitaciones.',
+      );
+    }
+
+    const { data: tarea, error: tareaError } = await client
+      .from('tareas_hk')
+      .select('id')
+      .eq('habitacion_id', habitacionId)
+      .eq('tipo', 'limpieza')
+      .eq('estado', 'planificado')
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (tareaError) throw tareaError;
+    if (!tarea) {
+      throw new ConflictException(
+        'No se puede deshacer: no se encontró la tarea de limpieza pendiente que generó el checkout (puede que HK ya la haya iniciado). Corrígelo a mano desde Habitaciones.',
+      );
+    }
+
+    const { error: updEstadiaError } = await client
+      .from('estadias')
+      .update({ checkout_real: null, estado_actual: 'en_curso' })
+      .eq('id', estadiaId);
+    if (updEstadiaError) throw updEstadiaError;
+
+    const { error: updHabError } = await client
+      .from('habitaciones')
+      .update({ estado: 'ocupada' })
+      .eq('id', habitacionId);
+    if (updHabError) throw updHabError;
+
+    const { error: delTareaError } = await client.from('tareas_hk').delete().eq('id', tarea.id);
+    if (delTareaError) throw delTareaError;
+
+    if (estadia.reserva_habitacion.cochera_id) {
+      const { error: cocheraError } = await client
+        .from('cocheras')
+        .update({ estado: 'ocupada' })
+        .eq('id', estadia.reserva_habitacion.cochera_id);
+      if (cocheraError) throw cocheraError;
+    }
+
+    return this.obtenerDetalle(client, hotelId, estadiaId);
+  }
+
+  /**
    * Traslado de habitación: el huésped ya hizo check-in pero pide cambiarse
    * a otra habitación disponible. Todo lo que ya cuelga de
    * reserva_habitacion_id/estadia_id (movimientos_cuenta, anticipos,
