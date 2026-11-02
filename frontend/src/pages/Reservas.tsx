@@ -85,6 +85,19 @@ function rangoFechas(desde: string, hasta: string): Date[] {
   return dias;
 }
 
+// El calendario pinta una tabla de habitaciones × días -- un rango amplio
+// (ej. un año, guardado sin querer en localStorage) vuelve esa tabla
+// enorme y cara de calcular/pintar en cada render. 93 días (~3 meses) ya
+// es más de lo que alguien puede leer útilmente en esta grilla; se usa
+// como tope tanto para corregir un valor viejo guardado como para
+// impedir que alguien lo vuelva a ampliar sin querer.
+const MAX_DIAS_CALENDARIO = 93;
+
+function clampHasta(desde: string, hasta: string): string {
+  const limite = sumarDias(desde, MAX_DIAS_CALENDARIO);
+  return hasta > limite ? limite : hasta;
+}
+
 function capitalizar(texto: string): string {
   return texto.charAt(0).toUpperCase() + texto.slice(1);
 }
@@ -118,18 +131,27 @@ export function Reservas() {
   // AuthContext.tsx), el calendario reabre en ese mismo rango en vez de
   // saltar de nuevo a "hoy + 10 días".
   const [desde, setDesde] = useState(() => localStorage.getItem('reservas_desde') || hoyYMD());
-  const [hasta, setHasta] = useState(
-    () => localStorage.getItem('reservas_hasta') || sumarDias(hoyYMD(), 10),
+  // Clamp también en la lectura inicial: corrige solo un rango amplio que
+  // haya quedado guardado en localStorage de antes de este límite, sin
+  // esperar a que alguien lo cambie a mano.
+  const [hasta, setHasta] = useState(() =>
+    clampHasta(desde, localStorage.getItem('reservas_hasta') || sumarDias(hoyYMD(), 10)),
   );
 
   function cambiarDesde(v: string) {
     setDesde(v);
     localStorage.setItem('reservas_desde', v);
+    const hastaClamp = clampHasta(v, hasta);
+    if (hastaClamp !== hasta) {
+      setHasta(hastaClamp);
+      localStorage.setItem('reservas_hasta', hastaClamp);
+    }
   }
 
   function cambiarHasta(v: string) {
-    setHasta(v);
-    localStorage.setItem('reservas_hasta', v);
+    const clamped = clampHasta(desde, v);
+    setHasta(clamped);
+    localStorage.setItem('reservas_hasta', clamped);
   }
   const [calendario, setCalendario] = useState<ReservaCalendario[]>([]);
   const [calendarioLoading, setCalendarioLoading] = useState(false);
@@ -837,7 +859,24 @@ function CalendarioReservas({
   // abría su edición, sin dejar crear la reserva entrante. Ahora ese día
   // se parte en dos mitades: la que sale (izquierda) y la que entra o
   // queda libre para crear (derecha).
-  function celdasHabitacion(habId: string): CeldaRender[] {
+  //
+  // Memoizado con useMemo (antes era una función llamada directo en el
+  // render, una vez por habitación, en cada re-render del componente) --
+  // recalculaba la grilla entera (habitaciones × días, con parseo de
+  // fechas por celda) con cualquier cambio de estado ajeno, como abrir el
+  // modal "Ver tarifas". En una PC débil, con un rango de fechas amplio
+  // guardado en localStorage de una sesión anterior, esto alcanzaba a
+  // colgar el navegador (CPU/disco al 100%) solo por tener Reservas
+  // abierto -- ver CLAUDE.md sección 7, "presupuesto cero" también es la
+  // PC de recepción.
+  const celdasPorHabitacion = useMemo(() => {
+    const mapa = new Map<string, CeldaRender[]>();
+    for (const h of habitacionesOrdenadas) {
+      mapa.set(h.id, calcularCeldas(h.id));
+    }
+    return mapa;
+
+    function calcularCeldas(habId: string): CeldaRender[] {
     const items = calendario.filter((c) => c.habitacionId === habId);
 
     function entranteDeDia(ymd: string): ReservaCalendario | undefined {
@@ -892,7 +931,9 @@ function CalendarioReservas({
       }
     }
     return celdas;
-  }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [calendario, dias, habitacionesOrdenadas]);
 
   return (
     <div>
@@ -1035,7 +1076,7 @@ function CalendarioReservas({
                       </span>
                     )}
                   </td>
-                  {celdasHabitacion(h.id).map((c, i) =>
+                  {(celdasPorHabitacion.get(h.id) ?? []).map((c, i) =>
                     c.tipo === 'simple' ? (
                       <td
                         key={i}
