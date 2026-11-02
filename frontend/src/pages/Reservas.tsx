@@ -58,7 +58,12 @@ interface ReservaCalendario {
 }
 
 function fechaYMD(d: Date): string {
-  const y = d.getFullYear();
+  // padStart en el año también (no solo mes/día): sin esto, un año fuera
+  // de rango (ej. año 1, de la fecha corrupta "0001-02-01" guardada en
+  // localStorage -- ver fechaRazonable más abajo) produce un string tipo
+  // "1-05-04" en vez de "0001-05-04", que ni el input nativo ni el
+  // backend reconocen como fecha ISO válida.
+  const y = String(d.getFullYear()).padStart(4, '0');
   const m = String(d.getMonth() + 1).padStart(2, '0');
   const day = String(d.getDate()).padStart(2, '0');
   return `${y}-${m}-${day}`;
@@ -98,6 +103,20 @@ function clampHasta(desde: string, hasta: string): string {
   return hasta > limite ? limite : hasta;
 }
 
+// Un <input type="date"> nativo puede disparar onChange con un valor a
+// medio escribir mientras el usuario todavía está tipeando el año (caso
+// real: quedó guardado "0001-02-01" en localStorage, lo que el backend
+// termina rechazando con "hasta must be a valid ISO 8601 date string" y
+// deja la página rota). Antes de guardar o usar cualquier fecha, se exige
+// año completo (4 dígitos) y dentro de un rango razonable -- año 0001 o
+// 9999 no pasan, pero cualquier año real del negocio sí.
+function fechaRazonable(v: string | null): v is string {
+  if (!v || !/^\d{4}-\d{2}-\d{2}$/.test(v)) return false;
+  if (isNaN(new Date(`${v}T00:00:00`).getTime())) return false;
+  const anio = Number(v.slice(0, 4));
+  return anio >= 2000 && anio <= new Date().getFullYear() + 10;
+}
+
 function capitalizar(texto: string): string {
   return texto.charAt(0).toUpperCase() + texto.slice(1);
 }
@@ -130,15 +149,25 @@ export function Reservas() {
   // página se recarga de verdad (no solo el bug de sesión ya corregido en
   // AuthContext.tsx), el calendario reabre en ese mismo rango en vez de
   // saltar de nuevo a "hoy + 10 días".
-  const [desde, setDesde] = useState(() => localStorage.getItem('reservas_desde') || hoyYMD());
-  // Clamp también en la lectura inicial: corrige solo un rango amplio que
-  // haya quedado guardado en localStorage de antes de este límite, sin
-  // esperar a que alguien lo cambie a mano.
-  const [hasta, setHasta] = useState(() =>
-    clampHasta(desde, localStorage.getItem('reservas_hasta') || sumarDias(hoyYMD(), 10)),
-  );
+  const [desde, setDesde] = useState(() => {
+    const guardado = localStorage.getItem('reservas_desde');
+    return fechaRazonable(guardado) ? guardado : hoyYMD();
+  });
+  // Clamp también en la lectura inicial: corrige tanto un rango amplio
+  // como una fecha corrupta/a medio tipear que haya quedado guardada en
+  // localStorage, sin esperar a que alguien lo cambie a mano.
+  const [hasta, setHasta] = useState(() => {
+    const guardado = localStorage.getItem('reservas_hasta');
+    const base = fechaRazonable(guardado) ? guardado : sumarDias(desde, 10);
+    return clampHasta(desde, base);
+  });
 
   function cambiarDesde(v: string) {
+    // El input dispara onChange con valores a medio tipear (ver
+    // fechaRazonable) -- se ignoran en vez de guardarlos, así el navegador
+    // sigue mostrando lo que el usuario está escribiendo sin corromper el
+    // estado ni localStorage hasta que complete una fecha real.
+    if (!fechaRazonable(v)) return;
     setDesde(v);
     localStorage.setItem('reservas_desde', v);
     const hastaClamp = clampHasta(v, hasta);
@@ -149,6 +178,7 @@ export function Reservas() {
   }
 
   function cambiarHasta(v: string) {
+    if (!fechaRazonable(v)) return;
     const clamped = clampHasta(desde, v);
     setHasta(clamped);
     localStorage.setItem('reservas_hasta', clamped);
