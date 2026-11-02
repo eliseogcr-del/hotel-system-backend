@@ -363,12 +363,30 @@ export class ReservasService {
     return filasMapeadas;
   }
 
+  // Tope defensivo: el frontend ya recorta el rango a 93 días (ver
+  // MAX_DIAS_CALENDARIO en Reservas.tsx), pero esto queda acá también por
+  // si algún otro cliente llama este endpoint directo -- un rango de meses
+  // o años no solo pesa más en la respuesta, también vuelve carísimo de
+  // renderizar el calendario del lado del frontend (caso real: casi colgó
+  // la PC de recepción, ver CLAUDE.md sección 7).
+  private static readonly MAX_DIAS_CALENDARIO = 93;
+
   async obtenerCalendario(
     client: SupabaseClient,
     hotelId: string,
     desde: string,
     hasta: string,
   ) {
+    const dias = Math.ceil(
+      (new Date(`${hasta}T00:00:00`).getTime() - new Date(`${desde}T00:00:00`).getTime()) /
+        (24 * 60 * 60 * 1000),
+    );
+    if (dias > ReservasService.MAX_DIAS_CALENDARIO) {
+      throw new BadRequestException(
+        `El rango del calendario no puede superar ${ReservasService.MAX_DIAS_CALENDARIO} días`,
+      );
+    }
+
     const { data, error } = await client
       .from('reserva_habitacion')
       .select(
