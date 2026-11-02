@@ -273,3 +273,28 @@ el sistema esté listo para producción.
     proyecto nuevo, gratis) ya está escrito paso a paso en
     `sql/runbook_migracion_emergencia_supabase.md` -- no hay que
     improvisarlo de nuevo.
+  - **"Presupuesto cero" no es solo cuota de red: también es la PC de
+    recepción.** No hay dinero para hardware mejor tampoco -- un cambio
+    de frontend que haga trabajar de más al navegador (re-renders
+    continuos, listeners o `setInterval` mal ubicados, estado que
+    cambia seguido viviendo en un componente grande) tiene el mismo
+    efecto práctico que gastar cuota: la PC se cuelga y alguien no
+    puede trabajar. Caso real (ver PR #126): el reloj en vivo del
+    encabezado de Habitaciones vivía como estado del componente
+    completo (~2000 líneas: toda la grilla + modales), así que cada
+    tick de 1seg re-renderizaba todo ese árbol -- acumulado durante un
+    turno de 8h con la pestaña abierta, terminó colgando una PC con
+    disco HDD (reportado como "se cuelga todo" solo con el sistema
+    abierto, mientras otras pestañas pesadas como Booking/Facebook/
+    WhatsApp Web funcionaban bien).
+    - Antes de agregar un `setInterval`/`setTimeout` recurrente, un
+      estado que cambia con frecuencia (reloj, contador, polling), o
+      un listener nuevo: pensar dónde vive ese estado. Si el
+      componente que lo contiene renderiza una lista/grilla grande o
+      varios modales condicionales, aíslalo en su propio componente
+      chico (como `RelojEnVivo`) para que el re-render no se propague
+      a todo lo demás.
+    - Mismo principio para cualquier polling nuevo: no solo importa el
+      costo de red (ya cubierto arriba), importa también el trabajo de
+      renderizado que dispara cada vez, sobre todo si el componente que
+      escucha ese polling es grande.
