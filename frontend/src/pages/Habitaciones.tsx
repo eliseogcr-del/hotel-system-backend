@@ -9,6 +9,35 @@ import { FotosHabitacionModal } from '../components/FotosHabitacionModal';
 import { FotosCocheraModal } from '../components/FotosCocheraModal';
 import { colorPorOrigen, labelPorOrigen } from '../lib/colorOrigen';
 
+// Aislado en su propio componente a propósito: si el reloj viviera como
+// estado del componente Habitaciones (que tiene ~25 habitaciones + cocheras
+// + modales), cada tick de 1seg re-renderizaría TODO ese árbol sin motivo,
+// corriendo así durante todo un turno de 8h seguidas con la pestaña abierta
+// -- un gasto de CPU/memoria continuo e innecesario que no tiene ninguna
+// otra pantalla del sistema (reportado como "se cuelga todo" en la PC de
+// recepción, con disco/memoria al 100% solo mientras este panel está
+// abierto). Aislándolo aquí, el tick de cada segundo solo re-renderiza este
+// span chico.
+function RelojEnVivo({ isMobile }: { isMobile: boolean }) {
+  const [ahora, setAhora] = useState(new Date());
+  useEffect(() => {
+    const t = setInterval(() => setAhora(new Date()), 1000);
+    return () => clearInterval(t);
+  }, []);
+  return (
+    <span
+      style={{
+        fontSize: isMobile ? 13 : 15,
+        fontWeight: 700,
+        color: 'var(--text-primary)',
+        textAlign: isMobile ? 'left' : 'center',
+      }}
+    >
+      {ahora.toLocaleString('es-PE', { dateStyle: isMobile ? 'medium' : 'full', timeStyle: 'medium' })}
+    </span>
+  );
+}
+
 type Vista = 'tabla' | 'tarjetas';
 
 type Estado = 'disponible' | 'ocupada' | 'limpieza' | 'mantenimiento' | 'bloqueada';
@@ -265,7 +294,6 @@ export function Habitaciones() {
   const [proximasLlegadas, setProximasLlegadas] = useState<ProximaLlegada[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [ahora, setAhora] = useState(new Date());
   const [checkinHab, setCheckinHab] = useState<Habitacion | null>(null);
   const [reservaModal, setReservaModal] = useState<Habitacion | null>(null);
   const [fotosModal, setFotosModal] = useState<FotosHabitacionEstado | null>(null);
@@ -303,11 +331,6 @@ export function Habitaciones() {
     setActualizacionAutomatica(v);
     localStorage.setItem('habitaciones_auto_refresh', String(v));
   }
-
-  useEffect(() => {
-    const t = setInterval(() => setAhora(new Date()), 1000);
-    return () => clearInterval(t);
-  }, []);
 
   // Sin cron real en el backend, procesar-salidas-vencidas (ver
   // EstadiasService.procesarSalidasVencidas(): extiende sola una salida
@@ -576,16 +599,7 @@ export function Habitaciones() {
         }
       >
         <h1 style={{ fontSize: 20 }}>Habitaciones</h1>
-        <span
-          style={{
-            fontSize: isMobile ? 13 : 15,
-            fontWeight: 700,
-            color: 'var(--text-primary)',
-            textAlign: isMobile ? 'left' : 'center',
-          }}
-        >
-          {ahora.toLocaleString('es-PE', { dateStyle: isMobile ? 'medium' : 'full', timeStyle: 'medium' })}
-        </span>
+        <RelojEnVivo isMobile={isMobile} />
         {!isMobile && <span />}
       </div>
 
