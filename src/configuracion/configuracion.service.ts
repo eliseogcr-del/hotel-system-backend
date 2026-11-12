@@ -14,8 +14,18 @@ import { ActualizarHotelDto } from './dto/actualizar-hotel.dto';
 const CODIGO_UNIQUE_VIOLATION = '23505';
 const CODIGO_FOREIGN_KEY_VIOLATION = '23503';
 
+// Sin logo_url a propósito: es un data URI base64 (hasta ~1.4MB real, ver
+// ActualizarHotelDto.logoUrl) y este select lo usan Habitaciones y
+// NuevaCotizacion solo para leer precio_mascota/horas/modo_24h -- ninguna
+// de las dos muestra el logo. Traerlo acá significaba repetir esa carga
+// pesada cada vez que alguien abre Habitaciones (la pantalla más visitada
+// del sistema), sin usarlo para nada -- mismo criterio que
+// tiene_foto1/tiene_foto2 en habitaciones/cocheras (ver CLAUDE.md sección
+// 7, "presupuesto cero"). Quien sí necesita el logo (Configuracion para
+// mostrarlo/editarlo, CotizacionDetalle para el PDF) lo pide aparte con
+// obtenerLogoHotel()/GET :hotelId/logo.
 const HOTEL_SELECT =
-  'id, nombre, hora_checkin, hora_checkout, modo_24h, precio_mascota, saldo_inicial_caja, logo_url, razon_social, ruc, direccion, ciudad, telefono, nombre_contacto, eslogan, agente_whatsapp_activo, umbral_grupo_grande';
+  'id, nombre, hora_checkin, hora_checkout, modo_24h, precio_mascota, saldo_inicial_caja, razon_social, ruc, direccion, ciudad, telefono, nombre_contacto, eslogan, agente_whatsapp_activo, umbral_grupo_grande';
 
 @Injectable()
 export class ConfiguracionService {
@@ -32,6 +42,20 @@ export class ConfiguracionService {
     if (error) throw error;
     if (!data) throw new NotFoundException('Hotel no encontrado');
     return { ...data, saldo_inicial_caja_bloqueado: await this.yaOperoCaja(hotelId) };
+  }
+
+  // Aparte de obtenerHotel() (ver HOTEL_SELECT): solo lo piden Configuracion
+  // (para mostrar/editar el logo) y CotizacionDetalle (para incrustarlo en
+  // el PDF) -- una sola fila, recién cuando de verdad hace falta.
+  async obtenerLogoHotel(client: SupabaseClient, hotelId: string) {
+    const { data, error } = await client
+      .from('hoteles')
+      .select('logo_url')
+      .eq('id', hotelId)
+      .maybeSingle();
+    if (error) throw error;
+    if (!data) throw new NotFoundException('Hotel no encontrado');
+    return data;
   }
 
   async actualizarHotel(client: SupabaseClient, hotelId: string, dto: ActualizarHotelDto) {

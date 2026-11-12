@@ -124,7 +124,20 @@ export function Configuracion() {
     api.get<Turno[]>(`/hoteles/${h}/turnos`).then(setTurnos).catch(reportarError);
     api.get<RegistroTipoCambio[]>(`/hoteles/${h}/tipo-cambio`).then(setTiposCambio).catch(reportarError);
     api.get<PersonalHotel[]>(`/hoteles/${h}/personal`).then(setPersonal).catch(reportarError);
-    api.get<HotelConfig>(`/hoteles/${h}`).then(setHotel).catch(reportarError);
+    // El logo (base64, hasta ~1.4MB) se pide aparte -- GET /hoteles/:id ya
+    // no lo trae (ver HOTEL_SELECT en ConfiguracionService), así que se
+    // fusiona acá recién cuando esta pantalla en particular lo necesita
+    // para mostrarlo/editarlo.
+    api
+      .get<HotelConfig>(`/hoteles/${h}`)
+      .then((hotelSinLogo) => {
+        setHotel(hotelSinLogo);
+        api
+          .get<{ logo_url: string | null }>(`/hoteles/${h}/logo`)
+          .then(({ logo_url }) => setHotel((actual) => (actual ? { ...actual, logo_url } : actual)))
+          .catch(reportarError);
+      })
+      .catch(reportarError);
   }
 
   useEffect(cargarTodo, [hotelActual]);
@@ -357,6 +370,13 @@ function SeccionDocumentos({
   setError: (e: string | null) => void;
 }) {
   const [logoUrl, setLogoUrl] = useState(hotel.logo_url);
+  // hotel.logo_url llega en un segundo fetch aparte (ver cargarTodo()): este
+  // componente ya está montado con hotel.logo_url todavía undefined cuando
+  // eso pasa, así que el useState de arriba no lo captura solo -- sin este
+  // efecto, el preview del logo se queda vacío hasta cambiar de pantalla.
+  useEffect(() => {
+    setLogoUrl(hotel.logo_url);
+  }, [hotel.logo_url]);
   const [razonSocial, setRazonSocial] = useState(hotel.razon_social ?? '');
   const [ruc, setRuc] = useState(hotel.ruc ?? '');
   const [direccion, setDireccion] = useState(hotel.direccion ?? '');
