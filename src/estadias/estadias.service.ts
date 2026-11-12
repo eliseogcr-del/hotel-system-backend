@@ -39,6 +39,12 @@ interface HotelHoras {
 // en el TZ del servidor.
 const PERU_UTC_OFFSET_MS = 5 * 60 * 60 * 1000;
 
+// Tope defensivo para EstadiasService.listar() al buscar por nombre/doc
+// dentro de 'finalizada' -- un término de búsqueda real ya acota el
+// resultado solo, esto es para no repetir el otro anti-patrón ya evitado en
+// este archivo (una lista de ids gigante por una búsqueda demasiado corta).
+const LIMITE_BUSQUEDA_FINALIZADAS = 500;
+
 function comoRelojLima(fecha: Date): Date {
   return new Date(fecha.getTime() - PERU_UTC_OFFSET_MS);
 }
@@ -995,6 +1001,59 @@ export class EstadiasService {
     // checkout_real ya es una columna del nivel superior y el .order() sí
     // ordena las filas que se van a paginar.
     if (filtros.estado === 'finalizada') {
+      // Búsqueda por nombre/doc, resuelta ANTES y APARTE del resto de filtros:
+      // PostgREST devuelve 500 (Internal server error, reportado en
+      // producción) con un .or() a 3 niveles de profundidad
+      // (reserva_habitacion.reservas.huespedes) -- el único lugar del
+      // archivo que necesita esa profundidad, porque acá `estadias` es la
+      // tabla de nivel superior (necesario para que el .order('checkout_real')
+      // de más abajo sí reordene filas -- ver el comentario grande unas
+      // líneas arriba). El .or() a 2 niveles (reservas.huespedes) sí
+      // funciona, ya probado en construirQuery(): se reusa ese mismo patrón
+      // partiendo de reserva_habitacion para obtener primero los IDs de
+      // estadía que calzan, acotados a un tope razonable (no el `.in()` con
+      // cientos de ids que ya se evitó antes -- un término de búsqueda real
+      // acota el resultado por sí solo).
+      let idsEstadiaFiltrados: string[] | null = null;
+      if (busqueda) {
+        let qBusqueda = client
+          .from('reserva_habitacion')
+          .select(
+            `estadias!inner(id), habitaciones!inner(hab_numero),
+             reservas!inner(hotel_id, huespedes!inner(nombres, apellidos, nro_doc, ruc, razon_social))`,
+          )
+          .eq('reservas.hotel_id', hotelId)
+          .eq('estadias.estado_actual', 'finalizada')
+          .limit(LIMITE_BUSQUEDA_FINALIZADAS);
+        for (const palabra of busqueda.split(/\s+/)) {
+          qBusqueda = qBusqueda.or(
+            `nombres.ilike.%${palabra}%,apellidos.ilike.%${palabra}%,nro_doc.ilike.%${palabra}%,ruc.ilike.%${palabra}%,razon_social.ilike.%${palabra}%`,
+            { referencedTable: 'reservas.huespedes' },
+          );
+        }
+        if (filtros.habNumero) {
+          qBusqueda = qBusqueda.eq('habitaciones.hab_numero', Number(filtros.habNumero));
+        }
+        if (filtros.checkinDesde) {
+          qBusqueda = qBusqueda.gte(
+            'fecha_hora_checkin_prevista',
+            this.fechaLimaAInstante(filtros.checkinDesde).toISOString(),
+          );
+        }
+        if (filtros.checkinHasta) {
+          const hastaExclusivo = new Date(
+            this.fechaLimaAInstante(filtros.checkinHasta).getTime() + 24 * 60 * 60 * 1000,
+          );
+          qBusqueda = qBusqueda.lt('fecha_hora_checkout_prevista', hastaExclusivo.toISOString());
+        }
+        const { data: filas, error: busquedaError } = await qBusqueda;
+        if (busquedaError) throw busquedaError;
+        idsEstadiaFiltrados = (filas ?? []).map((f: any) => f.estadias.id);
+        if (idsEstadiaFiltrados.length === 0) {
+          return { data: [], total: 0 };
+        }
+      }
+
       const construirQueryFinalizada = (opciones: { count: 'exact' | false; head?: boolean }) => {
         let q = client
           .from('estadias')
@@ -1005,7 +1064,7 @@ export class EstadiasService {
               id, habitacion_id, tipo_alquiler, incluye_desayuno, tarifa_dia,
               fecha_hora_checkin_prevista, fecha_hora_checkout_prevista,
               habitaciones!inner(hab_numero, piso),
-              reservas!inner(hotel_id, huesped_id, ${embedHuespedes}(nombres, apellidos, tipo_doc, nro_doc, telefono, ruc, razon_social))
+              reservas!inner(hotel_id, huesped_id, huespedes(nombres, apellidos, tipo_doc, nro_doc, telefono, ruc, razon_social))
             )
           `,
             opciones.count ? { count: opciones.count, head: opciones.head ?? false } : {},
@@ -1013,14 +1072,8 @@ export class EstadiasService {
           .eq('reserva_habitacion.reservas.hotel_id', hotelId)
           .eq('estado_actual', 'finalizada');
 
-        if (busqueda) {
-          // Ver el comentario en construirQuery() más arriba.
-          for (const palabra of busqueda.split(/\s+/)) {
-            q = q.or(
-              `nombres.ilike.%${palabra}%,apellidos.ilike.%${palabra}%,nro_doc.ilike.%${palabra}%,ruc.ilike.%${palabra}%,razon_social.ilike.%${palabra}%`,
-              { referencedTable: 'reserva_habitacion.reservas.huespedes' },
-            );
-          }
+        if (idsEstadiaFiltrados) {
+          q = q.in('id', idsEstadiaFiltrados);
         }
         if (filtros.conSaldo) {
           q = q.gt('saldo', 0);
