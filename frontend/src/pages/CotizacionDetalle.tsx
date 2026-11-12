@@ -268,9 +268,18 @@ export function CotizacionDetalle() {
 
   useEffect(() => {
     if (!hotelActual) return;
+    // El logo (base64, hasta ~1.4MB) se pide aparte -- GET /hoteles/:id ya
+    // no lo trae (ver HOTEL_SELECT en ConfiguracionService). Se fusiona acá
+    // porque esta pantalla sí lo necesita para el PDF (imprimirCotizacionPDF).
     api
-      .get<HotelIdentidad>(`/hoteles/${hotelActual.hotelId}`)
-      .then(setHotelInfo)
+      .get<Omit<HotelIdentidad, 'logo_url'>>(`/hoteles/${hotelActual.hotelId}`)
+      .then((hotelSinLogo) => {
+        setHotelInfo({ ...hotelSinLogo, logo_url: null });
+        api
+          .get<{ logo_url: string | null }>(`/hoteles/${hotelActual.hotelId}/logo`)
+          .then(({ logo_url }) => setHotelInfo((actual) => (actual ? { ...actual, logo_url } : actual)))
+          .catch(() => {});
+      })
       .catch(() => {});
   }, [hotelActual]);
 

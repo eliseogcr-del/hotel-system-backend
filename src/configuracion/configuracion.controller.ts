@@ -42,6 +42,13 @@ export class ConfiguracionController {
     return this.configuracionService.obtenerHotel(client, hotelId);
   }
 
+  @Get('logo')
+  @Roles('admin', 'recepcion')
+  async obtenerLogoHotel(@Param('hotelId') hotelId: string, @CurrentUser() user: RequestUser) {
+    const client = this.supabase.getClientForRequest(user.accessToken);
+    return this.configuracionService.obtenerLogoHotel(client, hotelId);
+  }
+
   @Patch()
   @Roles('admin')
   async actualizarHotel(
