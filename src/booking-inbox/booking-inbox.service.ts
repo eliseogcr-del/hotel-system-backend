@@ -8,6 +8,16 @@ import { WhatsappCallmebotService } from './whatsapp-callmebot.service';
 
 const REMITENTE_BOOKING = 'noreply@booking.com';
 
+// Antes se buscaba por seen:false ("no leído" = pendiente de procesar), pero
+// el hotel también lee estos correos a mano desde Gmail -- si alguien los
+// abre antes de que el bot corra, quedan marcados \Seen y el bot nunca los
+// encuentra, aunque no se haya avisado nada por WhatsApp (bug real
+// reportado: "ya no avisa"). Buscar por fecha en vez de por leído/no leído
+// evita depender de que nadie más toque la bandeja; la protección contra
+// avisos duplicados sigue intacta porque yaFueAvisado() ya la resuelve
+// contra la base de datos (por Message-ID), no contra el estado de lectura.
+const DIAS_VENTANA_BUSQUEDA = 7;
+
 export interface CorreoProcesado {
   asunto: string;
   tipo: string;
@@ -19,9 +29,12 @@ export interface CorreoProcesado {
 
 /**
  * Revisa por IMAP la bandeja de correo del hotel buscando avisos de Booking
- * sin leer, arma el aviso de WhatsApp correspondiente y marca el correo
- * como leído para no volver a procesarlo (misma idea que "unread = pendiente
- * de procesar", sin necesitar una tabla aparte para no duplicar avisos).
+ * de los últimos DIAS_VENTANA_BUSQUEDA días (sin importar si ya se leyeron a
+ * mano -- el hotel también revisa esta bandeja directo desde Gmail), arma el
+ * aviso de WhatsApp correspondiente y marca el correo como leído tras
+ * procesarlo. La protección contra avisos duplicados vive en la base de
+ * datos (yaFueAvisado(), por Message-ID), no en el estado de lectura del
+ * correo -- por eso leerlos a mano no interfiere con esto.
  *
  * Deliberadamente NO crea ninguna reserva: los correos de Booking de este
  * hotel nunca traen tipo de habitación, y a veces ni fechas/huésped -- ver
@@ -57,8 +70,9 @@ export class BookingInboxService {
     try {
       const lock = await client.getMailboxLock('INBOX');
       try {
+        const desde = new Date(Date.now() - DIAS_VENTANA_BUSQUEDA * 24 * 60 * 60 * 1000);
         const uids = await client.search(
-          { seen: false, from: REMITENTE_BOOKING },
+          { since: desde, from: REMITENTE_BOOKING },
           { uid: true },
         );
 
