@@ -52,12 +52,49 @@ export class DisponibilidadService {
       };
     }
 
-    // 1. Tiempo de limpieza según el tipo de habitación
-    const { data: habitacion, error: habError } = await client
-      .from('habitaciones')
-      .select('id, tipo_id, estado, tipos_habitacion(tiempo_limpieza_min)')
-      .eq('id', habitacionId)
-      .single();
+    // 1. Tiempo de limpieza según el tipo de habitación, y 2. reservas
+    // activas de esa habitación que puedan chocar -- en paralelo: la
+    // consulta de reservas no depende del resultado de la de habitación
+    // (el margen de búsqueda es fijo, el tiempo de limpieza real solo se
+    // usa más abajo, en el filtro en memoria). Se paga el costo de la
+    // segunda consulta aunque la habitación termine bloqueada/no
+    // encontrada (caso raro), a cambio de no esperar las dos siempre una
+    // tras otra en el caso normal.
+    const margenBusqueda = 24 * 60 * 60 * 1000; // 1 día en ms
+    const desde = new Date(nuevoCheckin.getTime() - margenBusqueda).toISOString();
+    const hasta = new Date(nuevoCheckout.getTime() + margenBusqueda).toISOString();
+
+    let queryReservas = client
+      .from('reserva_habitacion')
+      .select(
+        `
+        id,
+        fecha_hora_checkin_prevista,
+        fecha_hora_checkout_prevista,
+        reservas!inner(id, estado, huespedes(nombres, apellidos)),
+        estadias(estado_actual)
+      `,
+      )
+      .eq('habitacion_id', habitacionId)
+      .neq('reservas.estado', 'cancelada')
+      .gte('fecha_hora_checkout_prevista', desde)
+      .lte('fecha_hora_checkin_prevista', hasta);
+
+    if (input.excluirReservaHabitacionId) {
+      queryReservas = queryReservas.neq('id', input.excluirReservaHabitacionId);
+    }
+
+    const [
+      { data: habitacion, error: habError },
+      { data: existentes, error: resError },
+    ] = await Promise.all([
+      client
+        .from('habitaciones')
+        .select('id, tipo_id, estado, tipos_habitacion(tiempo_limpieza_min)')
+        .eq('id', habitacionId)
+        .single(),
+      queryReservas,
+    ]);
 
     if (habError || !habitacion) {
       return {
@@ -88,35 +125,6 @@ export class DisponibilidadService {
       tiempo_limpieza_min: number;
     } | null;
     const tiempoLimpiezaMin = tipoHabitacion?.tiempo_limpieza_min ?? 45;
-
-    // 2. Traer reservas activas de esa habitación que puedan chocar
-    // (ampliamos el rango de búsqueda +/- 1 día del rango solicitado
-    // para no traer toda la historia de la habitación)
-    const margenBusqueda = 24 * 60 * 60 * 1000; // 1 día en ms
-    const desde = new Date(nuevoCheckin.getTime() - margenBusqueda).toISOString();
-    const hasta = new Date(nuevoCheckout.getTime() + margenBusqueda).toISOString();
-
-    let query = client
-      .from('reserva_habitacion')
-      .select(
-        `
-        id,
-        fecha_hora_checkin_prevista,
-        fecha_hora_checkout_prevista,
-        reservas!inner(id, estado, huespedes(nombres, apellidos)),
-        estadias(estado_actual)
-      `,
-      )
-      .eq('habitacion_id', habitacionId)
-      .neq('reservas.estado', 'cancelada')
-      .gte('fecha_hora_checkout_prevista', desde)
-      .lte('fecha_hora_checkin_prevista', hasta);
-
-    if (input.excluirReservaHabitacionId) {
-      query = query.neq('id', input.excluirReservaHabitacionId);
-    }
-
-    const { data: existentes, error: resError } = await query;
 
     if (resError) {
       throw resError;
