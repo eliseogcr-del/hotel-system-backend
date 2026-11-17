@@ -10,6 +10,7 @@ import {
   buscarEmpresaPorRuc,
   buscarEmpresasPorNombre,
   crearHuesped,
+  esErrorDocumentoDuplicado,
   type Huesped,
   type Empresa,
 } from '../lib/huespedes';
@@ -589,6 +590,17 @@ export function ReservaFormModal({
             razonSocial: huespedRazonSocial.trim() || undefined,
           });
           idHuesped = creado.id;
+          // Se guarda en el estado YA -- no al final del try -- porque la
+          // creación del huésped y la de la reserva son dos peticiones
+          // separadas, sin transacción entre ambas. Si la reserva falla
+          // después (ej. la habitación ya no está disponible), el huésped
+          // ya quedó creado en la base; sin esto, reintentar el envío
+          // volvía a pasar por esta misma rama e intentaba crearlo de
+          // nuevo con el mismo documento -- error real visto en
+          // producción: "duplicate key value violates unique constraint
+          // huespedes_hotel_id_tipo_doc_nro_doc_key".
+          setHuespedId(creado.id);
+          setHuespedOriginal(creado);
         } else if (idHuesped && huespedOriginal) {
           // Huésped ya existente encontrado por la búsqueda: si se corrigió
           // algún dato de contacto (teléfono desactualizado, etc.) se guarda
@@ -665,6 +677,10 @@ export function ReservaFormModal({
       if (err instanceof ApiError && err.status === 409) {
         setError(
           `${err.message} — si es una persona distinta, usa "Buscar huésped" arriba para reasignar en vez de editar estos datos.`,
+        );
+      } else if (esErrorDocumentoDuplicado(err)) {
+        setError(
+          'Ya existe un huésped con ese documento en este hotel (puede ser de un intento anterior). Presiona "Buscar" de nuevo con el mismo dato para reutilizarlo, en vez de volver a registrarlo.',
         );
       } else {
         setError(mensajeDeError(err, 'No se pudo guardar la reserva'));
