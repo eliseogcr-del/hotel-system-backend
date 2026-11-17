@@ -297,6 +297,14 @@ export function Habitaciones() {
   const [checkinHab, setCheckinHab] = useState<Habitacion | null>(null);
   const [reservaModal, setReservaModal] = useState<Habitacion | null>(null);
   const [fotosModal, setFotosModal] = useState<FotosHabitacionEstado | null>(null);
+  // Comparten estado entre varias acciones de la misma fila a propósito
+  // (notas, mantenimiento, visible en WhatsApp, marcar disponible): mientras
+  // cualquiera esté en curso para esa habitación/cochera, se bloquean las
+  // demás de la misma fila -- evita pisarse entre dos acciones a la vez y
+  // le da feedback visual de "procesando" a los controles que antes no
+  // tenían ninguno.
+  const [accionandoHabId, setAccionandoHabId] = useState<string | null>(null);
+  const [accionandoCocheraId, setAccionandoCocheraId] = useState<string | null>(null);
   const [fotosCocheraModal, setFotosCocheraModal] = useState<FotosCocheraEstado | null>(null);
   const [precioMascotaDia, setPrecioMascotaDia] = useState(0);
   const [horaCheckoutHotel, setHoraCheckoutHotel] = useState<string | undefined>(undefined);
@@ -397,12 +405,15 @@ export function Habitaciones() {
   }
 
   async function guardarNotas(hab: Habitacion, notas: string) {
-    if (!hotelActual || !hab.estadiaId) return;
+    if (!hotelActual || !hab.estadiaId || accionandoHabId) return;
+    setAccionandoHabId(hab.id);
     try {
       await api.patch(`/hoteles/${hotelActual.hotelId}/estadias/${hab.estadiaId}/notas`, { notas });
       setHabitaciones((prev) => prev.map((h) => (h.id === hab.id ? { ...h, notas } : h)));
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'No se pudieron guardar las notas');
+    } finally {
+      setAccionandoHabId(null);
     }
   }
 
@@ -410,12 +421,15 @@ export function Habitaciones() {
   // estadía -- se expone acá para poder marcarlo/desmarcarlo de un vistazo
   // desde la sección "Planificación de Desayunos" sin entrar al detalle.
   async function guardarIncluyeDesayuno(hab: Habitacion, incluyeDesayuno: boolean) {
-    if (!hotelActual || !hab.estadiaId) return;
+    if (!hotelActual || !hab.estadiaId || accionandoHabId) return;
+    setAccionandoHabId(hab.id);
     try {
       await api.patch(`/hoteles/${hotelActual.hotelId}/estadias/${hab.estadiaId}`, { incluyeDesayuno });
       setHabitaciones((prev) => prev.map((h) => (h.id === hab.id ? { ...h, incluyeDesayuno } : h)));
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'No se pudo guardar el desayuno');
+    } finally {
+      setAccionandoHabId(null);
     }
   }
 
@@ -423,12 +437,15 @@ export function Habitaciones() {
   // dejar un aviso operativo ("faltan toallas") cuando está disponible, sin
   // huésped ni tarea HK en curso.
   async function guardarNotasHabitacion(hab: Habitacion, notas: string) {
-    if (!hotelActual) return;
+    if (!hotelActual || accionandoHabId) return;
+    setAccionandoHabId(hab.id);
     try {
       await api.patch(`/hoteles/${hotelActual.hotelId}/habitaciones/${hab.id}/notas`, { notas });
       setHabitaciones((prev) => prev.map((h) => (h.id === hab.id ? { ...h, notas_operativas: notas || null } : h)));
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'No se pudieron guardar las notas');
+    } finally {
+      setAccionandoHabId(null);
     }
   }
 
@@ -438,28 +455,35 @@ export function Habitaciones() {
   // (ver ConfiguracionService.actualizarCocheraOperativo()), así que este
   // control solo se muestra cuando `c.ocupante` es null.
   async function cambiarEstadoCochera(cochera: Cochera, ocupada: boolean) {
-    if (!hotelActual) return;
+    if (!hotelActual || accionandoCocheraId) return;
+    setAccionandoCocheraId(cochera.id);
     const estado = ocupada ? 'ocupada' : 'disponible';
     try {
       await api.patch(`/hoteles/${hotelActual.hotelId}/cocheras/${cochera.id}/operativo`, { estado });
       setCocheras((prev) => prev.map((c) => (c.id === cochera.id ? { ...c, estado } : c)));
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'No se pudo cambiar el estado de la cochera');
+    } finally {
+      setAccionandoCocheraId(null);
     }
   }
 
   async function guardarNotasCochera(cochera: Cochera, notas: string) {
-    if (!hotelActual) return;
+    if (!hotelActual || accionandoCocheraId) return;
+    setAccionandoCocheraId(cochera.id);
     try {
       await api.patch(`/hoteles/${hotelActual.hotelId}/cocheras/${cochera.id}/operativo`, { notas });
       setCocheras((prev) => prev.map((c) => (c.id === cochera.id ? { ...c, notas: notas || null } : c)));
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'No se pudieron guardar las notas');
+    } finally {
+      setAccionandoCocheraId(null);
     }
   }
 
   async function alternarMantenimientoPlanificado(hab: Habitacion) {
-    if (!hotelActual || hab.estado !== 'ocupada') return;
+    if (!hotelActual || hab.estado !== 'ocupada' || accionandoHabId) return;
+    setAccionandoHabId(hab.id);
     const nuevo = !hab.mantenimiento_planificado;
     try {
       await api.patch(`/hoteles/${hotelActual.hotelId}/habitaciones/${hab.id}/mantenimiento`, {
@@ -470,6 +494,8 @@ export function Habitaciones() {
       );
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'No se pudo actualizar');
+    } finally {
+      setAccionandoHabId(null);
     }
   }
 
@@ -477,7 +503,8 @@ export function Habitaciones() {
   // false, el agente de WhatsApp nunca ofrece esta habitación aunque esté
   // realmente disponible (política comercial del hotel).
   async function alternarVisibleWhatsapp(hab: Habitacion) {
-    if (!hotelActual) return;
+    if (!hotelActual || accionandoHabId) return;
+    setAccionandoHabId(hab.id);
     const nuevo = !hab.visible_whatsapp;
     try {
       await api.patch(`/hoteles/${hotelActual.hotelId}/habitaciones/${hab.id}/visible-whatsapp`, {
@@ -486,16 +513,21 @@ export function Habitaciones() {
       setHabitaciones((prev) => prev.map((h) => (h.id === hab.id ? { ...h, visible_whatsapp: nuevo } : h)));
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'No se pudo actualizar');
+    } finally {
+      setAccionandoHabId(null);
     }
   }
 
   async function marcarDisponible(hab: Habitacion) {
-    if (!hotelActual) return;
+    if (!hotelActual || accionandoHabId) return;
+    setAccionandoHabId(hab.id);
     try {
       await api.patch(`/hoteles/${hotelActual.hotelId}/habitaciones/${hab.id}/marcar-disponible`);
       cargar();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'No se pudo marcar disponible');
+    } finally {
+      setAccionandoHabId(null);
     }
   }
 
@@ -766,19 +798,21 @@ export function Habitaciones() {
                   {(h.estado === 'limpieza' || h.estado === 'mantenimiento') && (
                     <button
                       onClick={() => marcarDisponible(h)}
-                      style={linkBtnStyle}
+                      disabled={accionandoHabId === h.id}
+                      style={{ ...linkBtnStyle, opacity: accionandoHabId === h.id ? 0.5 : 1 }}
                       title="Usar solo si HK ya terminó pero se le olvidó cerrar la tarea"
                     >
-                      Marcar disponible
+                      {accionandoHabId === h.id ? 'Procesando...' : 'Marcar disponible'}
                     </button>
                   )}
                   {h.estado === 'ocupada' && !h.estadiaId && (
                     <button
                       onClick={() => marcarDisponible(h)}
-                      style={linkBtnStyle}
+                      disabled={accionandoHabId === h.id}
+                      style={{ ...linkBtnStyle, opacity: accionandoHabId === h.id ? 0.5 : 1 }}
                       title='Habitación "ocupada" sin ninguna estadía real en curso (ej. una tarea de mantenimiento con huésped dentro que quedó colgada de un huésped anterior) -- no hay checkout que hacer, esto la libera'
                     >
-                      Marcar disponible
+                      {accionandoHabId === h.id ? 'Procesando...' : 'Marcar disponible'}
                     </button>
                   )}
                   <button
@@ -848,8 +882,15 @@ export function Habitaciones() {
                   <input
                     type="checkbox"
                     checked={h.mantenimiento_planificado}
-                    disabled={h.estado !== 'ocupada'}
-                    title={h.estado !== 'ocupada' ? 'Solo se puede marcar mientras la habitación está ocupada' : ''}
+                    disabled={h.estado !== 'ocupada' || accionandoHabId === h.id}
+                    title={
+                      accionandoHabId === h.id
+                        ? 'Procesando...'
+                        : h.estado !== 'ocupada'
+                          ? 'Solo se puede marcar mientras la habitación está ocupada'
+                          : ''
+                    }
+                    style={{ cursor: accionandoHabId === h.id ? 'wait' : undefined }}
                     onChange={() => alternarMantenimientoPlanificado(h)}
                   />
                 </td>
@@ -857,7 +898,9 @@ export function Habitaciones() {
                   <input
                     type="checkbox"
                     checked={h.visible_whatsapp}
-                    title="El agente de WhatsApp la ofrece cuando está marcado"
+                    disabled={accionandoHabId === h.id}
+                    title={accionandoHabId === h.id ? 'Procesando...' : 'El agente de WhatsApp la ofrece cuando está marcado'}
+                    style={{ cursor: accionandoHabId === h.id ? 'wait' : undefined }}
                     onChange={() => alternarVisibleWhatsapp(h)}
                   />
                 </td>
@@ -921,9 +964,10 @@ export function Habitaciones() {
                         <input
                           type="checkbox"
                           checked={c.estado === 'ocupada'}
+                          disabled={accionandoCocheraId === c.id}
                           onChange={(e) => cambiarEstadoCochera(c, e.target.checked)}
-                          title="Ocupar/liberar esta cochera a mano (sin ligarla a ninguna habitación, ej. auto de un cliente externo o del personal)"
-                          style={checkboxGrandeStyle}
+                          title={accionandoCocheraId === c.id ? 'Procesando...' : 'Ocupar/liberar esta cochera a mano (sin ligarla a ninguna habitación, ej. auto de un cliente externo o del personal)'}
+                          style={{ ...checkboxGrandeStyle, cursor: accionandoCocheraId === c.id ? 'wait' : checkboxGrandeStyle.cursor }}
                         />
                       )}
                     </td>
@@ -985,6 +1029,7 @@ export function Habitaciones() {
         habitaciones={habitaciones}
         onGuardarNotas={guardarNotas}
         onGuardarDesayuno={guardarIncluyeDesayuno}
+        accionandoHabId={accionandoHabId}
       />
 
       {checkinHab && (
@@ -1878,10 +1923,12 @@ function SeccionPlanificacionDesayunos({
   habitaciones,
   onGuardarNotas,
   onGuardarDesayuno,
+  accionandoHabId,
 }: {
   habitaciones: Habitacion[];
   onGuardarNotas: (hab: Habitacion, notas: string) => void;
   onGuardarDesayuno: (hab: Habitacion, incluyeDesayuno: boolean) => void;
+  accionandoHabId: string | null;
 }) {
   const [filtro, setFiltro] = useState<FiltroDesayuno>('todas');
 
@@ -1935,9 +1982,10 @@ function SeccionPlanificacionDesayunos({
                       <input
                         type="checkbox"
                         checked={h.incluyeDesayuno}
+                        disabled={accionandoHabId === h.id}
                         onChange={(e) => onGuardarDesayuno(h, e.target.checked)}
-                        title="Marcar/desmarcar si esta estadía incluye desayuno"
-                        style={checkboxGrandeStyle}
+                        title={accionandoHabId === h.id ? 'Procesando...' : 'Marcar/desmarcar si esta estadía incluye desayuno'}
+                        style={{ ...checkboxGrandeStyle, cursor: accionandoHabId === h.id ? 'wait' : checkboxGrandeStyle.cursor }}
                       />
                     </td>
                     <td style={{ ...tdDesayunoStyle, borderRight: 'none' }}>

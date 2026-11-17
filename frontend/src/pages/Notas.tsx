@@ -94,6 +94,7 @@ export function Notas() {
   const [formularioAbierto, setFormularioAbierto] = useState(false);
   const [notaEditandoId, setNotaEditandoId] = useState<string | null>(null);
   const [guardando, setGuardando] = useState(false);
+  const [alternandoId, setAlternandoId] = useState<string | null>(null);
   const [formularioData, setFormularioData] = useState<CrearNotaDTO>({
     descripcion: '',
     tipo: 'Informativa',
@@ -137,12 +138,15 @@ export function Notas() {
   };
 
   const alternarVisible = async (nota: Nota) => {
-    if (!hotelActual) return;
+    if (!hotelActual || alternandoId) return;
+    setAlternandoId(nota.id);
     try {
       await api.patch<Nota>(`/hoteles/${hotelActual.hotelId}/notas/${nota.id}`, { visible: !nota.visible });
       cargarNotas();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'No se pudo cambiar la visibilidad de la nota');
+    } finally {
+      setAlternandoId(null);
     }
   };
 
@@ -330,8 +334,15 @@ export function Notas() {
                   type="checkbox"
                   checked={nota.visible}
                   onChange={() => alternarVisible(nota)}
-                  title={nota.visible ? 'Marcar como no visible (se oculta)' : 'Marcar como visible (vuelve a aparecer)'}
-                  style={{ marginTop: 4, cursor: 'pointer' }}
+                  disabled={alternandoId === nota.id}
+                  title={
+                    alternandoId === nota.id
+                      ? 'Procesando...'
+                      : nota.visible
+                        ? 'Marcar como no visible (se oculta)'
+                        : 'Marcar como visible (vuelve a aparecer)'
+                  }
+                  style={{ marginTop: 4, cursor: alternandoId === nota.id ? 'wait' : 'pointer' }}
                 />
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
                   <div>

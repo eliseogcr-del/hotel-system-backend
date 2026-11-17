@@ -293,13 +293,20 @@ export function TareasHk() {
                   ...tarjetaTareaStyle,
                   background: color.bg,
                   border: `2px solid ${color.border}`,
-                  cursor: puedeAvanzar ? 'pointer' : 'default',
+                  cursor: ocupado ? 'wait' : puedeAvanzar ? 'pointer' : 'default',
                   opacity: ocupado ? 0.6 : 1,
+                  // Además de la opacidad (sutil, fácil de no notar en una
+                  // tarjeta chica de color): bloquea clics mientras está en
+                  // curso, para que no parezca que "no hizo nada" si alguien
+                  // toca de nuevo antes de que la petición anterior termine.
+                  pointerEvents: ocupado ? 'none' : undefined,
                 }}
                 title={
-                  puedeAvanzar
-                    ? `Toca para pasar a "${t.estado === 'planificado' ? ESTADO_LABEL.en_proceso : ESTADO_LABEL.terminado}"`
-                    : undefined
+                  ocupado
+                    ? 'Procesando...'
+                    : puedeAvanzar
+                      ? `Toca para pasar a "${t.estado === 'planificado' ? ESTADO_LABEL.en_proceso : ESTADO_LABEL.terminado}"`
+                      : undefined
                 }
               >
                 <span style={{ fontSize: 22, fontWeight: 700, color: 'var(--text-primary)' }}>
@@ -322,10 +329,16 @@ export function TareasHk() {
                 <div onClick={(e) => e.stopPropagation()}>
                   <NotasTareaCelda notas={t.notas ?? ''} onGuardar={(n) => guardarNotas(t.id, n)} />
                 </div>
-                {puedeAvanzar && (
-                  <span style={{ fontSize: 10, fontStyle: 'italic', color: color.text }}>
-                    Toca para {t.estado === 'planificado' ? 'iniciar' : 'terminar'}
+                {ocupado ? (
+                  <span style={{ fontSize: 10, fontStyle: 'italic', fontWeight: 700, color: color.text }}>
+                    Procesando...
                   </span>
+                ) : (
+                  puedeAvanzar && (
+                    <span style={{ fontSize: 10, fontStyle: 'italic', color: color.text }}>
+                      Toca para {t.estado === 'planificado' ? 'iniciar' : 'terminar'}
+                    </span>
+                  )
                 )}
               </div>
             );
