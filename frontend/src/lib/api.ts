@@ -51,10 +51,30 @@ function esperar(ms: number): Promise<void> {
 // despertar. Solo reintenta fallos de RED: una respuesta HTTP de error
 // (4xx/5xx) sí llega a `llamar()` con éxito y se maneja más abajo como
 // ApiError, sin pasar por acá.
+//
+// SOLO para GET: un fallo de red no garantiza que la petición nunca llegó
+// al servidor -- puede haberse procesado del lado del backend y perderse
+// la respuesta en el camino de vuelta (caso real reportado: una nota
+// quedó registrada DOS VECES al crearla desde un hotel con el backend
+// recién despertando). Para GET reintentar es seguro (no cambia nada); para
+// POST/PATCH/DELETE el reintento queda deshabilitado -- más vale mostrar el
+// error y que la persona reintente a mano (viendo si de verdad no se creó)
+// que duplicar en silencio una reserva, un cargo o una nota.
 async function llamarConReintento(path: string, options: RequestInit, token: string | undefined): Promise<Response> {
+  const metodo = (options.method ?? 'GET').toUpperCase();
   try {
     return await llamar(path, options, token);
   } catch {
+    if (metodo !== 'GET') {
+      // No se reintenta, pero tampoco se puede asegurar que el backend no
+      // haya llegado a procesarla -- el mensaje genérico de "no se pudo
+      // guardar" invitaría a reintentar a ciegas y duplicar la acción a
+      // mano, justo lo que esto evita del lado automático.
+      throw new ApiError(
+        0,
+        'No se pudo confirmar si la acción se completó (falla de red). Verifica antes de reintentar, para no duplicarla.',
+      );
+    }
     await esperar(3000);
     return llamar(path, options, token);
   }
