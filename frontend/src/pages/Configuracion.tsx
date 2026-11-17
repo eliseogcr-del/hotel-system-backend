@@ -835,25 +835,34 @@ function SeccionTipos({
   }
 
   const [editandoId, setEditandoId] = useState<string | null>(null);
+  const [accionandoId, setAccionandoId] = useState<string | null>(null);
 
   async function alternarActivo(tipo: TipoHabitacion) {
+    if (accionandoId) return;
+    setAccionandoId(tipo.id);
     setError(null);
     try {
       await api.patch(`/hoteles/${hotelId}/tipos-habitacion/${tipo.id}`, { activo: !tipo.activo });
       onCambio();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'No se pudo actualizar');
+    } finally {
+      setAccionandoId(null);
     }
   }
 
   async function eliminar(tipo: TipoHabitacion) {
+    if (accionandoId) return;
     if (!confirm(`¿Eliminar el tipo "${tipo.nombre}"? Solo funciona si no tiene habitaciones ni tarifas asociadas.`)) return;
+    setAccionandoId(tipo.id);
     setError(null);
     try {
       await api.delete(`/hoteles/${hotelId}/tipos-habitacion/${tipo.id}`);
       onCambio();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'No se pudo eliminar');
+    } finally {
+      setAccionandoId(null);
     }
   }
 
@@ -879,14 +888,22 @@ function SeccionTipos({
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, justifyContent: 'space-between', alignItems: 'center' }}>
                 <span style={{ fontWeight: 500 }}>{t.nombre}</span>
                 <span style={{ display: 'flex', gap: 6 }}>
-                  <button onClick={() => setEditandoId(t.id)} style={btnSecondary}>
+                  <button onClick={() => setEditandoId(t.id)} style={btnSecondary} disabled={accionandoId === t.id}>
                     Editar
                   </button>
-                  <button onClick={() => alternarActivo(t)} style={btnSecondary}>
-                    {t.activo ? 'Desactivar' : 'Activar'}
+                  <button
+                    onClick={() => alternarActivo(t)}
+                    disabled={accionandoId === t.id}
+                    style={{ ...btnSecondary, opacity: accionandoId === t.id ? 0.6 : 1 }}
+                  >
+                    {accionandoId === t.id ? 'Procesando...' : t.activo ? 'Desactivar' : 'Activar'}
                   </button>
-                  <button onClick={() => eliminar(t)} style={btnDanger}>
-                    Eliminar
+                  <button
+                    onClick={() => eliminar(t)}
+                    disabled={accionandoId === t.id}
+                    style={{ ...btnDanger, opacity: accionandoId === t.id ? 0.6 : 1 }}
+                  >
+                    {accionandoId === t.id ? 'Procesando...' : 'Eliminar'}
                   </button>
                 </span>
               </div>
@@ -1166,6 +1183,7 @@ function SeccionHabitaciones({
   const [piso, setPiso] = useState(1);
   const [enviando, setEnviando] = useState(false);
   const [editandoId, setEditandoId] = useState<string | null>(null);
+  const [accionandoId, setAccionandoId] = useState<string | null>(null);
 
   async function crear(e: FormEvent) {
     e.preventDefault();
@@ -1183,23 +1201,31 @@ function SeccionHabitaciones({
   }
 
   async function cambiarEstado(hab: Habitacion, estado: string) {
+    if (accionandoId) return;
+    setAccionandoId(hab.id);
     setError(null);
     try {
       await api.patch(`/hoteles/${hotelId}/habitaciones/${hab.id}`, { estado });
       onCambio();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'No se pudo actualizar');
+    } finally {
+      setAccionandoId(null);
     }
   }
 
   async function eliminar(hab: Habitacion) {
+    if (accionandoId) return;
     if (!confirm(`¿Eliminar la habitación ${hab.hab_numero}? Solo funciona si no tiene reservas ni historial.`)) return;
+    setAccionandoId(hab.id);
     setError(null);
     try {
       await api.delete(`/hoteles/${hotelId}/habitaciones/${hab.id}`);
       onCambio();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'No se pudo eliminar');
+    } finally {
+      setAccionandoId(null);
     }
   }
 
@@ -1231,7 +1257,8 @@ function SeccionHabitaciones({
               <select
                 value={h.estado}
                 onChange={(e) => cambiarEstado(h, e.target.value)}
-                style={{ ...inputStyle, padding: '4px 8px', fontSize: 12 }}
+                disabled={accionandoId === h.id}
+                style={{ ...inputStyle, padding: '4px 8px', fontSize: 12, cursor: accionandoId === h.id ? 'wait' : undefined }}
               >
                 <option value="disponible">Disponible</option>
                 <option value="ocupada">Ocupada</option>
@@ -1240,11 +1267,15 @@ function SeccionHabitaciones({
                 <option value="bloqueada">Bloqueada</option>
               </select>
               <span style={{ display: 'flex', gap: 6 }}>
-                <button onClick={() => setEditandoId(h.id)} style={btnSecondary}>
+                <button onClick={() => setEditandoId(h.id)} disabled={accionandoId === h.id} style={btnSecondary}>
                   Editar
                 </button>
-                <button onClick={() => eliminar(h)} style={btnDanger}>
-                  Eliminar
+                <button
+                  onClick={() => eliminar(h)}
+                  disabled={accionandoId === h.id}
+                  style={{ ...btnDanger, opacity: accionandoId === h.id ? 0.6 : 1 }}
+                >
+                  {accionandoId === h.id ? 'Procesando...' : 'Eliminar'}
                 </button>
               </span>
             </div>
@@ -1419,6 +1450,7 @@ function SeccionBazar({
   const [precio, setPrecio] = useState('');
   const [enviando, setEnviando] = useState(false);
   const [editandoId, setEditandoId] = useState<string | null>(null);
+  const [accionandoId, setAccionandoId] = useState<string | null>(null);
 
   async function crear(e: FormEvent) {
     e.preventDefault();
@@ -1437,12 +1469,16 @@ function SeccionBazar({
   }
 
   async function alternarActivo(producto: ProductoBazar) {
+    if (accionandoId) return;
+    setAccionandoId(producto.id);
     setError(null);
     try {
       await api.patch(`/hoteles/${hotelId}/productos-bazar/${producto.id}`, { activo: !producto.activo });
       onCambio();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'No se pudo actualizar');
+    } finally {
+      setAccionandoId(null);
     }
   }
 
@@ -1475,11 +1511,15 @@ function SeccionBazar({
                 {p.activo ? 'Activo' : 'Inactivo'}
               </span>
               <span style={{ display: 'flex', gap: 6 }}>
-                <button onClick={() => setEditandoId(p.id)} style={btnSecondary}>
+                <button onClick={() => setEditandoId(p.id)} disabled={accionandoId === p.id} style={btnSecondary}>
                   Editar
                 </button>
-                <button onClick={() => alternarActivo(p)} style={btnSecondary}>
-                  {p.activo ? 'Desactivar' : 'Activar'}
+                <button
+                  onClick={() => alternarActivo(p)}
+                  disabled={accionandoId === p.id}
+                  style={{ ...btnSecondary, opacity: accionandoId === p.id ? 0.6 : 1 }}
+                >
+                  {accionandoId === p.id ? 'Procesando...' : p.activo ? 'Desactivar' : 'Activar'}
                 </button>
               </span>
             </div>
@@ -1584,6 +1624,7 @@ function SeccionTiposDesayuno({
   const [precio, setPrecio] = useState('');
   const [enviando, setEnviando] = useState(false);
   const [editandoId, setEditandoId] = useState<string | null>(null);
+  const [accionandoId, setAccionandoId] = useState<string | null>(null);
 
   async function crear(e: FormEvent) {
     e.preventDefault();
@@ -1602,12 +1643,16 @@ function SeccionTiposDesayuno({
   }
 
   async function alternarActivo(tipo: TipoDesayuno) {
+    if (accionandoId) return;
+    setAccionandoId(tipo.id);
     setError(null);
     try {
       await api.patch(`/hoteles/${hotelId}/tipos-desayuno/${tipo.id}`, { activo: !tipo.activo });
       onCambio();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'No se pudo actualizar');
+    } finally {
+      setAccionandoId(null);
     }
   }
 
@@ -1641,11 +1686,15 @@ function SeccionTiposDesayuno({
                 {t.activo ? 'Activo' : 'Inactivo'}
               </span>
               <span style={{ display: 'flex', gap: 6 }}>
-                <button onClick={() => setEditandoId(t.id)} style={btnSecondary}>
+                <button onClick={() => setEditandoId(t.id)} disabled={accionandoId === t.id} style={btnSecondary}>
                   Editar
                 </button>
-                <button onClick={() => alternarActivo(t)} style={btnSecondary}>
-                  {t.activo ? 'Desactivar' : 'Activar'}
+                <button
+                  onClick={() => alternarActivo(t)}
+                  disabled={accionandoId === t.id}
+                  style={{ ...btnSecondary, opacity: accionandoId === t.id ? 0.6 : 1 }}
+                >
+                  {accionandoId === t.id ? 'Procesando...' : t.activo ? 'Desactivar' : 'Activar'}
                 </button>
               </span>
             </div>
@@ -1751,6 +1800,7 @@ function SeccionTurnos({
   const [horaFin, setHoraFin] = useState('');
   const [enviando, setEnviando] = useState(false);
   const [editandoId, setEditandoId] = useState<string | null>(null);
+  const [accionandoId, setAccionandoId] = useState<string | null>(null);
 
   async function crear(e: FormEvent) {
     e.preventDefault();
@@ -1770,12 +1820,16 @@ function SeccionTurnos({
   }
 
   async function alternarActivo(turno: Turno) {
+    if (accionandoId) return;
+    setAccionandoId(turno.id);
     setError(null);
     try {
       await api.patch(`/hoteles/${hotelId}/turnos/${turno.id}`, { activo: !turno.activo });
       onCambio();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'No se pudo actualizar');
+    } finally {
+      setAccionandoId(null);
     }
   }
 
@@ -1811,11 +1865,15 @@ function SeccionTurnos({
                 {t.activo ? 'Activo' : 'Inactivo'}
               </span>
               <span style={{ display: 'flex', gap: 6 }}>
-                <button onClick={() => setEditandoId(t.id)} style={btnSecondary}>
+                <button onClick={() => setEditandoId(t.id)} disabled={accionandoId === t.id} style={btnSecondary}>
                   Editar
                 </button>
-                <button onClick={() => alternarActivo(t)} style={btnSecondary}>
-                  {t.activo ? 'Desactivar' : 'Activar'}
+                <button
+                  onClick={() => alternarActivo(t)}
+                  disabled={accionandoId === t.id}
+                  style={{ ...btnSecondary, opacity: accionandoId === t.id ? 0.6 : 1 }}
+                >
+                  {accionandoId === t.id ? 'Procesando...' : t.activo ? 'Desactivar' : 'Activar'}
                 </button>
               </span>
             </div>

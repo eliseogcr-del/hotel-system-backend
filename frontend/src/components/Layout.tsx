@@ -88,6 +88,7 @@ export function Layout() {
   const { asignaciones, hotelActual, cambiarHotel, personalNombre } = useHotel();
   const isMobile = useIsMobile();
   const [navAbierto, setNavAbierto] = useState(false);
+  const [cerrandoSesion, setCerrandoSesion] = useState(false);
   const [tipoCambio, setTipoCambio] = useState<TipoCambioVigente | null>(null);
 
   useEffect(() => {
@@ -209,6 +210,8 @@ export function Layout() {
   // que un cierre manual desde Caja.tsx -- calcula el saldo final de
   // verdad, no es un abandono silencioso).
   async function cerrarSesion() {
+    if (cerrandoSesion) return;
+    setCerrandoSesion(true);
     if (hotelActual) {
       try {
         const sesion = await api.get<{ id: string }>(`/hoteles/${hotelActual.hotelId}/caja/actual`);
@@ -218,6 +221,8 @@ export function Layout() {
       }
     }
     await signOut();
+    // No hace falta setCerrandoSesion(false): al cerrar sesión, ProtectedRoute
+    // desmonta este componente entero y manda a /login.
   }
 
   if (hotelActual?.rol === 'recepcion' && sesionCajaAbierta === null) {
@@ -432,6 +437,7 @@ export function Layout() {
             )}
             <button
               onClick={() => cerrarSesion()}
+              disabled={cerrandoSesion}
               style={{
                 border: '1px solid var(--chrome-border)',
                 borderRadius: 'var(--radius)',
@@ -440,9 +446,11 @@ export function Layout() {
                 fontSize: 13,
                 color: 'var(--chrome-text)',
                 flexShrink: 0,
+                opacity: cerrandoSesion ? 0.6 : 1,
+                cursor: cerrandoSesion ? 'wait' : 'pointer',
               }}
             >
-              {isMobile ? 'Salir' : 'Cerrar sesión'}
+              {cerrandoSesion ? 'Saliendo...' : isMobile ? 'Salir' : 'Cerrar sesión'}
             </button>
           </div>
         </header>
