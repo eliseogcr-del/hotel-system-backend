@@ -5,6 +5,7 @@ import { useHotel } from '../contexts/HotelContext';
 import { useIsMobile } from '../hooks/useIsMobile';
 import { api, ApiError } from '../lib/api';
 import { RecordatorioNotas } from './RecordatorioNotas';
+import { LogoGlyph } from './LogoMark';
 
 interface TipoCambioVigente {
   fecha: string;
@@ -301,14 +302,12 @@ export function Layout() {
                 alignItems: 'center',
                 justifyContent: 'center',
                 color: 'var(--chrome-bg)',
-                fontWeight: 700,
-                fontSize: 14,
                 flexShrink: 0,
               }}
             >
-              H
+              <LogoGlyph size={16} />
             </div>
-            <span style={{ fontSize: 13, fontWeight: 500, color: 'var(--chrome-text)' }}>Hotel Suite</span>
+            <span style={{ fontSize: 13, fontWeight: 500, color: 'var(--chrome-text)' }}>Hospeda</span>
           </div>
 
           {navItems.map((item) => (

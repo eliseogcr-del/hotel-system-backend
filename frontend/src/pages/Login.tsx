@@ -1,6 +1,7 @@
 import { useState, type CSSProperties, type FormEvent } from 'react';
 import { Navigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
+import { LogoGlyph } from '../components/LogoMark';
 
 export function Login() {
   const { session, signIn } = useAuth();
@@ -63,13 +64,12 @@ export function Login() {
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              fontWeight: 500,
             }}
           >
-            H
+            <LogoGlyph size={18} />
           </div>
           <div>
-            <p style={{ fontWeight: 500, fontSize: 14, margin: 0 }}>Hotel Suite</p>
+            <p style={{ fontWeight: 500, fontSize: 14, margin: 0 }}>Hospeda</p>
             <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: 0 }}>
               Sistema de gestión hotelera
             </p>
