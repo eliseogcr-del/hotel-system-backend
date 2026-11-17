@@ -93,6 +93,7 @@ export function Notas() {
   const [error, setError] = useState<string | null>(null);
   const [formularioAbierto, setFormularioAbierto] = useState(false);
   const [notaEditandoId, setNotaEditandoId] = useState<string | null>(null);
+  const [guardando, setGuardando] = useState(false);
   const [formularioData, setFormularioData] = useState<CrearNotaDTO>({
     descripcion: '',
     tipo: 'Informativa',
@@ -206,6 +207,10 @@ export function Notas() {
   }
 
   const manejarGuardar = async () => {
+    // Sin esto, un doble clic (o el Enter del formulario más un clic
+    // impaciente mientras el backend recién despierta) mandaba dos POST
+    // reales -- caso real reportado: una nota quedó registrada dos veces.
+    if (guardando) return;
     if (!hotelActual || !formularioData.descripcion.trim()) return;
     if (formularioData.tipo === 'Repetitiva' && !formularioData.fecha_hora_inicio_repeticion) {
       setError(
@@ -220,6 +225,7 @@ export function Notas() {
       return;
     }
 
+    setGuardando(true);
     try {
       const nuevaNota: CrearNotaDTO = {
         ...formularioData,
@@ -241,6 +247,8 @@ export function Notas() {
       cargarNotas(); // Recargar lista
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Error al guardar nota');
+    } finally {
+      setGuardando(false);
     }
   };
 
@@ -708,6 +716,7 @@ export function Notas() {
                 </button>
                 <button
                   type="submit"
+                  disabled={guardando}
                   style={{
                     padding: '8px 14px',
                     background: 'var(--brand)',
@@ -716,10 +725,11 @@ export function Notas() {
                     borderRadius: 'var(--radius)',
                     fontSize: 13,
                     fontWeight: 500,
-                    cursor: 'pointer',
+                    cursor: guardando ? 'default' : 'pointer',
+                    opacity: guardando ? 0.6 : 1,
                   }}
                 >
-                  {notaEditandoId ? 'Guardar cambios' : 'Guardar Nota'}
+                  {guardando ? 'Guardando...' : notaEditandoId ? 'Guardar cambios' : 'Guardar Nota'}
                 </button>
               </div>
             </form>
