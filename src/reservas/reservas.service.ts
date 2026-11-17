@@ -94,32 +94,38 @@ export class ReservasService {
     // si una habitación de la reserva grupal choca, se rechaza la reserva
     // completa en vez de crearla a medias. Mismo criterio para las cocheras
     // que traiga cada línea: deben estar 'disponible' en este momento.
-    for (const linea of dto.habitaciones) {
-      const resultado = await this.disponibilidad.validar(client, {
-        hotelId,
-        habitacionId: linea.habitacionId,
-        checkinPrevisto: linea.checkinPrevisto,
-        checkoutPrevisto: linea.checkoutPrevisto,
-      });
-      if (!resultado.disponible) {
-        throw new ConflictException(resultado.conflicto?.mensaje ?? 'La habitación no está disponible en ese rango');
-      }
+    //
+    // En paralelo (Promise.all, mismo patrón que el paso 2 de acá abajo):
+    // cada línea se valida independiente de las demás, así que una reserva
+    // de varias habitaciones no tiene por qué esperarlas una por una.
+    await Promise.all(
+      dto.habitaciones.map(async (linea) => {
+        const resultado = await this.disponibilidad.validar(client, {
+          hotelId,
+          habitacionId: linea.habitacionId,
+          checkinPrevisto: linea.checkinPrevisto,
+          checkoutPrevisto: linea.checkoutPrevisto,
+        });
+        if (!resultado.disponible) {
+          throw new ConflictException(resultado.conflicto?.mensaje ?? 'La habitación no está disponible en ese rango');
+        }
 
-      if (linea.cocheraId) {
-        const { data: cochera, error: cocheraError } = await client
-          .from('cocheras')
-          .select('id, estado, hotel_id')
-          .eq('id', linea.cocheraId)
-          .maybeSingle();
-        if (cocheraError) throw cocheraError;
-        if (!cochera || cochera.hotel_id !== hotelId) {
-          throw new NotFoundException('Cochera no encontrada en este hotel');
+        if (linea.cocheraId) {
+          const { data: cochera, error: cocheraError } = await client
+            .from('cocheras')
+            .select('id, estado, hotel_id')
+            .eq('id', linea.cocheraId)
+            .maybeSingle();
+          if (cocheraError) throw cocheraError;
+          if (!cochera || cochera.hotel_id !== hotelId) {
+            throw new NotFoundException('Cochera no encontrada en este hotel');
+          }
+          if (cochera.estado !== 'disponible') {
+            throw new BadRequestException('Esa cochera ya está ocupada');
+          }
         }
-        if (cochera.estado !== 'disponible') {
-          throw new BadRequestException('Esa cochera ya está ocupada');
-        }
-      }
-    }
+      }),
+    );
 
     // 2. Resolver tarifa y costo de cada línea.
     const lineasConCosto = await Promise.all(

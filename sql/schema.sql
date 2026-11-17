@@ -661,6 +661,25 @@ as $$
     where p.id = my_personal_id() and p.es_admin_organizacion = true and p_rol = 'admin';
 $$;
 
+-- Recalcula estadias.saldo como la suma de sus movimientos_cuenta, en un
+-- solo viaje a la base (antes era un SELECT de todos los movimientos +
+-- un UPDATE, dos viajes separados desde el backend por cada llamada --
+-- ver EstadiasService.recalcularSaldo()/migracion_recalcular_saldo_rpc.sql).
+-- Sin security definer a propósito: corre con los permisos de quien
+-- llama, respeta RLS igual que el resto del sistema.
+create or replace function recalcular_saldo_estadia(p_estadia_id uuid)
+returns numeric
+language sql
+as $$
+  update estadias
+  set saldo = coalesce(
+    (select sum(monto) from movimientos_cuenta where estadia_id = p_estadia_id),
+    0
+  )
+  where id = p_estadia_id
+  returning saldo;
+$$;
+
 -- ============================================================================
 -- ROW LEVEL SECURITY
 -- ============================================================================

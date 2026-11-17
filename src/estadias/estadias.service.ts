@@ -354,6 +354,10 @@ export class EstadiasService {
       .eq('id', (rh as any).habitacion_id);
     if (habError) throw habError;
 
+    // Una sola vez acá, después de postear alquiler + (early/mascota si
+    // aplican) + anticipos -- ver comentario en insertarMovimiento().
+    await this.recalcularSaldo(client, estadiaId);
+
     return this.obtenerDetalle(client, hotelId, estadiaId);
   }
 
@@ -378,39 +382,39 @@ export class EstadiasService {
     }
 
     const ahora = dto?.checkoutReal ? new Date(dto.checkoutReal) : new Date();
-    const { error: updError } = await client
-      .from('estadias')
-      .update({ checkout_real: ahora.toISOString(), estado_actual: 'finalizada' })
-      .eq('id', estadiaId);
-    if (updError) throw updError;
-
     const habitacionId = estadia.reserva_habitacion.habitacion_id;
 
-    const { error: habError } = await client
-      .from('habitaciones')
-      .update({ estado: 'limpieza' })
-      .eq('id', habitacionId);
-    if (habError) throw habError;
-
-    const { error: tareaError } = await client.from('tareas_hk').insert({
-      hotel_id: hotelId,
-      habitacion_id: habitacionId,
-      tipo: 'limpieza',
-      estado: 'planificado',
-      con_huesped_dentro: false,
-      definido_por: personalId,
-    });
-    if (tareaError) throw tareaError;
-
-    // La cochera es parte de la estadía igual que la habitación: si el
-    // huésped tenía una asignada, se libera al hacer checkout.
-    if (estadia.reserva_habitacion.cochera_id) {
-      const { error: cocheraError } = await client
-        .from('cocheras')
-        .update({ estado: 'disponible' })
-        .eq('id', estadia.reserva_habitacion.cochera_id);
-      if (cocheraError) throw cocheraError;
-    }
+    // Las 3-4 escrituras de acá abajo no dependen una de otra (tablas
+    // distintas, ningún resultado de una alimenta a la siguiente) -- antes
+    // se esperaban una por una; en paralelo, el tiempo total es el de la
+    // más lenta, no la suma de las cuatro.
+    const [updEstadia, updHab, insTarea, updCochera] = await Promise.all([
+      client
+        .from('estadias')
+        .update({ checkout_real: ahora.toISOString(), estado_actual: 'finalizada' })
+        .eq('id', estadiaId),
+      client.from('habitaciones').update({ estado: 'limpieza' }).eq('id', habitacionId),
+      client.from('tareas_hk').insert({
+        hotel_id: hotelId,
+        habitacion_id: habitacionId,
+        tipo: 'limpieza',
+        estado: 'planificado',
+        con_huesped_dentro: false,
+        definido_por: personalId,
+      }),
+      // La cochera es parte de la estadía igual que la habitación: si el
+      // huésped tenía una asignada, se libera al hacer checkout.
+      estadia.reserva_habitacion.cochera_id
+        ? client
+            .from('cocheras')
+            .update({ estado: 'disponible' })
+            .eq('id', estadia.reserva_habitacion.cochera_id)
+        : Promise.resolve({ error: null }),
+    ]);
+    if (updEstadia.error) throw updEstadia.error;
+    if (updHab.error) throw updHab.error;
+    if (insTarea.error) throw insTarea.error;
+    if (updCochera.error) throw updCochera.error;
 
     // El cargo por late ya NO se calcula ni se cobra solo al hacer
     // checkout -- lo decide recepción a mano (tipo 'late' en "Registrar
@@ -621,6 +625,7 @@ export class EstadiasService {
       notas: notaTraslado,
       registradoPor: personalId,
     });
+    await this.recalcularSaldo(client, estadiaId);
 
     return this.obtenerDetalle(client, hotelId, estadiaId);
   }
@@ -907,6 +912,10 @@ export class EstadiasService {
       if (cajaError) throw cajaError;
     }
 
+    // Una sola vez, después del cargo y (si aplica) su pago compensatorio
+    // -- ver comentario en insertarMovimiento().
+    await this.recalcularSaldo(client, estadiaId);
+
     return this.obtenerDetalle(client, hotelId, estadiaId);
   }
 
@@ -1144,13 +1153,19 @@ export class EstadiasService {
   }
 
   async obtenerDetalle(client: SupabaseClient, hotelId: string, estadiaId: string) {
-    const estadia = await this.cargarEstadiaHotel(client, hotelId, estadiaId);
-
-    const { data: movimientos, error } = await client
-      .from('movimientos_cuenta')
-      .select('*, personal(nombre)')
-      .eq('estadia_id', estadiaId)
-      .order('fecha', { ascending: true });
+    // En paralelo: la consulta de movimientos no depende del resultado de
+    // cargarEstadiaHotel() (solo necesita estadiaId, ya conocido) -- se
+    // llama al final de CADA operación de escritura de este servicio
+    // (checkin, checkout, pagos, etc.), así que ahorrar un viaje acá se
+    // multiplica por todas ellas.
+    const [estadia, { data: movimientos, error }] = await Promise.all([
+      this.cargarEstadiaHotel(client, hotelId, estadiaId),
+      client
+        .from('movimientos_cuenta')
+        .select('*, personal(nombre)')
+        .eq('estadia_id', estadiaId)
+        .order('fecha', { ascending: true }),
+    ]);
     if (error) throw error;
 
     return { ...estadia, movimientos: movimientos ?? [] };
@@ -1589,6 +1604,12 @@ export class EstadiasService {
       }
     }
 
+    // Solo si diasDelta insertó un movimiento arriba -- ver comentario en
+    // insertarMovimiento().
+    if (diasDelta) {
+      await this.recalcularSaldo(client, estadiaId);
+    }
+
     return this.obtenerDetalle(client, hotelId, estadiaId);
   }
 
@@ -1669,6 +1690,7 @@ export class EstadiasService {
         monto: Number(linea.tarifa_dia),
         notas: 'Extensión automática: no se registró checkout ni ampliación a la hora de salida programada (+1 día)',
       });
+      await this.recalcularSaldo(client, estadiaId);
 
       extendidas.push(estadiaId);
     }
@@ -1758,28 +1780,27 @@ export class EstadiasService {
       .single();
     if (movError) throw movError;
 
-    await this.recalcularSaldo(client, estadiaId);
-
+    // A propósito SIN recalcularSaldo() acá: esta función se llama varias
+    // veces seguidas dentro de la misma operación (ej. checkin() postea
+    // alquiler + early + mascota + un anticipo por cada uno) -- hacerlo acá
+    // significaba traer TODOS los movimientos de la estadía y actualizar
+    // el saldo una vez por cada inserción, en vez de una sola vez al
+    // final. Cada método que llama insertarMovimiento() es responsable de
+    // llamar a recalcularSaldo() él mismo, una sola vez, después de la
+    // última inserción (ver checkin(), registrarMovimiento(), etc.).
     return movimiento.id as string;
   }
 
+  // Antes: un SELECT de todos los movimientos_cuenta + un UPDATE de
+  // estadias.saldo, dos viajes separados a la base por cada llamada --
+  // esta es la operación más repetida del sistema (corre en cada checkin,
+  // checkout, pago, cargo), así que esos dos viajes se sentían en toda
+  // acción de guardado. Movido a una función de Postgres
+  // (recalcular_saldo_estadia(), ver sql/migracion_recalcular_saldo_rpc.sql)
+  // que hace el mismo cálculo exacto en un solo viaje.
   private async recalcularSaldo(client: SupabaseClient, estadiaId: string) {
-    const { data: movimientos, error } = await client
-      .from('movimientos_cuenta')
-      .select('monto')
-      .eq('estadia_id', estadiaId);
+    const { error } = await client.rpc('recalcular_saldo_estadia', { p_estadia_id: estadiaId });
     if (error) throw error;
-
-    const saldo = (movimientos ?? []).reduce(
-      (acc, m) => acc + Number(m.monto),
-      0,
-    );
-
-    const { error: updError } = await client
-      .from('estadias')
-      .update({ saldo })
-      .eq('id', estadiaId);
-    if (updError) throw updError;
   }
 
   private async resolverHuesped(
