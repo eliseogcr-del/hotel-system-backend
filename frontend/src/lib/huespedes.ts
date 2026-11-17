@@ -15,6 +15,21 @@ export interface Huesped {
   razon_social: string | null;
 }
 
+// Postgres 23505 = unique_violation. crearHuesped()/crearEmpresa() insertan
+// directo contra Supabase (sin pasar por el backend, ver comentario de
+// crearHuesped más abajo) -- si choca con la restricción única
+// (hotel_id, tipo_doc, nro_doc), el error llega tal cual de Postgres, sin
+// el envoltorio amigable que sí tienen los endpoints del backend. Se
+// detecta acá para mostrar un mensaje accionable en vez del texto crudo.
+export function esErrorDocumentoDuplicado(err: unknown): boolean {
+  return (
+    !!err &&
+    typeof err === 'object' &&
+    'code' in err &&
+    (err as { code?: unknown }).code === '23505'
+  );
+}
+
 const HUESPED_SELECT =
   'id, nombres, apellidos, tipo_doc, nro_doc, telefono, correo, nacionalidad, origen, fecha_nacimiento, ruc, razon_social';
 

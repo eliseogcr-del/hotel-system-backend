@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState, type CSSProperties, type FormEvent } from
 import { Link, useNavigate } from 'react-router-dom';
 import { api, ApiError, mensajeDeError } from '../lib/api';
 import { useHotel } from '../contexts/HotelContext';
-import { buscarHuespedPorDni, crearHuesped } from '../lib/huespedes';
+import { buscarHuespedPorDni, crearHuesped, esErrorDocumentoDuplicado } from '../lib/huespedes';
 
 interface HabitacionDisponible {
   id: string;
@@ -226,6 +226,13 @@ export function NuevaCotizacion() {
           nroDoc: dni.trim(),
         });
         idHuesped = creado.id;
+        // Se guarda en el estado ya -- crear el huésped y crear la
+        // cotización son dos peticiones separadas, sin transacción entre
+        // ambas. Si la cotización falla después, el huésped ya quedó
+        // creado; sin esto, reintentar el envío volvía a intentar crearlo
+        // de nuevo con el mismo DNI y chocaba con la restricción única
+        // (mismo bug real corregido en ReservaFormModal.tsx).
+        setHuespedId(creado.id);
       }
 
       const resultado = await api.post<{ id: string }>(`/hoteles/${hotelActual.hotelId}/cotizaciones`, {
@@ -246,7 +253,13 @@ export function NuevaCotizacion() {
       });
       navigate(`/cotizaciones/${resultado.id}`);
     } catch (err) {
-      setError(mensajeDeError(err, 'No se pudo grabar la cotización'));
+      if (esErrorDocumentoDuplicado(err)) {
+        setError(
+          'Ya existe un huésped con ese documento en este hotel (puede ser de un intento anterior). Busca por DNI de nuevo para reutilizarlo, en vez de volver a registrarlo.',
+        );
+      } else {
+        setError(mensajeDeError(err, 'No se pudo grabar la cotización'));
+      }
     } finally {
       setGuardando(false);
     }
