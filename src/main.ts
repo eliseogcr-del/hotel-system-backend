@@ -7,6 +7,14 @@ import { AppModule } from './app.module';
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
 
+  // Render pone el backend detrás de su propio proxy -- sin esto,
+  // request.ip (y por lo tanto el límite por IP de ThrottlerGuard en las
+  // rutas públicas de cotizaciones-whatsapp/integraciones) vería la IP del
+  // proxy de Render, la misma para TODO el tráfico, en vez de la IP real
+  // de quien llama. `1` = confiar en un solo salto de proxy delante
+  // (justo el caso de Render).
+  app.set('trust proxy', 1);
+
   // Default de Express es 100kb -- muy poco para el logo del hotel en
   // base64 (ActualizarHotelDto.logoUrl, hasta ~1.4MB de imagen real). El
   // resto de la API no manda payloads grandes, así que este límite más
