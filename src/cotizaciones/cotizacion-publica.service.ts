@@ -157,9 +157,32 @@ export class CotizacionPublicaService {
    * grande en el grupo principal -- útil para armar un grupo combinando
    * varias habitaciones sin que cada una tenga que calzar justo.
    */
+  // Usado por el formulario público (/cotizar/:hotelId): exige
+  // agente_whatsapp_activo además de activo -- ver cargarHotelConBotActivo().
   async buscarHabitacionesDisponibles(hotelId: string, dto: HabitacionesDisponiblesWhatsappDto) {
     const client = this.supabase.getServiceClient();
     const hotel = await this.cargarHotelConBotActivo(client, hotelId);
+    return this.buscarHabitacionesDisponiblesCore(client, hotelId, dto, hotel);
+  }
+
+  // Usado por IntegracionDisponibilidadController (asistentes externos
+  // autorizados por WhatsappApiKeyGuard, no por el formulario público): solo
+  // exige que el hotel esté activo, a propósito SIN depender de
+  // agente_whatsapp_activo -- ese flag prende/apaga el formulario público,
+  // un control de negocio distinto al de esta integración. Activar la IA no
+  // debe obligar a encender también el formulario del navegador.
+  async buscarDisponibilidadIntegracion(hotelId: string, dto: HabitacionesDisponiblesWhatsappDto) {
+    const client = this.supabase.getServiceClient();
+    const hotel = await this.cargarHotelActivo(client, hotelId);
+    return this.buscarHabitacionesDisponiblesCore(client, hotelId, dto, hotel);
+  }
+
+  private async buscarHabitacionesDisponiblesCore(
+    client: SupabaseClient,
+    hotelId: string,
+    dto: HabitacionesDisponiblesWhatsappDto,
+    hotel: { hora_checkout: string },
+  ) {
     const { dias, esLate } = this.resolverFechas(dto, hotel);
 
     const habitaciones = await this.habitacionesDisponiblesReales(client, hotelId, dto, hotel);
@@ -382,6 +405,23 @@ export class CotizacionPublicaService {
     if (error) throw error;
     if (!data || !data.activo || !data.agente_whatsapp_activo) {
       throw new ForbiddenException('El agente de WhatsApp no está disponible para este hotel en este momento.');
+    }
+    return data;
+  }
+
+  // Para IntegracionDisponibilidadController -- igual criterio de privacidad
+  // que cargarHotelConBotActivo(): el mismo mensaje y el mismo 403 tanto si
+  // el hotel no existe como si existe pero no está activo, para no dejar
+  // adivinar cuál de los dos pasó.
+  private async cargarHotelActivo(client: SupabaseClient, hotelId: string) {
+    const { data, error } = await client
+      .from('hoteles')
+      .select('id, activo, hora_checkout')
+      .eq('id', hotelId)
+      .maybeSingle();
+    if (error) throw error;
+    if (!data || !data.activo) {
+      throw new ForbiddenException('Este hotel no está disponible en este momento.');
     }
     return data;
   }
