@@ -394,20 +394,29 @@ export class TareasHkService {
   }
 
   /**
-   * Una tarea 'planificado' que quedó pendiente de días anteriores (nadie
-   * la inició) no debe perderse en el filtro de fecha del frontend, que
-   * por defecto muestra solo las de hoy -- se "arrastra" al día actual
-   * (created_at, el mismo campo que usa el filtro de fecha) para que quien
-   * entre a Tareas HK siempre vea todo lo pendiente junto. Solo aplica a
-   * 'planificado': una tarea en_proceso o terminado es un registro de lo
-   * que ya pasó ese día, no algo por hacer.
+   * Una tarea 'planificado' o 'en_proceso' que quedó pendiente de días
+   * anteriores (nadie la inició, o HK la empezó y nunca la cerró) no debe
+   * perderse en el filtro de fecha del frontend, que por defecto muestra
+   * solo las de hoy -- se "arrastra" al día actual (created_at, el mismo
+   * campo que usa el filtro de fecha) para que quien entre a Tareas HK (o
+   * a Mantenimientos y Limpiezas en Habitaciones.tsx) siempre vea todo lo
+   * pendiente junto. Solo 'terminado' queda afuera: ese sí es un registro
+   * cerrado de lo que ya pasó ese día, no algo por hacer.
+   *
+   * Caso real que motivó incluir 'en_proceso' acá (antes solo cubría
+   * 'planificado'): una tarea de mantenimiento en_proceso de un día
+   * anterior quedaba invisible en el filtro de hoy -- el checkbox
+   * "Planificada" se veía libre, pero crear() sí la encontraba (esa
+   * validación de duplicado no filtra por fecha) y rechazaba la nueva
+   * tarea con "ya hay una tarea activa", sin que recepción supiera dónde
+   * estaba la que ya existía (hab. 504).
    */
   private async rolloverPlanificadasVencidas(client: SupabaseClient, hotelId: string) {
     const { error } = await client
       .from('tareas_hk')
       .update({ created_at: new Date().toISOString() })
       .eq('hotel_id', hotelId)
-      .eq('estado', 'planificado')
+      .in('estado', ['planificado', 'en_proceso'])
       .lt('created_at', inicioDeHoyLima().toISOString());
     if (error) throw error;
   }
