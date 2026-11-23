@@ -518,7 +518,13 @@ create table cotizacion_detalle (
     -- Cuando es null, la pantalla y el PDF calculan la etiqueta sola
     -- (Individual con 1 persona, Múltiple con más de 5, tipo real en el
     -- resto de los casos) -- ver etiquetaTipoCotizacion en el frontend.
-    tipo_manual text
+    tipo_manual text,
+    -- Reserva propia que resultó de convertir ESTA línea (no la cotización
+    -- entera) -- CotizacionesService.convertir() crea una reserva
+    -- independiente por cada habitación, nunca una reserva grupal con varias
+    -- líneas, para que los anticipos de cada una no se mezclen al hacer
+    -- check-in (ver EstadiasService.checkin()). Null hasta que se convierte.
+    reserva_id uuid references reservas(id)
 );
 
 -- ============================================================================

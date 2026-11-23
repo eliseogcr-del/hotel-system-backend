@@ -17,6 +17,11 @@ interface DetalleLinea {
   subtotal: number;
   disponibilidad_forzada: boolean;
   tipo_manual: string | null;
+  // Reserva propia que resultó de convertir ESTA línea -- cada habitación
+  // de la cotización se convierte en su propia reserva (ver
+  // CotizacionesService.convertir()), nunca en una reserva grupal
+  // compartida. Null hasta que la cotización se convierte.
+  reserva_id: string | null;
   habitaciones: { hab_numero: number; tipos_habitacion: { nombre: string } | null } | null;
 }
 
@@ -430,14 +435,23 @@ export function CotizacionDetalle() {
 
   async function convertir() {
     if (!hotelActual || !id) return;
-    if (!confirm('¿Convertir esta cotización en una reserva confirmada?')) return;
+    if (!confirm('¿Convertir esta cotización en reserva(s) confirmada(s)?')) return;
     setAccionando(true);
     setError(null);
     try {
-      const resultado = await api.post<{ reserva: { id: string } }>(
+      // Una reserva independiente por cada habitación de la cotización (ver
+      // CotizacionesService.convertir()) -- con una sola habitación, se abre
+      // directo esa reserva, igual que antes; con varias, no hay una sola
+      // reserva a la que navegar, así que se recarga el detalle para mostrar
+      // el enlace de cada una.
+      const resultado = await api.post<{ reservas: { id: string }[] }>(
         `/hoteles/${hotelActual.hotelId}/cotizaciones/${id}/convertir`,
       );
-      navigate(`/reservas/${resultado.reserva.id}`);
+      if (resultado.reservas.length === 1) {
+        navigate(`/reservas/${resultado.reservas[0].id}`);
+      } else {
+        cargar();
+      }
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'No se pudo convertir');
     } finally {
@@ -557,11 +571,21 @@ export function CotizacionDetalle() {
         >
           🖨️ Imprimir / PDF
         </button>
-        {cotizacion.reserva_id && (
-          <Link to={`/reservas/${cotizacion.reserva_id}`} style={{ ...btnSecondary, textDecoration: 'none', display: 'inline-block' }}>
-            Ver reserva
-          </Link>
-        )}
+        {/* Una reserva por habitación (ver CotizacionesService.convertir()) --
+            cada línea de la cotización guarda la suya propia en
+            cotizacion_detalle.reserva_id, así que acá se lista un enlace por
+            cada una en vez de un solo "Ver reserva". */}
+        {cotizacion.cotizacion_detalle
+          .filter((d) => d.reserva_id)
+          .map((d) => (
+            <Link
+              key={d.id}
+              to={`/reservas/${d.reserva_id}`}
+              style={{ ...btnSecondary, textDecoration: 'none', display: 'inline-block' }}
+            >
+              Ver reserva · Hab. {d.habitaciones?.hab_numero ?? '—'}
+            </Link>
+          ))}
       </div>
 
       <div

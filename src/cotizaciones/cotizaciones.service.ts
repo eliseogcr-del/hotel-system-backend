@@ -581,10 +581,23 @@ export class CotizacionesService {
   }
 
   /**
-   * Copia (no enlaza) los datos de la cotización a una reserva nueva y
-   * editable, reutilizando ReservasService.crear() para heredar su misma
+   * Copia (no enlaza) los datos de la cotización a reservas nuevas y
+   * editables, reutilizando ReservasService.crear() para heredar su misma
    * validación de disponibilidad (re-chequeada, porque pudo haber pasado
    * tiempo desde que se cotizó) y su lógica de creación. Ver CLAUDE.md 3.5.
+   *
+   * Una reserva independiente POR CADA habitación -- nunca una sola reserva
+   * grupal con varias líneas (reserva_habitacion), aunque la cotización
+   * entera sea de un solo huésped/empresa. Antes se creaba una sola reserva
+   * con N líneas, y eso causó un incidente real (Amada Reyes, 17/11): una
+   * cotización de 11 habitaciones de 11 huéspedes INDEPENDIENTES (no un
+   * grupo que paga como un bloque) se convirtió en una reserva grupal, y
+   * los anticipos que se registraron después se enlazaron todos a una sola
+   * habitación al hacer check-in (anticipos_reserva se enlaza por
+   * reserva_id completo, no por habitación -- ver
+   * EstadiasService.checkin()). Con una reserva por habitación, cada
+   * anticipo que se registre después queda naturalmente en la reserva
+   * correcta, igual que cualquier reserva normal de una sola habitación.
    */
   async convertir(client: SupabaseClient, hotelId: string, id: string, personalId: string) {
     const cotizacion = await this.obtenerDetalle(client, hotelId, id);
@@ -597,38 +610,87 @@ export class CotizacionesService {
 
     const checkinISO = `${cotizacion.fecha_desde}T${cotizacion.hora_checkin}`;
     const checkoutISO = `${cotizacion.fecha_hasta}T${cotizacion.hora_checkout}`;
+    const detalle = (cotizacion as any).cotizacion_detalle as any[];
 
-    const reservaDto: CrearReservaDto = {
-      huespedId: cotizacion.huesped_id ?? undefined,
-      empresaId: cotizacion.empresa_id ?? undefined,
-      origen: 'directo',
-      moneda: cotizacion.moneda,
-      habitaciones: cotizacion.cotizacion_detalle.map((d: any) => ({
-        habitacionId: d.habitacion_id,
-        nroPersonas: d.nro_personas,
-        tipoAlquiler: 'pernocte' as const,
-        checkinPrevisto: checkinISO,
-        checkoutPrevisto: checkoutISO,
-        // Reservas cotiza por habitación por noche -- se convierte el
-        // precio por persona (o, en cotizaciones viejas del flujo
-        // anterior, el precio_noche que ya tenían) al equivalente por
-        // habitación para no perder el total cotizado.
-        tarifaDiaManual:
-          d.precio_persona != null ? Number(d.precio_persona) * Number(d.nro_personas) : Number(d.precio_noche),
-        cobroEarly: Number(d.cobro_early ?? 0),
-        cobroLate: Number(d.cobro_late ?? 0),
-      })),
-    };
+    // 1. Validar disponibilidad de TODAS las habitaciones antes de crear
+    // ninguna reserva -- si una ya no está libre, se rechaza la conversión
+    // completa en vez de convertir a medias (mismo criterio "todo o nada"
+    // que ReservasService.crear() ya usa para una reserva grupal).
+    await Promise.all(
+      detalle.map(async (d) => {
+        const resultado = await this.disponibilidad.validar(client, {
+          hotelId,
+          habitacionId: d.habitacion_id,
+          checkinPrevisto: checkinISO,
+          checkoutPrevisto: checkoutISO,
+        });
+        if (!resultado.disponible) {
+          throw new ConflictException(
+            resultado.conflicto?.mensaje ??
+              `La habitación ${d.habitaciones?.hab_numero ?? ''} ya no está disponible en ese rango`,
+          );
+        }
+      }),
+    );
 
-    const reserva = await this.reservasService.crear(client, hotelId, reservaDto, personalId);
+    // 2. Crear las reservas (una por habitación), en paralelo -- cada una
+    // es independiente, no comparten ninguna fila.
+    const reservas = await Promise.all(
+      detalle.map((d) => {
+        const reservaDto: CrearReservaDto = {
+          huespedId: cotizacion.huesped_id ?? undefined,
+          empresaId: cotizacion.empresa_id ?? undefined,
+          origen: 'directo',
+          moneda: cotizacion.moneda,
+          habitaciones: [
+            {
+              habitacionId: d.habitacion_id,
+              nroPersonas: d.nro_personas,
+              tipoAlquiler: 'pernocte' as const,
+              checkinPrevisto: checkinISO,
+              checkoutPrevisto: checkoutISO,
+              // Reservas cotiza por habitación por noche -- se convierte el
+              // precio por persona (o, en cotizaciones viejas del flujo
+              // anterior, el precio_noche que ya tenían) al equivalente por
+              // habitación para no perder el total cotizado.
+              tarifaDiaManual:
+                d.precio_persona != null
+                  ? Number(d.precio_persona) * Number(d.nro_personas)
+                  : Number(d.precio_noche),
+              cobroEarly: Number(d.cobro_early ?? 0),
+              cobroLate: Number(d.cobro_late ?? 0),
+            },
+          ],
+        };
+        return this.reservasService.crear(client, hotelId, reservaDto, personalId);
+      }),
+    );
 
+    // 3. Enlazar cada línea de la cotización con la reserva que generó.
+    await Promise.all(
+      detalle.map(async (d, i) => {
+        const { error } = await client
+          .from('cotizacion_detalle')
+          .update({ reserva_id: reservas[i].id })
+          .eq('id', d.id);
+        if (error) throw error;
+      }),
+    );
+
+    // cotizaciones.reserva_id es una sola columna (de cuando se creaba una
+    // única reserva grupal) -- se deja apuntando a la primera reserva creada
+    // solo como referencia rápida de "esta cotización ya se convirtió"; el
+    // detalle real, línea por línea, vive en cotizacion_detalle.reserva_id.
     const { error: updError } = await client
       .from('cotizaciones')
-      .update({ estado: 'convertida', reserva_id: reserva.id })
+      .update({ estado: 'convertida', reserva_id: reservas[0].id })
       .eq('id', id);
     if (updError) throw updError;
 
-    return { cotizacion: { ...cotizacion, estado: 'convertida', reserva_id: reserva.id }, reserva };
+    return {
+      cotizacion: { ...cotizacion, estado: 'convertida', reserva_id: reservas[0].id },
+      reservas,
+    };
   }
 
   // cotizaciones.fecha_emision tiene "default current_date" en la base,
