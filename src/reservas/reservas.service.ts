@@ -550,98 +550,12 @@ export class ReservasService {
   }
 
   /**
-   * Agrega una línea de habitación a una reserva YA existente. Es lo que
-   * permite "completar" una reserva creada sin habitaciones (ej. las que
-   * llegan de ImportacionesCanalModule en 'pendiente_revision', donde el
-   * texto libre del correo no alcanza para asignar un cuarto con
-   * confianza) sin tener que recrearla desde cero.
-   */
-  async agregarHabitacion(
-    client: SupabaseClient,
-    hotelId: string,
-    reservaId: string,
-    linea: CrearReservaHabitacionDto,
-  ) {
-    const { data: reserva, error: reservaError } = await client
-      .from('reservas')
-      .select('id, origen, empresa_id, descuento_total, estado')
-      .eq('id', reservaId)
-      .eq('hotel_id', hotelId)
-      .maybeSingle();
-    if (reservaError) throw reservaError;
-    if (!reserva) throw new NotFoundException('Reserva no encontrada en este hotel');
-    if (reserva.estado === 'cancelada') {
-      throw new BadRequestException('No se puede agregar habitaciones a una reserva cancelada');
-    }
-
-    const resultado = await this.disponibilidad.validar(client, {
-      hotelId,
-      habitacionId: linea.habitacionId,
-      checkinPrevisto: linea.checkinPrevisto,
-      checkoutPrevisto: linea.checkoutPrevisto,
-    });
-    if (!resultado.disponible) {
-      throw new ConflictException(resultado.conflicto?.mensaje ?? 'La habitación no está disponible en ese rango');
-    }
-
-    const costo = await this.resolverCostoLinea(
-      client,
-      hotelId,
-      reserva.origen as OrigenReserva,
-      linea,
-      reserva.empresa_id ?? undefined,
-    );
-
-    const { data: nuevaLinea, error: insertError } = await client
-      .from('reserva_habitacion')
-      .insert({
-        reserva_id: reservaId,
-        habitacion_id: linea.habitacionId,
-        nro_personas: linea.nroPersonas,
-        incluye_desayuno: linea.incluyeDesayuno ?? false,
-        tarifa_dia: costo.tarifaDia,
-        dias: costo.dias,
-        cargo_aforo_extra: costo.cargoAforoExtra,
-        cobro_early: costo.cobroEarly,
-        cobro_late: costo.cobroLate,
-        con_mascota: linea.conMascota ?? false,
-        cobro_mascota: costo.cobroMascota,
-        subtotal: costo.subtotal,
-        tipo_alquiler: linea.tipoAlquiler,
-        fecha_hora_checkin_prevista: linea.checkinPrevisto,
-        fecha_hora_checkout_prevista: linea.checkoutPrevisto,
-        observaciones: linea.observaciones ?? null,
-        cochera_id: linea.cocheraId ?? null,
-      })
-      .select()
-      .single();
-    if (insertError) throw insertError;
-
-    if (
-      linea.cocheraId &&
-      (linea.vehiculoPlaca || linea.vehiculoColor || linea.vehiculoCaracteristicas)
-    ) {
-      const { error: vehError } = await client.from('vehiculos').insert({
-        reserva_habitacion_id: nuevaLinea.id,
-        placa: linea.vehiculoPlaca ?? null,
-        color: linea.vehiculoColor ?? null,
-        caracteristicas: linea.vehiculoCaracteristicas ?? null,
-      });
-      if (vehError) throw vehError;
-    }
-
-    await this.recalcularTotales(client, reservaId, Number(reserva.descuento_total));
-
-    return this.obtenerDetalle(client, hotelId, reservaId);
-  }
-
-  /**
    * Editar una reserva que todavía no tiene check-in, desde el formulario
    * del calendario (click en una celda ya ocupada por una reserva
    * 'pendiente'). No cambia la habitación -- eso implicaría mover la
    * celda, fuera de alcance de este formulario. Si cambia checkin/días,
    * revalida disponibilidad excluyéndose a sí misma (mismo motor que
-   * crear()/agregarHabitacion()).
+   * crear()).
    */
   async actualizarLinea(
     client: SupabaseClient,
@@ -868,7 +782,7 @@ export class ReservasService {
    * sea del mismo tipo -- si difiere, se informa en la respuesta
    * (`avisoTipoHabitacion`) pero no bloquea el traslado. Revalida
    * disponibilidad de la habitación destino con el mismo motor que
-   * crear()/agregarHabitacion() (solapamiento + margen de limpieza,
+   * crear() (solapamiento + margen de limpieza,
    * considerando la hora exacta de checkin/checkout, no solo el día).
    */
   async trasladarHabitacionLinea(
@@ -957,7 +871,20 @@ export class ReservasService {
   /**
    * pendiente_revision -> confirmada. El "un clic" que menciona CLAUDE.md
    * 3.6 para las reservas que llegan de Booking/Airbnb: exige que ya tenga
-   * al menos una habitación asignada (si no, agregarHabitacion primero).
+   * al menos una habitación asignada.
+   *
+   * ImportacionesCanalService.procesarCorreo() puede crear una reserva SIN
+   * ninguna habitación (ver su comentario) cuando el parseo no permite
+   * asignar un cuarto con confianza -- hoy esa reserva queda sin forma de
+   * completarse desde la app: se quitó agregarHabitacion() (y su único
+   * botón, en ReservaDetalle.tsx) porque era el mismo camino que terminaba
+   * agrupando habitaciones de huéspedes independientes bajo una sola
+   * reserva (ver incidente Amada Reyes / hab. 205, 17/11). Esto no rompe
+   * nada hoy -- procesarCorreo() no lo dispara ningún trigger automático
+   * todavía ni lo llama ninguna pantalla -- pero hay que resolverlo (con
+   * una vía acotada solo a reservas con cero habitaciones, no un botón que
+   * permita seguir agregando indefinidamente) antes de terminar de cablear
+   * ImportacionesCanalModule a un flujo automático real.
    */
   async confirmar(client: SupabaseClient, hotelId: string, reservaId: string) {
     const reserva = await this.obtenerDetalle(client, hotelId, reservaId);
