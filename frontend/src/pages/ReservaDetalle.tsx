@@ -41,10 +41,8 @@ export function ReservaDetalle() {
   const navigate = useNavigate();
   const [haciendoCheckin, setHaciendoCheckin] = useState<string | null>(null);
   const [reserva, setReserva] = useState<ReservaDetalle | null>(null);
-  const [habitaciones, setHabitaciones] = useState<Habitacion[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [accionando, setAccionando] = useState(false);
-  const [mostrarAgregar, setMostrarAgregar] = useState(false);
   const [trasladando, setTrasladando] = useState<LineaReserva | null>(null);
 
   function cargar() {
@@ -56,14 +54,6 @@ export function ReservaDetalle() {
   }
 
   useEffect(cargar, [hotelActual, id]);
-
-  useEffect(() => {
-    if (!hotelActual) return;
-    api
-      .get<Habitacion[]>(`/hoteles/${hotelActual.hotelId}/habitaciones`)
-      .then(setHabitaciones)
-      .catch(() => {});
-  }, [hotelActual]);
 
   async function confirmar() {
     if (!hotelActual || !id) return;
@@ -144,24 +134,7 @@ export function ReservaDetalle() {
             Cancelar reserva
           </button>
         )}
-        {reserva.estado !== 'cancelada' && (
-          <button onClick={() => setMostrarAgregar((v) => !v)} style={btnSecondary}>
-            {mostrarAgregar ? 'Cerrar' : '+ Agregar habitación'}
-          </button>
-        )}
       </div>
-
-      {mostrarAgregar && (
-        <AgregarHabitacionForm
-          hotelId={hotelActual.hotelId}
-          reservaId={reserva.id}
-          habitaciones={habitaciones}
-          onAgregada={() => {
-            setMostrarAgregar(false);
-            cargar();
-          }}
-        />
-      )}
 
       <div style={{ overflowX: 'auto' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, minWidth: 720 }}>
@@ -234,98 +207,6 @@ export function ReservaDetalle() {
         />
       )}
     </div>
-  );
-}
-
-function AgregarHabitacionForm({
-  hotelId,
-  reservaId,
-  habitaciones,
-  onAgregada,
-}: {
-  hotelId: string;
-  reservaId: string;
-  habitaciones: Habitacion[];
-  onAgregada: () => void;
-}) {
-  const [habitacionId, setHabitacionId] = useState('');
-  const [nroPersonas, setNroPersonas] = useState(2);
-  const [tipoAlquiler, setTipoAlquiler] = useState<'pernocte' | 'por_horas'>('pernocte');
-  const [checkin, setCheckin] = useState('');
-  const [checkout, setCheckout] = useState('');
-  const [enviando, setEnviando] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  async function handleSubmit(e: FormEvent) {
-    e.preventDefault();
-    setEnviando(true);
-    setError(null);
-    try {
-      await api.post(`/hoteles/${hotelId}/reservas/${reservaId}/habitaciones`, {
-        habitacionId,
-        nroPersonas,
-        tipoAlquiler,
-        checkinPrevisto: new Date(checkin).toISOString(),
-        checkoutPrevisto: new Date(checkout).toISOString(),
-      });
-      onAgregada();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'No se pudo agregar la habitación');
-    } finally {
-      setEnviando(false);
-    }
-  }
-
-  return (
-    <form
-      onSubmit={handleSubmit}
-      style={{
-        background: 'var(--form-bg)',
-        border: '1px solid var(--border)',
-        borderRadius: 12,
-        padding: 16,
-        marginBottom: 20,
-        display: 'flex',
-        gap: 8,
-        alignItems: 'flex-end',
-        flexWrap: 'wrap',
-      }}
-    >
-      <div style={{ flex: 1, minWidth: 160 }}>
-        <label style={labelStyle}>Habitación</label>
-        <select value={habitacionId} onChange={(e) => setHabitacionId(e.target.value)} style={inputStyle} required>
-          <option value="">Selecciona...</option>
-          {habitaciones.map((h) => (
-            <option key={h.id} value={h.id}>
-              {h.hab_numero} · {h.tipos_habitacion?.nombre}
-            </option>
-          ))}
-        </select>
-      </div>
-      <div style={{ width: 90 }}>
-        <label style={labelStyle}># personas</label>
-        <input type="number" min={1} value={nroPersonas} onChange={(e) => setNroPersonas(Number(e.target.value))} style={inputStyle} />
-      </div>
-      <div style={{ width: 130 }}>
-        <label style={labelStyle}>Tipo</label>
-        <select value={tipoAlquiler} onChange={(e) => setTipoAlquiler(e.target.value as 'pernocte' | 'por_horas')} style={inputStyle}>
-          <option value="pernocte">Pernocte</option>
-          <option value="por_horas">Por horas</option>
-        </select>
-      </div>
-      <div style={{ flex: 1, minWidth: 160 }}>
-        <label style={labelStyle}>Check-in</label>
-        <input type="datetime-local" value={checkin} onChange={(e) => setCheckin(e.target.value)} style={inputStyle} required />
-      </div>
-      <div style={{ flex: 1, minWidth: 160 }}>
-        <label style={labelStyle}>Check-out</label>
-        <input type="datetime-local" value={checkout} onChange={(e) => setCheckout(e.target.value)} style={inputStyle} required />
-      </div>
-      <button type="submit" disabled={enviando} style={btnPrimary}>
-        {enviando ? 'Agregando...' : 'Agregar'}
-      </button>
-      {error && <p style={{ color: 'var(--danger)', fontSize: 12, width: '100%' }}>{error}</p>}
-    </form>
   );
 }
 
