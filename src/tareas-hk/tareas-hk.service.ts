@@ -264,12 +264,28 @@ export class TareasHkService {
 
   /**
    * Termina la tarea. La habitación queda 'disponible', salvo mantenimiento
-   * con huésped dentro: en ese caso vuelve a 'ocupada' (el huésped nunca se
-   * fue de la habitación) y se desmarca mantenimiento_planificado (el
-   * checkbox que ve recepción en Habitaciones) porque ya se atendió. Si
-   * había huésped dentro, se agrega una nota a su registro para que
-   * recepción vea que se hizo el mantenimiento. tareas_hk.notas se limpia
-   * siempre (el mensaje de "en proceso" ya no aplica).
+   * con huésped dentro Y que ese huésped siga de verdad hospedado ahora
+   * mismo: en ese caso vuelve a 'ocupada'. Se desmarca
+   * mantenimiento_planificado (el checkbox que ve recepción en
+   * Habitaciones) porque ya se atendió. Si el huésped sigue dentro, se
+   * agrega una nota a su registro para que recepción vea que se hizo el
+   * mantenimiento. tareas_hk.notas se limpia siempre (el mensaje de "en
+   * proceso" ya no aplica).
+   *
+   * con_huesped_dentro se fija al CREAR la tarea (exige habitacion.estado
+   * === 'ocupada' en ese momento, ver crear()) -- pero la tarea puede
+   * quedar pendiente varios días sin que nadie la inicie/termine (el
+   * arrastre diario de rolloverPlanificadasVencidas existe justo para que
+   * no se pierda de vista en ese caso), y el huésped que justificaba ese
+   * flag puede haber hecho check-out mientras tanto. Caso real: hab. 304,
+   * 28/11/2026 -- dos tareas de mantenimiento con_huesped_dentro=true
+   * quedaron pendientes desde antes del check-out; el check-out real pasó
+   * la habitación por limpieza -> disponible correctamente, pero al cerrar
+   * esas tareas viejas después, forzar 'ocupada' solo por el flag
+   * (desactualizado) la dejó "pegada" en ocupada sin ningún huésped real.
+   * Por eso se vuelve a comprobar el estado ACTUAL (¿sigue habiendo una
+   * estadía en_curso en esta habitación?) antes de decidir, en vez de
+   * confiar ciegamente en el flag.
    */
   async terminar(client: SupabaseClient, hotelId: string, tareaId: string) {
     const tarea = await this.cargarTareaHotel(client, hotelId, tareaId);
@@ -283,8 +299,19 @@ export class TareasHkService {
       .eq('id', tareaId);
     if (updError) throw updError;
 
-    const nuevoEstadoHabitacion =
-      tarea.tipo === 'mantenimiento' && tarea.con_huesped_dentro ? 'ocupada' : 'disponible';
+    let huespedSigueDentro = false;
+    if (tarea.tipo === 'mantenimiento' && tarea.con_huesped_dentro) {
+      const { data: estadiaActiva, error: estadiaError } = await client
+        .from('reserva_habitacion')
+        .select('id, estadias!inner(estado_actual)')
+        .eq('habitacion_id', tarea.habitacion_id)
+        .eq('estadias.estado_actual', 'en_curso')
+        .maybeSingle();
+      if (estadiaError) throw estadiaError;
+      huespedSigueDentro = !!estadiaActiva;
+    }
+
+    const nuevoEstadoHabitacion = huespedSigueDentro ? 'ocupada' : 'disponible';
 
     const cambiosHabitacion: Record<string, unknown> = { estado: nuevoEstadoHabitacion };
     if (tarea.tipo === 'mantenimiento') {
@@ -297,7 +324,7 @@ export class TareasHkService {
       .eq('id', tarea.habitacion_id);
     if (habError) throw habError;
 
-    if (tarea.tipo === 'mantenimiento' && tarea.con_huesped_dentro) {
+    if (huespedSigueDentro) {
       await this.agregarNotaMantenimiento(client, tarea.habitacion_id);
     }
 
